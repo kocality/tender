@@ -1,4 +1,4 @@
-// Single source of app configuration (tasks/WS3.md §0.3). Defaults are mainnet; rehearsal and testnet override via VITE_* env.
+// Single source of app configuration. Defaults are mainnet; rehearsal and testnet override via VITE_* env.
 // Defaults below are public mainnet contract ids; every account name can be overridden by env.
 // quote token, mpc_public_key and app_pk_mode are always read live from get_config(), never from env.
 

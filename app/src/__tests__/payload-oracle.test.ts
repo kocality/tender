@@ -1,5 +1,5 @@
 /// <reference types="node" />
-// Our hand-built payloads vs @defuse-protocol/intents-sdk 0.95.0 (dev-only oracle, DECISIONS T12 / I3).
+// Our hand-built payloads vs @defuse-protocol/intents-sdk 0.95.0 (dev-only oracle: production code builds its own payloads).
 // The SDK's ESM build fails to load in Node, so it is loaded through its CJS build.
 import { createRequire } from 'node:module';
 import { describe, expect, test } from 'vitest';

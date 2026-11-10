@@ -1,5 +1,5 @@
 {
-  "_source": "near/intents @16d04f6ec4401263f8914638710260da50bb46b0 (tests copied verbatim) + intents-sdk 0.95.0 golden nonce (tasks/WS3.md F10)",
+  "_source": "near/intents @16d04f6ec4401263f8914638710260da50bb46b0 (tests copied verbatim) + intents-sdk 0.95.0 golden nonce (F10)",
   "versioned_nonce": {
     "_source": "intents-sdk 0.95.0 VersionedNonceBuilder.encodeNonce",
     "salt_hex": "252812b3",

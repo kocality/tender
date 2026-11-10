@@ -1,4 +1,4 @@
-// Persistent UI text (tasks/WS3.md §0.5). The honest-claims rule applies to every string in this app.
+// Persistent UI text. The honest-claims rule applies to every string in this app.
 
 export const TRUST_LINE =
   "Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs.";

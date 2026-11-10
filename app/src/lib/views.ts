@@ -1,7 +1,7 @@
 import { viewCall } from '@tender/intents';
 import { config } from '../config';
 
-// Contract views (C23). ASSUMES the WS1-T09 JSON shapes (tasks/WS1.md WS1-T09): u64/u128 are strings, small counters may be
+// Contract views (C23). ASSUMES the contract view JSON shapes (get_config, get_sale, get_bids, get_result, get_key_log): u64/u128 are strings, small counters may be
 // numbers. Only this file parses them; if the contract output differs, change the parse functions here and nothing else.
 // Unknown fields are ignored; missing optional fields become null/0.
 
@@ -289,11 +289,11 @@ export async function getSales(from: number, limit = SALES_PAGE): Promise<Sale[]
   return raw.map(parseSale);
 }
 
-/** Pages of 64 until a short page (the contract silently trims `limit`). */
+/** Pages of 64 until a short page (the contract silently trims `limit`). `from` is a JSON number here (u16), unlike the u64 string ids. */
 export async function getAllBids(id: string): Promise<Bid[]> {
   const out: Bid[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
-    const raw = await view<unknown[]>('get_bids', { id, from: String(out.length), limit: BIDS_PAGE });
+    const raw = await view<unknown[]>('get_bids', { id, from: out.length, limit: BIDS_PAGE });
     out.push(...raw.map(parseBid));
     if (raw.length < BIDS_PAGE) break;
   }
