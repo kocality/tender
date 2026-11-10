@@ -34,4 +34,4 @@ A spec holds sale parameters only. It never holds a bid, a price a bidder chose,
 
 ## `new()` arguments
 
-`mpc`, `intents`, `domain_id`, `mpc_public_key` (must equal the live `public_key({domain_id})` of the MPC contract), `quote_tokens`, `sellers`, and `app_pk_mode`, one of `identity`, `generator`, `plain`. The mode is fixed by `new()` and is decided by gate S1. Until that gate has a recorded result the files carry the placeholder `<identity|generator|plain>`, and `birth.ts` refuses to send them.
+`mpc`, `intents`, `domain_id`, `mpc_public_key` (must equal the live `public_key({domain_id})` of the MPC contract), `quote_tokens`, `sellers`, and `app_pk_mode`, one of `identity`, `generator`, `plain`. The mode is fixed by `new()` and is decided by gate S1. Gate S1 passed on mainnet in `identity` mode (first PASS; `generator` also passed, see `evidence/spikes.json`), so the files carry `identity`. `birth.ts` refuses a mode that differs from the S1 row's `chosen_path`.
