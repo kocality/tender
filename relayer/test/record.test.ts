@@ -83,3 +83,32 @@ describe("recordTx", () => {
     });
   });
 });
+
+describe("the outcome is what Tender did, not the top-level status (S-05)", () => {
+  const withLogs = (logs: string[]) => ({ ...txResult({ SuccessValue: "" }), receipts_outcome: [{ block_hash: "BLK1", outcome: { executor_id: "v1.tenderseal.near", logs, status: { SuccessValue: "" } } }] });
+  const ev = (event: string, data: object) => `EVENT_JSON:${JSON.stringify({ standard: "tender", version: "1.0.0", event, data: [data] })}`;
+  const record = async (result: object, extra: object = {}) => {
+    stubRpc(result);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const dir = mkdtempSync(join(tmpdir(), "tender-rec-"));
+    return recordTx({ network: "mainnet", sale: "3", step: "bid", txHash: HASH, signer: "alice.near", evidenceDir: dir, ...extra });
+  };
+  it("a bid tx that succeeded but logged a Tender refund is a failure with the reason", async () => {
+    const row = await record(withLogs([ev("refund", { reason: "closed", sender_id: "alice.near", amount: "3000000", op: "bid" })]));
+    expect(row.outcome).toBe("failure");
+    expect(row.note).toBe("Tender refunded it: closed");
+  });
+  it("a finalize tx whose payout failed is a failure; a stored bid and paid payouts are successes", async () => {
+    const bad = await record(withLogs([ev("payout", { sale: "3", idx: 0, ok: true }), ev("payout", { sale: "3", idx: 2, ok: false })]), { step: "finalize" });
+    expect(bad.outcome).toBe("failure");
+    expect(bad.note).toBe("payout failed for item(s) 2");
+    expect((await record(withLogs([ev("bid", { sale: "3", idx: 0 })]))).outcome).toBe("success");
+    expect((await record(withLogs([ev("payout", { sale: "3", idx: 0, ok: true })]), { step: "finalize" })).outcome).toBe("success");
+  });
+  it("a refunded late bid with --expect failure raises no warning", async () => {
+    const row = await record(withLogs([ev("refund", { reason: "closed", op: "bid" })]), { step: "attack-late", expect: "failure" });
+    expect(row).toMatchObject({ outcome: "failure", expected: "failure" });
+    expect(row.note).toBe("Tender refunded it: closed");
+  });
+});

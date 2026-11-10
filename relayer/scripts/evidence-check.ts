@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseCommon } from "./lib/cli.js";
-import { EVIDENCE_DIR, validateMainnetRow, type MainnetRow, type SaleTag, type Step } from "./lib/evidence.js";
+import { EVIDENCE_DIR, txOutcome, validateMainnetRow, type MainnetRow, type SaleTag, type Step } from "./lib/evidence.js";
 import { txStatus, type Network } from "./lib/rpc.js";
 
 // Which mainnet rows each sale must have by the end (step order is the order of the runbooks).
@@ -65,8 +65,7 @@ function liveLookup(network: Network): Lookup {
     const signer = row.signer_id;
     if (!signer) return null;
     const { result } = await txStatus(network, row.tx_hash, signer);
-    const status = result?.status ?? {};
-    return "SuccessValue" in status ? "success" : "Failure" in status ? "failure" : null;
+    return txOutcome(result).outcome ?? null;
   };
 }
 
@@ -128,7 +127,8 @@ export async function checkEvidence(opts: {
       want.set(step, (want.get(step) ?? 0) + 1);
     });
     for (const [step, n] of want) {
-      const have = rows.filter((r) => r.sale === sale && r.step === step).length;
+      // a row fills its slot only when the chain did what the runbook expected (a refunded bid is not a bid, S-05)
+      const have = rows.filter((r) => r.sale === sale && r.step === step && (r.outcome ?? "success") === (r.expected ?? "success")).length;
       if (have < n) missing.push(`MISSING ${sale}/${step} ×${n - have}`);
     }
   }

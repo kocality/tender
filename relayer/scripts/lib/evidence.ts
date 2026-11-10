@@ -115,6 +115,39 @@ export function validateGateRow(r: unknown): string[] {
   return p;
 }
 
+/** Tender NEP-297 events in the receipt logs of an EXPERIMENTAL_tx_status result. */
+export function tenderEvents(result: unknown): { event: string; data: Record<string, unknown> }[] {
+  const ros = (result as { receipts_outcome?: { outcome?: { logs?: string[] } }[] } | null)?.receipts_outcome ?? [];
+  const out: { event: string; data: Record<string, unknown> }[] = [];
+  for (const line of ros.flatMap((ro) => ro.outcome?.logs ?? [])) {
+    if (!line.startsWith("EVENT_JSON:")) continue;
+    try {
+      const e = JSON.parse(line.slice("EVENT_JSON:".length)) as { standard?: string; event?: string; data?: Record<string, unknown>[] };
+      if (e.standard === "tender" && typeof e.event === "string") out.push({ event: e.event, data: e.data?.[0] ?? {} });
+    } catch {
+      // not ours
+    }
+  }
+  return out;
+}
+
+/**
+ * The outcome of a recorded transaction (S-05). The top-level status is not enough: execute_intents and mt_transfer_call
+ * succeed when Tender refuses the op (it returns the amount and logs a `refund` event), and finalize / cancel succeed
+ * when a detached payout fails (a `payout` event with ok false). Those are failures, with the reason in `why`.
+ */
+export function txOutcome(result: unknown): { outcome?: "success" | "failure"; why?: string } {
+  const status = (result as { status?: Record<string, unknown> } | null)?.status ?? {};
+  if ("Failure" in status) return { outcome: "failure" };
+  if (!("SuccessValue" in status)) return {};
+  const events = tenderEvents(result);
+  const refund = events.find((e) => e.event === "refund");
+  if (refund) return { outcome: "failure", why: `Tender refunded it: ${String(refund.data.reason ?? "no reason logged")}` };
+  const failed = events.filter((e) => e.event === "payout" && e.data.ok === false).map((e) => String(e.data.idx));
+  if (failed.length) return { outcome: "failure", why: `payout failed for item(s) ${failed.join(", ")}` };
+  return { outcome: "success" };
+}
+
 export function explorerUrl(network: "mainnet" | "testnet", hash: string): string {
   return network === "mainnet" ? `https://nearblocks.io/txns/${hash}` : `https://testnet.nearblocks.io/txns/${hash}`;
 }

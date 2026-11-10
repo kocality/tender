@@ -301,6 +301,13 @@ describe("runKeeper", () => {
     expect(r.exitCode).toBe(1);
     expect(b.st.lines[0]).toMatch(/^stop: function-call key allowance .* 300 Tgas prepaid gas/);
   });
+  it("a 0.25 NEAR allowance (the old A5/A6 figure) cannot sign finalize: stop with the 300 Tgas text, no call sent (DOC-07)", async () => {
+    const { st, deps } = chain({ sale: keyed({ revealed: 3 }), bids: sealed(3), now: CLOSE_NS + 10n, allowance: 250_000_000_000_000_000_000_000n });
+    const r = await runKeeper(OPTS, deps);
+    expect(st.calls).toEqual([]);
+    expect(r.exitCode).toBe(1);
+    expect(st.lines[0]).toMatch(/^stop: function-call key allowance 250000000000000000000000 yocto is below 315000000000000000000000 yocto, the cost of 300 Tgas prepaid gas/);
+  });
   it("a missing sale or contract is exit 0 with 'no such sale'", async () => {
     const a = chain({ sale: open(), bids: [], now: CLOSE_NS });
     a.st.sale = null;
@@ -379,6 +386,7 @@ describe("the keeper key (KEEP-05, OPS-03)", () => {
     expect(keeperKeyProblem(fc({ methodNames: ["open", "withdraw"] }), V1, live)).toMatch(/subset/);
     expect(keeperKeyProblem(fc({ methodNames: [] }), V1, live)).toMatch(/subset/);
     expect(keeperKeyProblem(fc({ allowance: 314_999_999_999_999_999_999_999n }), V1, live)).toMatch(/below/);
+    expect(keeperKeyProblem(fc({ allowance: 250_000_000_000_000_000_000_000n }), V1, live)).toMatch(/below 315000000000000000000000 yocto/); // DOC-07: 0.5 NEAR is the allowance of H-keys-keeper
   });
   it("a full-access key needs --allow-full-access, and is refused under GitHub Actions even with it", () => {
     const fa = { kind: "FullAccess" as const, allowance: null };

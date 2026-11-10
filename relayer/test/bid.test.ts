@@ -5,7 +5,7 @@ import { KeyPair } from "near-api-js";
 import { describe, expect, it } from "vitest";
 import { b58decode, fromBase64, nep413Prehash, type MultiPayload } from "@tender/intents";
 import { MPC_DOMAIN2_PK, commitmentHex, sealBid } from "@tender/seal";
-import { buildBidPayload, loadSealedFile, main, signNep413, windowProblem, type BidEnv, type Submitted } from "../scripts/bid-nep413.js";
+import { buildBidPayload, loadSealedFile, main, refundProblem, signNep413, windowProblem, type BidEnv, type Submitted } from "../scripts/bid-nep413.js";
 import type { BidView, SaleView } from "../scripts/lib/views.js";
 import { bidView, configView, saleView } from "./helpers/views.js";
 
@@ -19,13 +19,14 @@ const baseSale = (over: Partial<SaleView> = {}): SaleView => saleView({
   id: "3", close_ns: (NOW_NS + 3_600_000_000_000n).toString(), path: "tender/3/00112233445566778899aabbccddeeff", lot_exp: 0, ...over,
 });
 
-interface Fake { env: BidEnv; calls: string[]; sent: MultiPayload[]; bids: BidView[]; balance: { v: bigint }; keys: { v: string[] } }
+interface Fake { env: BidEnv; calls: string[]; sent: MultiPayload[]; bids: BidView[]; balance: { v: bigint }; keys: { v: string[] }; recorded: Array<Parameters<BidEnv["record"]>[0]> }
 
-function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; native?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean } = {}): Fake {
+function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; native?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean; foreignAfter?: boolean } = {}): Fake {
   const kp = o.secret === undefined ? KeyPair.fromRandom("ed25519") : o.secret;
   const calls: string[] = [];
   const sent: MultiPayload[] = [];
   const bids: BidView[] = [];
+  const recorded: Fake["recorded"] = [];
   const balance = { v: o.balance ?? 10_000_000n };
   const keys = { v: kp && o.registered !== false ? [kp.getPublicKey().toString()] : [] };
   const cmOf = (mp: MultiPayload) => {
@@ -51,18 +52,20 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
       calls.push("execute");
       if (o.refund) balance.v = balance.v; // escrow debited, then refunded: balance unchanged
       else bids.push(bidView({ idx: bids.length, bidder: signer, ct: "", cm: cmOf(mp), origin: "near" }));
+      if (o.foreignAfter) bids.push(bidView({ idx: bids.length, bidder: "someone.near", ct: "", cm: "f".repeat(64), origin: "near" })); // another bidder lands right after ours
       return { hash: "HASH1", ok: true, block: 5, logs: [], signer };
     },
     relay: async () => {
       calls.push("relay");
       return { hash: "HASH2", ok: true, logs: [], signer: "relayer.tenderseal.near" };
     },
-    record: async () => {
+    record: async (row) => {
       calls.push("record");
+      recorded.push(row);
     },
     sleep: async () => {},
   };
-  return { env, calls, sent, bids, balance, keys };
+  return { env, calls, sent, bids, balance, keys, recorded };
 }
 
 async function run(args: string[], f: Fake, dir = mkdtempSync(join(tmpdir(), "bid-"))) {
@@ -103,7 +106,6 @@ describe("signer gas balance (OPS-01): a 300 Tgas execute_intents needs 0.3009 N
 describe("bid payload", () => {
   it("transfer fields match the Intents contract of the card", async () => {
     const f = fake();
-    const before = Date.now();
     const r = await run(BASE, f);
     expect(r.code).toBe(0);
     const line = r.out.split("\n").find((l) => l.startsWith("payload (unsigned): "))!;
@@ -124,9 +126,8 @@ describe("bid payload", () => {
     expect(msg.origin).toBe("near");
     expect(fromBase64(msg.ct)).toHaveLength(160);
     expect(msg.cm).toMatch(/^[0-9a-f]{64}$/);
-    const ttl = Date.parse(p.deadline) - before;
-    expect(ttl).toBeGreaterThan(595_000 - 1000);
-    expect(ttl).toBeLessThan(605_000);
+    // 10 minutes after the chain's clock, not the local one (X12-01): the fake chain stands in 2026-11-06, the local clock does not
+    expect(p.deadline).toBe(new Date(Math.floor(Number(NOW_NS / 1_000_000n + 600_000n) / 1000) * 1000).toISOString());
   });
 
   it("the nep413 signature verifies over the Intents prehash", async () => {
@@ -318,5 +319,83 @@ describe("--yes", () => {
     const r = await run(BASE, fake({ secret: null }));
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/no local key/);
+  });
+});
+
+describe("refunded bids leave their ciphertext in public history (X12P-02)", () => {
+  const closeIn = (ms: number) => ({ close_ns: (NOW_NS + BigInt(ms) * 1_000_000n).toString() });
+  const deadlineOf = (out: string) => JSON.parse(out.split("\n").find((l) => l.startsWith("payload (unsigned): "))!.slice(20)).deadline as string;
+  it("the signed deadline stops a minute before close", async () => {
+    const r = await run(BASE, fake({ sale: closeIn(300_000) }));
+    expect(r.code).toBe(0);
+    expect(deadlineOf(r.out)).toBe(new Date(Number(NOW_NS / 1_000_000n) + 240_000).toISOString());
+  });
+  it("a sale that closes within a minute is refused before anything is sealed", async () => {
+    const f = fake({ sale: closeIn(59_000) });
+    const r = await run(BASE, f);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/less than a minute from now/);
+    expect(r.out).not.toContain("sealed bid file");
+    expect(f.calls).toEqual([]);
+  });
+  it("a full sale, the escrow cap and a key request in flight are refused; --late is not held to them", async () => {
+    expect(refundProblem(baseSale({ bids: 8, max_bids: 8 }), 1_000_000n)).toMatch(/sale is full \(8\/8 bids\)/);
+    expect(refundProblem(baseSale({ escrow_total: "999999999999" }), 2n)).toMatch(/escrow cap/);
+    expect(refundProblem(baseSale({ in_flight: true }), 1_000_000n)).toMatch(/in flight/);
+    expect(refundProblem(baseSale(), 3_000_000n)).toBeNull();
+    const full = await run(BASE, fake({ sale: { bids: 16, max_bids: 16 } }));
+    expect(full.code).toBe(1);
+    expect(full.err).toMatch(/sale is full/);
+    expect((await run([...BASE, "--late"], fake({ sale: { ...closeIn(-1000), bids: 16, max_bids: 16 } }))).code).toBe(0);
+  });
+});
+
+describe("what is recorded, and when (S-05, SC-06)", () => {
+  const order = (f: Fake) => {
+    const seq: string[] = [];
+    const bids = f.env.bids;
+    const record = f.env.record;
+    f.env.bids = async (id) => (seq.push("bids"), bids(id));
+    f.env.record = async (row) => (seq.push("record"), record(row));
+    return seq;
+  };
+  it("the row is written after the get_bids confirmation, not before it", async () => {
+    const f = fake();
+    const seq = order(f);
+    expect((await run([...BASE, "--yes"], f)).code).toBe(0);
+    expect(seq.lastIndexOf("bids")).toBeLessThan(seq.indexOf("record"));
+    expect(f.recorded).toHaveLength(1);
+    expect(f.recorded[0]).toMatchObject({ sale: "3", step: "bid", txHash: "HASH1" });
+  });
+  it("a bid the contract refunded is reported FAIL (and its tx is still recorded, as what the chain says it was)", async () => {
+    const f = fake({ refund: true });
+    const seq = order(f);
+    const r = await run([...BASE, "--yes"], f);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/FAIL the bid is not in get_bids/);
+    expect(seq.lastIndexOf("bids")).toBeLessThan(seq.indexOf("record")); // the 10 polls come first
+  });
+  it("another bidder landing after ours does not turn a stored bid into a FAIL", async () => {
+    const f = fake({ foreignAfter: true });
+    const r = await run([...BASE, "--yes", "--no-record"], f);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("OK bid idx 0 sealed");
+  });
+  it("a late bid is recorded as an expected failure (it is refunded), after the refund is seen", async () => {
+    const f = fake({ sale: { close_ns: (NOW_NS - 1n).toString() }, refund: true });
+    const seq = order(f);
+    expect((await run([...BASE, "--late", "--yes"], f)).code).toBe(0);
+    expect(f.recorded[0]).toMatchObject({ step: "attack-late", expect: "failure" });
+    expect(seq.lastIndexOf("bids")).toBeLessThan(seq.indexOf("record"));
+  });
+  it("escrow equal to size says the size is public (X12-02: escrow B is visible the moment the bid lands, q <= B)", async () => {
+    const same = await run(["--sale", "3", "--price", "3.5", "--size", "3", "--escrow", "3", "--signer", SIGNER, "--contract", CONTRACT], fake());
+    expect(same.out).toMatch(/note: --escrow equals --size: the escrow is public the moment the bid lands, so the size is public too; use an escrow above the size/);
+    expect((await run(BASE, fake())).out).not.toMatch(/escrow equals --size/);
+  });
+  it("a below-reserve bid says it is refunded once it is revealed, not 'in full' without a condition", async () => {
+    const r = await run(["--sale", "3", "--price", "1", "--size", "1", "--escrow", "3", "--signer", SIGNER, "--contract", CONTRACT], fake({ sale: { reserve: "3000000" } }));
+    expect(r.out).toMatch(/refunded in full once it is revealed/);
+    expect(r.out).not.toMatch(/the bid is refunded in full but/);
   });
 });

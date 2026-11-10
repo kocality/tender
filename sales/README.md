@@ -28,9 +28,9 @@ A spec holds sale parameters only. It never holds a bid, a price a bidder chose,
 - `create_at_utc`: when the human creates the sale (informational).
 - `msg`: the create message. `close_ns` is added by the script. Amounts are decimal strings of base units; `min_bidders`, `max_bids`, `decimals` and `lot_exp` are numbers.
   - `reserve`: minimum clearing price in micro-USDC per `10^lot_exp` tokens. `auto:oneclick_x0.9` means 90% of the 1Click USD price of the token at creation time, computed with integer math; the result goes into the transaction, not into this file. `--reserve <n>` overrides it.
-  - `min_escrow` (micro-USDC) and `min_bidders` are the public open conditions.
+  - `min_escrow` (micro-USDC) and `min_bidders` are the public open conditions. Sale #0 must fail them on purpose, and it uses `1000000000001`: the contract refuses any bid that takes a sale's escrow above 10^12 micro-USDC (1,000,000 USDC, `MAX_ESCROW_TOTAL`), so no one can fund sale #0 open and it ends by `cancel` with 0 key requests. A reachable threshold (the earlier 50 USDC) can be met by anyone with a few fresh accounts, because a below-reserve bid is refunded in full and costs nothing. The dry-run prints a note for a sale with such a `min_escrow`.
   - `reveal_secs`: reveal window, 86400 s.
-  - `decimals`, `lot_exp`: the contract requires `decimals + lot_exp <= 26`.
+  - `decimals`, `lot_exp`: the contract requires `20 <= decimals + lot_exp <= 26` (create refunds with `decimals_plus_lot_exp` outside it). The lower bound limits what `p`, a u64, can price: `lot_exp >= 20 - decimals`, so one whole token costs at most `(2^64 - 1) / 10^(20 - decimals)` micro-USDC, about 0.18 USDC at 6 decimals, 18.4 USDC at 8 and 184 USDC at 9. `decimals` is the seller's own declaration and the contract cannot read `ft_metadata` while it handles the transfer, so the script reads `ft_metadata` of the sale token and the quote token (6 decimals) and blocks a create whose numbers differ (a wrong `decimals` would shift every price by 10^k and still pass `pnpm verify`).
 
 ## `new()` arguments
 

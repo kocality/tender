@@ -28,6 +28,8 @@ const usage = `usage:
 const MIN_BID = 1_000_000n; // micro-USDC
 const ORIGIN_RE = /^[\x21-\x7e]{1,8}$/;
 const MS = 1000;
+const CLOSE_MARGIN_MS = 60_000; // a signed bid expires a minute before close, so a late relay is never stored (X12P-02)
+const MAX_ESCROW_TOTAL = 1_000_000_000_000n; // micro-USDC per sale, contract/src/sale.rs
 
 export interface Submitted {
   hash: string;
@@ -54,7 +56,7 @@ export interface BidEnv {
   secretKey(signer: string): KeyPairString | null;
   execute(signer: string, intents: string, mp: MultiPayload): Promise<Submitted>;
   relay(url: string, mp: MultiPayload): Promise<Submitted>;
-  record(row: { sale: SaleTag; step: Step; txHash: string; signer: string; contract: string }): Promise<void>;
+  record(row: { sale: SaleTag; step: Step; txHash: string; signer: string; contract: string; expect?: "failure" }): Promise<void>;
   sleep(ms: number): Promise<void>;
 }
 
@@ -98,7 +100,7 @@ export function liveEnv(c: Common): BidEnv {
     },
     async record(row) {
       const { recordTx } = await import("./record.js");
-      await recordTx({ network: c.network, sale: row.sale, step: row.step, txHash: row.txHash, signer: row.signer, contract: row.contract, chain: "near" });
+      await recordTx({ network: c.network, sale: row.sale, step: row.step, txHash: row.txHash, signer: row.signer, contract: row.contract, chain: "near", expect: row.expect });
     },
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
@@ -153,11 +155,13 @@ export function loadSealedFile(path: string, want: { sale: string; escrow: bigin
 /** The bid transfer, with the msg the contract parses (op, sale, ct, cm, origin). */
 export async function buildBidPayload(o: {
   signer: string; intents: string; contract: string; token: string; amount: bigint; sale: string; ct: string; cm: string; origin: string;
-  saltHex: string; nowMs?: number;
+  saltHex: string; nowMs?: number; closeMs?: number;
 }): Promise<{ payload: DefusePayload; nonce32: Uint8Array; msg: string }> {
   const msg = bidMsg({ sale: o.sale, ct: o.ct, cm: o.cm, origin: o.origin as BidOrigin });
   if (Buffer.byteLength(msg) > 512) throw new Error("bid msg is longer than 512 bytes");
-  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs);
+  // 10 minutes from `nowMs` (chain time; the local clock only when the caller gives none), and never past a minute before close
+  const nowMs = o.nowMs ?? Date.now();
+  const { deadlineMs, deadlineIso } = makeDeadline(nowMs, o.closeMs === undefined ? 600_000 : Math.min(600_000, o.closeMs - CLOSE_MARGIN_MS - nowMs));
   const nonce32 = buildVersionedNonce({ saltHex: o.saltHex, deadlineMs });
   const intent = transferIntent({ receiverId: o.contract, tokenId: o.token, amount: o.amount, msg });
   const payload = buildPayload({ signerId: o.signer, verifyingContract: o.intents, deadlineIso, nonce: nonce32, intents: [intent] });
@@ -170,7 +174,17 @@ export function windowProblem(sale: SaleView, nowNs: bigint, late: boolean): str
   const closeIso = new Date(Number(close / 1_000_000n)).toISOString();
   if (late) return nowNs >= close ? null : `--late needs the sale to be closed; it closes ${closeIso}`;
   if (sale.state !== "Open") return `sale is ${sale.state}, not Open`;
-  return nowNs < close ? null : `sale closed ${closeIso}; use --late to send a deliberately late bid`;
+  if (nowNs >= close) return `sale closed ${closeIso}; use --late to send a deliberately late bid`;
+  if (nowNs >= close - BigInt(CLOSE_MARGIN_MS) * 1_000_000n) return `sale closes ${closeIso}, less than a minute from now: a bid that lands after close is refunded and its ciphertext stays public (X12P-02); use --late to send a deliberately late bid after close`;
+  return null;
+}
+
+/** Pure: the contract would refund this bid (sale full, escrow cap, key request in flight) and its ciphertext would stay in public tx history (X12P-02). `null` = fine. */
+export function refundProblem(sale: SaleView, B: bigint): string | null {
+  if (sale.in_flight) return "the key request is in flight: the sale no longer takes bids";
+  if (sale.bids >= sale.max_bids) return `sale is full (${sale.bids}/${sale.max_bids} bids)`;
+  if (BigInt(sale.escrow_total) + B > MAX_ESCROW_TOTAL) return `escrow cap: ${sale.escrow_total} + ${B} > ${MAX_ESCROW_TOTAL} micro-USDC`;
+  return null;
 }
 
 function saleTag(explicit: string | undefined, saleId: string, contract: string): SaleTag | null {
@@ -223,7 +237,7 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     const config = await env.config();
     const sale = await env.sale(saleId);
     if (!sale) throw new Error(`sale ${saleId} not found on ${common.contract}`);
-    const problem = windowProblem(sale, await env.nowNs(), late);
+    const problem = windowProblem(sale, await env.nowNs(), late) ?? (late ? null : refundProblem(sale, B));
     if (problem) throw new Error(problem);
     const repoMpk = MPC_DOMAIN2_PK[common.network];
     if (config.mpc_public_key !== repoMpk) throw new Error(`MPC key mismatch, refusing to seal: contract ${config.mpc_public_key} · repo ${repoMpk}`);
@@ -250,7 +264,8 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
         p: p.toString(), q: q.toString(), escrow: B.toString(), origin: bidOrigin,
       });
       io.out(`p = ${p} micro-USDC per ${unit} token(s) · q = ${q} micro-USDC · escrow = ${B} micro-USDC (${fromUnits(B, 6)} USDC)`);
-      if (p < BigInt(sale.reserve)) io.out(`note: p is below the reserve (${sale.reserve}); the bid is refunded in full but still counts toward the open conditions`);
+      if (q === B) io.out("note: --escrow equals --size: the escrow is public the moment the bid lands, so the size is public too; use an escrow above the size");
+      if (p < BigInt(sale.reserve)) io.out(`note: p is below the reserve (${sale.reserve}); refunded in full once it is revealed (left unrevealed while another bid is revealed, 10% stays in the contract); still counts toward the open conditions`);
     }
     io.out(`sealed bid file (plaintext p, q, salt; local only, never commit): ${savedTo}`);
     if (!sealedPath) io.out(`to send exactly this bid later: re-run with --sealed ${savedTo}`);
@@ -272,6 +287,8 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     const { payload, nonce32 } = await buildBidPayload({
       signer, intents: config.intents, contract: common.contract, token: sale.quote_token, amount: B, sale: saleId, ct, cm, origin: bidOrigin,
       saltHex: await env.currentSalt(config.intents),
+      nowMs: Number((await env.nowNs()) / 1_000_000n), // chain time, not the local clock (X12-01)
+      ...(late ? {} : { closeMs: Number(BigInt(sale.close_ns) / 1_000_000n) }),
     });
     io.out(`payload (unsigned): ${payloadString(payload)}`);
     let mp: MultiPayload | null = null;
@@ -304,39 +321,43 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     const r = relayUrl ? await env.relay(relayUrl, mp) : await env.execute(signer, config.intents, mp);
     io.out(`tx=${r.hash} status=${r.ok ? "SuccessValue" : "Failure"}${r.block !== undefined ? ` block=${r.block}` : ""} url=${explorer(common.network, r.hash)}`);
     const tag = saleTag(str("tag"), saleId, common.contract);
+    // What the chain shows, before anything is recorded: a tx that succeeded at top level can still be a refund (S-05).
+    const mineIn = (bids: BidView[]) => bids.slice(bidsBefore).find((b) => b.bidder === signer && b.cm === cm); // not "the last bid": another bidder may land after ours
+    const confirm = async (): Promise<number> => {
+      if (!r.ok) {
+        io.err(`FAIL execute_intents: ${JSON.stringify(r.status).slice(0, 400)}`);
+        return 1;
+      }
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const bids = await env.bids(saleId);
+        if (!late) {
+          const mine = mineIn(bids);
+          if (mine) {
+            io.out(`OK bid idx ${mine.idx} sealed`);
+            return 0;
+          }
+        } else if ((await env.balance(config.intents, signer, sale.quote_token)) === have) {
+          if (mineIn(bids)) {
+            io.err(`FAIL late bid was accepted: ${bids.length} bids now, ${bidsBefore} before`);
+            return 1;
+          }
+          io.out("OK late bid refunded");
+          return 0;
+        }
+        await env.sleep(3 * MS);
+      }
+      io.err(late ? "FAIL the refund of the late bid is not visible yet (balance differs from before)" : `FAIL the bid is not in get_bids; contract log: ${r.logs.filter((l) => /refund/i.test(l)).join(" | ") || r.logs.join(" | ") || "(no log)"}`);
+      return 1;
+    };
+    const code = await confirm();
     if (common.network === "mainnet" && !common.noRecord && tag && r.signer) {
       try {
-        await env.record({ sale: tag, step: late ? "attack-late" : "bid", txHash: r.hash, signer: r.signer, contract: common.contract });
+        await env.record({ sale: tag, step: late ? "attack-late" : "bid", txHash: r.hash, signer: r.signer, contract: common.contract, ...(late ? { expect: "failure" as const } : {}) });
       } catch (e) {
         io.err(`WARN recording failed (run scripts/record.ts by hand within 2 h): ${(e as Error).message}`);
       }
     } else if (common.network === "mainnet" && !common.noRecord) io.err("WARN not recorded: pass --tag R|0|1|2|3 (and a signer) or run scripts/record.ts by hand within 2 h");
-    if (!r.ok) {
-      io.err(`FAIL execute_intents: ${JSON.stringify(r.status).slice(0, 400)}`);
-      return 1;
-    }
-
-    // outcome as the chain shows it
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const bids = await env.bids(saleId);
-      if (!late) {
-        const last = bids.at(-1);
-        if (bids.length > bidsBefore && last && last.bidder === signer && last.cm === cm) {
-          io.out(`OK bid idx ${last.idx} sealed`);
-          return 0;
-        }
-      } else if ((await env.balance(config.intents, signer, sale.quote_token)) === have) {
-        if (bids.length !== bidsBefore) {
-          io.err(`FAIL late bid was accepted: ${bids.length} bids now, ${bidsBefore} before`);
-          return 1;
-        }
-        io.out("OK late bid refunded");
-        return 0;
-      }
-      await env.sleep(3 * MS);
-    }
-    io.err(late ? "FAIL the refund of the late bid is not visible yet (balance differs from before)" : `FAIL the bid is not in get_bids; contract log: ${r.logs.filter((l) => /refund/i.test(l)).join(" | ") || r.logs.join(" | ") || "(no log)"}`);
-    return 1;
+    return code;
   } catch (e) {
     io.err(`error: ${(e as Error).message}`);
     return 1;

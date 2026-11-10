@@ -11,6 +11,7 @@ import { fromUnits, toUnits } from "./lib/units.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ONECLICK_TOKENS = "https://1click.chaindefuser.com/v0/tokens";
+const MAX_ESCROW_TOTAL = 1_000_000_000_000n; // micro-USDC per sale, contract/src/sale.rs (relayer/test/sale.test.ts reads it from there)
 
 export interface SaleSpec {
   tag: SaleTag;
@@ -47,6 +48,7 @@ export interface SaleState {
   wrapFtBalance: bigint; // seller's wrap.near fungible-token balance
   wrapRegistered: boolean; // storage_balance_of(seller) is not null
   price?: { price: string; updatedAt: string }; // JAMBO USD price from 1Click, decimal string
+  decimals?: { token: number | null; quote: number | null }; // ft_metadata().decimals of the sale token and of the quote token; null = unreadable; absent = not checked
 }
 
 export interface SalePlan {
@@ -118,6 +120,20 @@ export function planSale(spec: SaleSpec, o: SaleOpts, st: SaleState): SalePlan {
   // decimals + lot_exp must stay inside the contract's create window (refund reason decimals_plus_lot_exp)
   const scaleExp = spec.msg.decimals + spec.msg.lot_exp;
   if (scaleExp < 20 || scaleExp > 26) problems.push(`decimals + lot_exp is ${scaleExp}, create needs 20 to 26 (the contract refunds with decimals_plus_lot_exp)`);
+
+  // The contract cannot read ft_metadata in mt_on_transfer, so a wrong declared `decimals` would shift every price unit by 10^k and still verify (X12-03)
+  if (st.decimals) {
+    const asset = (id: string) => id.replace(/^nep141:/, "");
+    const check = (what: string, got: number | null, want: number) => {
+      if (got === null) (net === "mainnet" ? problems : notes).push(`cannot read ft_metadata of ${what}; its decimals ${want} are unchecked`);
+      else if (got !== want) problems.push(`${what} has decimals ${got} in ft_metadata but the sale says ${want}; every price and amount would be off by 10^${Math.abs(got - want)}`);
+    };
+    check(asset(tokenId), st.decimals.token, spec.msg.decimals);
+    check(`the quote token ${asset(o.quoteToken ?? spec.msg.quote_token)}`, st.decimals.quote, 6);
+  }
+
+  // contract/src/sale.rs MAX_ESCROW_TOTAL: validate_bid refuses a bid that takes a sale's escrow above it
+  if (BigInt(spec.msg.min_escrow) > MAX_ESCROW_TOTAL) notes.push(`min_escrow ${spec.msg.min_escrow} is above the contract's per-sale escrow cap ${MAX_ESCROW_TOTAL}: this sale can never open and ends by cancel (intended for the twin's failed half)`);
 
   // reserve
   let reserve = spec.msg.reserve;
@@ -253,9 +269,19 @@ export async function main(argv: string[]): Promise<number> {
       wrapFtBalance = await ftBalance(network, o.wrap, o.seller);
       wrapRegistered = (await view<unknown>(network, o.wrap, "storage_balance_of", { account_id: o.seller })) !== null;
     }
+    const decimalsOf = async (assetId: string): Promise<number | null> => {
+      if (!assetId.startsWith("nep141:")) return null;
+      try {
+        const meta = await view<{ decimals?: unknown }>(network, assetId.slice("nep141:".length), "ft_metadata", {});
+        return typeof meta?.decimals === "number" ? meta.decimals : null;
+      } catch {
+        return null; // a testnet mock without ft_metadata, or an RPC problem: planSale decides what that means
+      }
+    };
+    const decimals = { token: await decimalsOf(tokenId), quote: await decimalsOf(o.quoteToken ?? spec.msg.quote_token) };
     const needsPrice = o.reserveOverride === undefined && spec.msg.reserve.startsWith("auto:");
     const plan = planSale(spec, o, {
-      nowMs: Date.now(), nextId, intentsBalance: intentsBalance as bigint, wrapFtBalance, wrapRegistered, price: needsPrice ? await jamboPrice() : undefined,
+      nowMs: Date.now(), nextId, intentsBalance: intentsBalance as bigint, wrapFtBalance, wrapRegistered, price: needsPrice ? await jamboPrice() : undefined, decimals,
     });
 
     for (const n of plan.notes) console.log(n);

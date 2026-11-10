@@ -37,6 +37,13 @@ describe("evidence-check", () => {
     expect(r.missing.some((m) => m.startsWith("MISSING lock/"))).toBe(false);
   });
 
+  it("a refunded bid recorded as a failure does not fill a slot, an expected failure does (S-05)", async () => {
+    write([row({ n: 20, sale: "lock", step: "birth", outcome: "failure" }), row({ n: 21, sale: "0", step: "attack-early-open", outcome: "failure", expected: "failure" })]);
+    const r = await offline({ until: new Date("2026-11-13T04:30:00Z") });
+    expect(r.missing).toContain("MISSING lock/birth ×1");
+    expect(r.missing).not.toContain("MISSING 0/attack-early-open ×1");
+  });
+
   it("a missing snapshot is a problem", async () => {
     write([row({ n: 2 })], false);
     expect((await offline()).problems.join("\n")).toMatch(/rpc\/2.*is missing/);

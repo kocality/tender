@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseCommon } from "./lib/cli.js";
 import {
-  EVIDENCE_DIR, SALE_TAGS, STEPS, explorerUrl, upsertGateRow, upsertMainnetRow,
+  EVIDENCE_DIR, SALE_TAGS, STEPS, explorerUrl, txOutcome, upsertGateRow, upsertMainnetRow,
   type GateRow, type MainnetRow, type SaleTag, type Step,
 } from "./lib/evidence.js";
 import { blockHeight, decodeSuccessValue, txStatus, type Network } from "./lib/rpc.js";
@@ -110,9 +110,9 @@ export async function recordTx(o: RecordOpts): Promise<MainnetRow> {
   if (o.rpc) notes.push("rpc override");
 
   const block = await blockHeight(o.network, r.transaction_outcome.block_hash, { rpc: o.rpc });
-  const status = r?.status ?? {};
-  const outcome: MainnetRow["outcome"] | undefined = "SuccessValue" in status ? "success" : "Failure" in status ? "failure" : undefined;
-  if (!outcome) console.warn(`WARN transaction status is neither SuccessValue nor Failure: ${JSON.stringify(status).slice(0, 120)}`);
+  const { outcome, why } = txOutcome(r);
+  if (!outcome) console.warn(`WARN transaction status is neither SuccessValue nor Failure: ${JSON.stringify(r?.status ?? {}).slice(0, 120)}`);
+  if (why) notes.push(why);
   if (o.expect && outcome && o.expect !== outcome) {
     const msg = `WARN expected ${o.expect} but got ${outcome}`;
     console.warn(msg);

@@ -72,6 +72,11 @@ describe("validateBody", () => {
   it("over 16 KB is 413", () => {
     expect(validateBody("x".repeat(17 * 1024), cfg, NOW)).toMatchObject({ ok: false, status: 413 });
   });
+  it("a deadline more than 15 minutes ahead is 400 deadline_too_far; exactly 15 minutes passes (X12-01)", () => {
+    expect(validateBody(body(raw({ deadline: "2026-11-10T08:15:00.001Z" })), cfg, NOW)).toMatchObject({ ok: false, status: 400, code: "deadline_too_far" });
+    expect(validateBody(body(nep({ deadline: "2026-11-11T08:00:00.000Z" })), cfg, NOW)).toMatchObject({ ok: false, code: "deadline_too_far" });
+    expect(validateBody(body(raw({ deadline: "2026-11-10T08:15:00.000Z" })), cfg, NOW).ok).toBe(true);
+  });
 });
 
 describe("handler", () => {
@@ -202,7 +207,7 @@ describe("gas griefing: the relayer only pays for what the app sends (REL-01)", 
     let now = NOW;
     deps.now = () => now;
     const h = make();
-    const b = body(raw({ deadline: "2026-11-10T09:00:00.000Z" }));
+    const b = body(raw({ deadline: "2026-11-10T08:15:00.000Z" }));
     expect((await h(post(b))).status).toBe(502);
     const again = await h(post(b));
     expect(again.status).toBe(409);
@@ -382,6 +387,18 @@ describe("an RPC failure is not 'allowance 0' (REL-04)", () => {
       expect(g).toMatchObject({ unknown: true, allowance: null, allowance_near: null });
       const r = await h(post(body(raw())));
       expect(r.status).toBe(200);
+    });
+  });
+  it("a POST while every RPC answers 429 is 502 upstream_error whose detail says to retry or run a relayer, never relayer_allowance_low (DUP-REL04)", async () => {
+    await withFetch(err429, async () => {
+      const { cfg: c, deps: d } = live();
+      const h = createRelayHandler(c, { ...d, now: () => NOW, log: () => {} });
+      const r = await h(post(body(raw())));
+      const j = await r.json();
+      expect(r.status).toBe(502);
+      expect(j.error).toBe("upstream_error");
+      expect(j.detail).toMatch(/try again in a minute or run your own relayer with `pnpm relay:local`/);
+      expect(j.detail).not.toMatch(/allowance/);
     });
   });
   it("a key that is not on chain is still allowance 0", async () => {

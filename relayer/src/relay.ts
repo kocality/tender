@@ -46,6 +46,7 @@ const bad = (code: string, detail: string): Check => ({ ok: false, status: 400, 
 const MAX_MIN_GAS = 30_000_000_000_000n; // 30 Tgas: what a bid or a self-reveal notification asks for
 const FAILED_TTL_MS = 10 * 60_000; // a body that failed on chain is not executed again for this long
 const HEALTH_TTL_MS = 30_000;
+const MAX_DEADLINE_AHEAD_MS = 15 * 60_000; // the app and the CLI sign 10 minutes ahead; Intents itself sets no upper bound
 
 /** R3 + D4-04 + I2: shape, standard, recipient / verifying contract, future deadline, transfer-only intents. */
 export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Check & { signed?: unknown[]; signers?: string[] } {
@@ -83,6 +84,7 @@ export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Chec
     if (standard !== "nep413" && inner.verifying_contract !== cfg.intentsId) return bad("wrong_verifying_contract", `${at} verifying_contract must be ${cfg.intentsId}`);
     if (typeof inner.deadline !== "string" || !RFC3339.test(inner.deadline) || Number.isNaN(Date.parse(inner.deadline))) return bad("bad_deadline", `${at} deadline must be an RFC 3339 timestamp`);
     if (Date.parse(inner.deadline) <= nowMs) return bad("deadline_expired", `${at} deadline ${inner.deadline} has passed`);
+    if (Date.parse(inner.deadline) > nowMs + MAX_DEADLINE_AHEAD_MS) return bad("deadline_too_far", `${at} deadline ${inner.deadline} is more than 15 minutes ahead; sign a payload that expires within 10 minutes`);
     if (!Array.isArray(inner.intents) || inner.intents.length === 0) return bad("no_intents", `${at} intents must be a non-empty array`);
     if (inner.intents.some((x) => !isObj(x) || x.intent !== "transfer")) return bad("only_transfer_allowed", `${at} may contain only transfer intents`);
     // The relayer pays gas for whatever passes simulate: one transfer per signed item, and a notifying transfer only to the Tender contract.
@@ -204,7 +206,8 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
         failed.set(key, deps.now() + FAILED_TTL_MS);
         return { status: 502, body: { error: "execute_failed", txHash: out.txHash, detail: out.error ?? "execute_intents failed" } };
       } catch (e) {
-        return failBody(502, "upstream_error", oneLine(e));
+        // A transport failure says nothing about the signed payload or the allowance: the app shows this text for any 5xx.
+        return failBody(502, "upstream_error", `the relayer could not complete its NEAR RPC call (${oneLine(e)}); try again in a minute or run your own relayer with \`pnpm relay:local\``);
       }
     })();
     inFlight.set(key, run);
