@@ -11,6 +11,8 @@ export interface SaleBundle {
   result?: SaleResult | null;
   /** Block of the sale's latest key request, for "key released after k blocks". */
   keyRequestBlock?: bigint | null;
+  /** Chain time of the pending key request while one is in flight (C-02: dead after an hour). */
+  keyRequestNs?: bigint | null;
 }
 
 /** One final height for every view of a bundle: sale, bids, result and key log describe the same block, not three different ones. */
@@ -18,12 +20,12 @@ export async function loadSaleBundle(id: string): Promise<SaleBundle> {
   const at = await finalBlockHeight(config.rpcUrls);
   const sale = await getSale(id, at);
   if (!sale) return { id, sale, bids: [] };
-  const [bids, result, keyRequestBlock] = await Promise.all([
+  const [bids, result, keyRequest] = await Promise.all([
     getAllBids(id, at),
     sale.state === 'Finalized' ? getResult(id, at).catch(() => null) : Promise.resolve(null),
-    sale.key ? getKeyLog(at).then((log) => log.filter((k) => k.sale === id).at(-1)?.block ?? null).catch(() => null) : Promise.resolve(null),
+    sale.key || sale.inFlight ? getKeyLog(at).then((log) => log.filter((k) => k.sale === id).at(-1) ?? null).catch(() => null) : Promise.resolve(null),
   ]);
-  return { id, sale, bids, result, keyRequestBlock };
+  return { id, sale, bids, result, keyRequestBlock: sale.key ? (keyRequest?.block ?? null) : null, keyRequestNs: sale.inFlight ? (keyRequest?.ns ?? null) : null };
 }
 
 export interface KeysData {

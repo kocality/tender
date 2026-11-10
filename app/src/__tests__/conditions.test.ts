@@ -35,6 +35,15 @@ describe('openConditions (C13 / C19)', () => {
     expect(c).toMatchObject({ canOpen: false, canCancel: false });
   });
 
+  test('a request in flight for an hour or more is dead (C-02): open again, and cancel after close + 24 h', () => {
+    const sent = AFTER;
+    const s = open({ state: 'Opening', in_flight: true, key_requests: 1 });
+    expect(openConditions(s, sent + 3599n * NS, sent)).toMatchObject({ canOpen: false, canCancel: false, requestDead: false });
+    expect(openConditions(s, sent + 3600n * NS, sent)).toMatchObject({ canOpen: true, canCancel: false, requestDead: true });
+    expect(openConditions(s, CLOSE + 86_400n * NS, sent)).toMatchObject({ canOpen: true, canCancel: true, cancelReason: 'no_key_after_24h' });
+    expect(openConditions(s, CLOSE + 86_400n * NS)).toMatchObject({ canOpen: false, canCancel: false }); // request time unknown: wait
+  });
+
   test('key already present: neither open nor cancel', () => {
     const c = openConditions(parseSale({ ...saleKeyed, state: 'Open' }), AFTER);
     expect(c.canOpen).toBe(false);

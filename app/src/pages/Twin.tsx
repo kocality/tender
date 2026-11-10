@@ -33,7 +33,7 @@ export function TwinView({ bundles, nowNs }: { bundles: SaleBundle[]; nowNs: big
       </div>
       <div className="grid-2">
         {bundles.map((b) => (
-          <SaleCard key={b.id} id={b.id} sale={b.sale} nowNs={nowNs} actions={b.sale ? <OpenPanel sale={b.sale} nowNs={nowNs} keyRequestBlock={b.keyRequestBlock} /> : undefined}>
+          <SaleCard key={b.id} id={b.id} sale={b.sale} nowNs={nowNs} actions={b.sale ? <OpenPanel sale={b.sale} nowNs={nowNs} keyRequestBlock={b.keyRequestBlock} keyRequestNs={b.keyRequestNs} /> : undefined}>
             {b.sale ? (
               <>
                 {config.demoFailSales.includes(b.id) ? (

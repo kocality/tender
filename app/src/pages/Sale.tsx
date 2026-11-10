@@ -36,7 +36,7 @@ export function SaleView({
   const recomputed = useMemo(() => (sale && sale.state === 'Finalized' && result ? recompute(sale, bids, result) : null), [sale, bids, result]);
   return (
     <div>
-      <SaleCard id={id} sale={sale} nowNs={nowNs} asH1 actions={sale ? <OpenPanel sale={sale} nowNs={nowNs} keyRequestBlock={bundle.keyRequestBlock} /> : undefined}>
+      <SaleCard id={id} sale={sale} nowNs={nowNs} asH1 actions={sale ? <OpenPanel sale={sale} nowNs={nowNs} keyRequestBlock={bundle.keyRequestBlock} keyRequestNs={bundle.keyRequestNs} /> : undefined}>
         {sale ? (
           <div style={{ marginTop: 12 }}>
             <Countdown closeNs={sale.closeNs} nowNs={nowNs} />

@@ -10,11 +10,11 @@ import { BlockLink, TxLink } from './TxLink';
  * Open and Cancel for anyone with a NEAR wallet. The buttons follow chain time and the public open conditions; the
  * contract re-checks everything, so a stale button can only produce a refused call.
  */
-export function OpenPanel({ sale, nowNs, keyRequestBlock }: { sale: Sale; nowNs: bigint; keyRequestBlock?: bigint | null }) {
+export function OpenPanel({ sale, nowNs, keyRequestBlock, keyRequestNs }: { sale: Sale; nowNs: bigint; keyRequestBlock?: bigint | null; keyRequestNs?: bigint | null }) {
   const [busy, setBusy] = useState<'open' | 'cancel' | null>(null);
   const [tx, setTx] = useState<{ kind: 'open' | 'cancel'; hash: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cond = openConditions(sale, nowNs);
+  const cond = openConditions(sale, nowNs, keyRequestNs);
 
   const run = async (kind: 'open' | 'cancel') => {
     setBusy(kind);
@@ -39,7 +39,11 @@ export function OpenPanel({ sale, nowNs, keyRequestBlock }: { sale: Sale; nowNs:
           {keyRequestBlock != null ? ` (+${key.block - keyRequestBlock} blocks after the request)` : ''}
         </p>
       ) : null}
-      {sale.state === 'Opening' || (sale.inFlight && !key) ? (
+      {cond.requestDead ? (
+        <p className="result warn" role="status">
+          The key request got no answer within an hour: anyone can open again.
+        </p>
+      ) : sale.state === 'Opening' || (sale.inFlight && !key) ? (
         <p className="result warn" role="status">
           Request in flight: waiting for NEAR&apos;s MPC network to answer.
         </p>

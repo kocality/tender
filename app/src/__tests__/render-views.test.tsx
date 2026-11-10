@@ -6,7 +6,7 @@ import receipts from '../__fixtures__/views/nearblocks-receipts.json';
 import sale0 from '../__fixtures__/views/sale-0-cancelled.json';
 import sale1 from '../__fixtures__/views/sale-1-keyed.json';
 import { SaleCard } from '../components/SaleCard';
-import { loadKeys, type SaleBundle } from '../lib/loaders';
+import { loadKeys, loadSaleBundle, type SaleBundle } from '../lib/loaders';
 import { parseBid, parseSale } from '../lib/views';
 import { KeysView } from '../pages/Keys';
 import { SaleView } from '../pages/Sale';
@@ -65,6 +65,30 @@ describe('twin view', () => {
     const html = renderToString(<SaleView bundle={bundle1} nowNs={NOW} />);
     expect(html.split('class="cipher ').length - 1).toBe(6);
     expect(html).not.toContain(bids1[0]!.ct); // full ciphertext is never printed
+  });
+});
+
+describe('a dead key request (C-02)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const opening = { ...s1, state: 'Opening' as const, key: null, inFlight: true, keyRequests: 1, revealDeadlineNs: null };
+  const sent = s1.closeNs + 10_000_000_000n;
+  test('an hour after the request the sale page offers Open again; before that it only says the request is in flight', () => {
+    const page = (nowNs: bigint) => renderToString(<SaleView bundle={{ id: '1', sale: opening, bids: [], keyRequestNs: sent }} nowNs={nowNs} />);
+    expect(page(sent + 3_599_000_000_000n)).not.toContain('Open (anyone)');
+    const late = page(sent + 3_600_000_000_000n);
+    expect(late).toContain('Open (anyone)');
+    expect(late).toContain('no answer within an hour');
+  });
+  test('the bundle of an in-flight sale carries the time of its pending key request', async () => {
+    const raw = { ...sale1, state: 'Opening', key: null, in_flight: true, reveal_deadline_ns: null };
+    const log = [{ i: '0', sale: '1', block: '5', ns: String(sent), outcome: 'Pending', resolved_block: null }];
+    vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+      const { method, params } = JSON.parse(init.body) as { method: string; params: { method_name?: string } };
+      if (method === 'block') return Response.json({ jsonrpc: '2.0', id: 'tender', result: { header: { height: 7, timestamp_nanosec: '1' } } });
+      const out = params.method_name === 'get_sale' ? raw : params.method_name === 'get_key_log' ? log : [];
+      return Response.json({ jsonrpc: '2.0', id: 'tender', result: { result: Array.from(new TextEncoder().encode(JSON.stringify(out))) } });
+    });
+    expect((await loadSaleBundle('1')).keyRequestNs).toBe(sent);
   });
 });
 
