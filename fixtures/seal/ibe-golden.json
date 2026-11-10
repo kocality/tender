@@ -1,0 +1,32 @@
+{
+ "_doc": "Golden BF-IBE ciphertexts from prototype/seal-golden.mjs (verbatim ibe.mjs helpers, fixed sigma). ct = U(96) || V(32) || W(32), base64 std with padding.",
+ "cases": [
+  {
+   "name": "mainnet-v1",
+   "mpk": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+   "account": "v1.tenderseal.near",
+   "path": "tender/1/00112233445566778899aabbccddeeff",
+   "app_id_hex": "c5db6e292be1b0b76a58ab571e4fb28b013b798f63b142cc29954d90b667c8f1",
+   "msg_hex": "80ee36000000000080841e0000000000000102030405060708090a0b0c0d0e0f",
+   "sigma_hex": "78d5d7af8689b4aeb7bfd15f090d3a1b7590495f2970017fc8de1e7ab05f4135",
+   "U_hex": "a04eb8b08491eb5df7437f3be9b78bc7856002f7bb4006d8a78ea77b5bd7e4cf2f2df11c877b6c291c95a85735002a7914e08d1e31528d00770c02bec2dae5679404c32758af228134f32296f4b469d3377443c5f054d36765f72ad4a463b5fd",
+   "V_hex": "5c2e21e835034d5b2974fe010e1e76402b30266de4885ad090915f74918220b0",
+   "W_hex": "3251493724966b804315ff8f484a307b3cf4dfe91c27ebe71e6e7e35cb2c0742",
+   "ct_b64": "oE64sISR6133Q3876beLx4VgAve7QAbYp46ne1vX5M8vLfEch3tsKRyVqFc1ACp5FOCNHjFSjQB3DAK+wtrlZ5QEwydYryKBNPMilvS0adM3dEPF8FTTZ2X3KtSkY7X9XC4h6DUDTVspdP4BDh52QCswJm3kiFrQkJFfdJGCILAyUUk3JJZrgEMV/49ISjB7PPTf6Rwn6+cebn41yywHQg=="
+  },
+  {
+   "name": "vector0-decrypt",
+   "mpk": "bls12381g2:22XyWpmZiZrx945VsdG63EpuoWh1Steaf16sEEjp7U8CcKnMYVL54yxomPf2ZkppTYeg47FQZAoeY9eMYpWDSenMY6ndyzDVNri96upxWopmY25vd7C3x3gDrX2zsRbJVQhC",
+   "account": null,
+   "path": null,
+   "app_id_hex": "c7dba29ba7ae16fd28796c2f508bc11d571c38341ce55d243b3c72cf02e0a2fd",
+   "msg_hex": "e06735000000000040420f0000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "sigma_hex": "84097c6d942a9ab5128317baabaa663410643e9a5f2ef4699752b0eb9da7c171",
+   "U_hex": "8bdecb0cfd7735beb23f0644b218aab984bb95d643e0e8ddf380d60811d3d475dd1e04314d6033c11f95baea2b0e45ba0490e64fa6b868a0a14c02bd5bb8ea6c6c37cc744fb5fbaf6f62fbbde01ae2dcfb9b6b5ed0dc88d68350db454b231b05",
+   "V_hex": "eb5c0759760e66ea20a13d8ab68b65b5e97073aa0f07128c7caeb0a9e26f1cb5",
+   "W_hex": "e2f49310a7c5743c912fb906b3ec5b9c74b556e95ddba2b50ddb5dde35613df7",
+   "ct_b64": "i97LDP13Nb6yPwZEshiquYS7ldZD4Ojd84DWCBHT1HXdHgQxTWAzwR+VuuorDkW6BJDmT6a4aKChTAK9W7jqbGw3zHRPtfuvb2L7veAa4tz7m2te0NyI1oNQ20VLIxsF61wHWXYOZuogoT2Ktotltelwc6oPBxKMfK6wqeJvHLXi9JMQp8V0PJEvuQaz7FucdLVW6V3borUN213eNWE99w==",
+   "S_hex": "b7a83185c068fe7098766c005cef35a794e37311cdf989e183e0364262953e58eb225cd31e0d8c2c166aa3276e668362"
+  }
+ ]
+}
