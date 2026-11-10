@@ -1,0 +1,28 @@
+Tender verify · sale 0 · v1.tender-09bdfe.testnet · testnet · block 277053294 (2026-11-10T10:09:59Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+PASS #1 mpc-key — domain 2 key bls12381g2:xeYho…R4kj = repo constant = live v1.signer-prod.testnet = contract config
+PASS #2 mpc-network — v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · TEE accounts 18 · allowed images 1
+PASS #3 code-hash — 8oai2gojooPhoUS8ustxyjvvugc13yfvm4671epGfFGL = sha256(contract/target/near/tender.wasm) https://testnet.nearblocks.io/address/v1.tender-09bdfe.testnet
+PASS #4 no-access-keys — v1.tender-09bdfe.testnet has no access keys: nobody can sign for it or redeploy it https://testnet.nearblocks.io/address/v1.tender-09bdfe.testnet
+PASS #5 wasm-imports — 24 imports, none can add a key, deploy code or delete the account
+WARN #6 reproducible-build — rebuild not performed; run with --rebuild (Docker + cargo-near 0.23.0) · contract_source_metadata has no source_code_snapshot
+PASS #7 init-before-sale — init block 277052592 (2026-11-10T10:03:11Z) < sale created block 277052605 (2026-11-10T10:03:19Z)
+PASS #8 sale-identity — path tender/0/f774cf89643a17d7a89e520b5510ccd8 · app_id(v1.tender-09bdfe.testnet, path) = 56d75558b5d9cc037eea9c912a9b3f0a8327e8c5b97a562f473b76cfa45e76fa
+PASS #9 bid-count — 2 bids (max 8) from 2 bidders · escrow 4.00 USDC
+PASS #10 key-after-close — key at 2026-11-10T10:09:56Z (block 277053289) ≥ close 2026-11-10T10:09:16Z https://testnet.nearblocks.io/blocks/277053289
+PASS #11 key-pairing — checkKey true: e(S, G2) = e(H(pk ‖ app_id), mpk), mode identity https://testnet.nearblocks.io/blocks/277053289
+PASS #12 ciphertexts-decrypt — 2/2 decrypt
+PASS #13 plaintext-matches-commitment — 2/2 match
+WARN #14 reveal-states — reveal window open until 2026-11-11T10:09:56Z: 2 decryptable bid(s) still Sealed · 0 Revealed, 0 Penalized, 2 Sealed
+n/a #15 clearing-price — state Keyed: no clearing
+n/a #16 allocations — state Keyed: no clearing
+n/a #17 conservation — state Keyed: nothing paid out yet
+n/a #18 uniform-price — state Keyed: no clearing
+PASS #19 escrow-balance — 1 sale(s): nep141:usdc.tender-09bdfe.testnet 4000000 ≥ owed 4000000 · nep141:wnear.tender-09bdfe.testnet 100000000000000000000000 ≥ owed 100000000000000000000000 https://testnet.nearblocks.io/address/v1.tender-09bdfe.testnet
+n/a #20 payouts — state Keyed: no payouts yet
+PASS #21 key-ledger — 1 request for this sale (Ok) = key_requests; 1 in the contract's key log
+PASS #22 nearblocks-receipts — NearBlocks: 1 v1.tender-09bdfe.testnet → v1.signer-prod.testnet.request_app_private_key receipts = key log 1
+n/a #23 cancelled-sealed — state Keyed
+n/a #24 oneclick-status — 1Click runs on mainnet only
+n/a #25 archival-tx — no rows for this sale in evidence/mainnet.json
+15/17 checks passed (2 warnings)

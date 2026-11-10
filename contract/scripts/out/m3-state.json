@@ -1,0 +1,70 @@
+{
+  "h": "09bdfe",
+  "network": "testnet",
+  "app_pk_mode": "identity",
+  "mpc": "v1.signer-prod.testnet",
+  "accounts": {
+    "tender": "tender-09bdfe.testnet",
+    "intents": "intents-09bdfe.testnet",
+    "usdc": "usdc.tender-09bdfe.testnet",
+    "wnear": "wnear.tender-09bdfe.testnet",
+    "v1": "v1.tender-09bdfe.testnet",
+    "bidders": [
+      {
+        "id": "bidder1.tender-09bdfe.testnet",
+        "usdc_deposit": "5000000"
+      },
+      {
+        "id": "bidder2.tender-09bdfe.testnet",
+        "usdc_deposit": "5000000"
+      }
+    ]
+  },
+  "seller_wnear_deposit": "100000000000000000000000",
+  "tx": {
+    "create-tender": "7DzYBogYvqMAEVy95TAoWwvQ7UF9TdnRK5hKTzF85B5k",
+    "create-intents": "BFkEvTtZ3MGjpmKC2mrE4UcuiUc1xsRfhtV8AdJm5zGf",
+    "create-usdc": "CXoZqT5pk741Bv5EimQxB5WSQsrTmcLbPvY54LS1afmg",
+    "create-wnear": "TPot3p6m5sbyBvdoDmQkT9UBdxnW1Qw89qmKdqwSKeS",
+    "create-bidder1": "C46A9ZdwL1FosjN71Hkb9VCFsiTMjs18R26fbBsQdadm",
+    "create-bidder2": "3WFuEydHtSCKjdvhbcS9stRtj7iMpdx6JyakQ9JBvu71",
+    "fund-extra": "Bfw3jvymZd2EHSnCQXUVbPXgcqz38rWdiuHtKcQ9AJyT",
+    "deploy-usdc": "CJYZCHd7T55VKiRRDEbpLNiDHnim1ebLeGnk6hQhYuBL",
+    "deploy-wnear": "Cd953Gyqc1dnLv5xLYR1ppVRvKaVS4YhDzEPkknaJrHL",
+    "deploy-intents": "5AwLcr6Ud49pBWEA6MmyAhwC9f7z1Ccsdwpxskh2NQcp",
+    "reg-usdc": "FWG4qWCNAsRU1DveazA5iAhagRWGddAtKZ26mEHwQL1z",
+    "reg-wnear": "7EjGm1soy67TNDxqWaNdHbdsYLrvdZHGDq1KPdCvUerk",
+    "mint-wnear": "8WMk2wiBjxvzHDzY4y5N1F6yDhCknwZqS31bYASS1Kpj",
+    "mint-usdc-bidder1": "B14E9VuoHAfJ3Cz3oPgUAxMgUkpnFqcpoawwmjbxLdnH",
+    "mint-usdc-bidder2": "975xG8EF2N4sPRtKvRmxLM9iyiB6R2PXi9XTm3zgFmgA",
+    "deposit-seller": "2cvj3ACycbAwkKvMUNqpizkpYeudrXoRbjYc2Ae4i9Fv",
+    "deposit-bidder1": "4yWBKNQ2T8P4STogDzPMMxBj3d7XCbmLQFshRUMJU6gy",
+    "deposit-bidder2": "2zjmp24zMm3D1bxGBXwY7dHQ2kwuiH2w5k6bV9QeKFAA",
+    "birth": "26np72KTmzC9z8HX743hRAcXFGXx2ohxRWyzutwYF4sK",
+    "create": "CT7GSr6xCYAzm37J3fGAu7m7ceUqGefseoyfoMwt8sFF",
+    "bid1": "5fdPPfk5cEUg3x2aidUCZnsaE6VacJ9cztCMEgg7REsF",
+    "bid2": "ErmgeczD8gfuRsCwDbiup6rcPZ3U3fEcuH13Vnk1T7vS",
+    "open1": "4e74FNSTRsqeckYYq8PJZmcX85DSkJeMPkjaChW48rwD",
+    "reveal": "BX2Z39mTbTwcP1sinA4c63SQsuuvwAYc4pNDTKuaavPg",
+    "finalize1": "FnypREk9epKaXRaGMB8dY94rNL5PrK3PULYUduEwULui"
+  },
+  "extra_fund": "tender-s1-164b59.testnet",
+  "access_keys_v1": [],
+  "sale": {
+    "id": "0",
+    "path": "tender/0/f774cf89643a17d7a89e520b5510ccd8",
+    "close_ns": "1794305356939000000",
+    "created_block": "277052605"
+  },
+  "key_log": [
+    {
+      "i": "0",
+      "sale": "0",
+      "block": "277053281",
+      "ns": "1794305392451133099",
+      "outcome": "Ok",
+      "resolved_block": "277053289"
+    }
+  ],
+  "ckd_latency_blocks": 8
+}

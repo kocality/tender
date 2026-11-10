@@ -1,0 +1,26 @@
+PASS state: Finalized
+PASS payouts 3/3: 3
+PASS p_star: 3900000
+PASS seller_usdc: 390000
+PASS seller_tokens_back: 0
+PASS token_dust: 0
+PASS bid 0 alloc: 100000000000000000000000
+PASS bid 0 spend: 390000
+PASS bid 0 paid.usdc = refund: 1610000
+PASS bid 0 paid.tokens = alloc: 100000000000000000000000
+PASS bid 0 paid.ok: true
+PASS bid 1 alloc: 0
+PASS bid 1 spend: 0
+PASS bid 1 paid.usdc = refund: 2000000
+PASS bid 1 paid.tokens = alloc: 0
+PASS bid 1 paid.ok: true
+PASS seller_payout.ok: true
+PASS bidder1.tender-09bdfe.testnet USDC: 4610000
+PASS bidder1.tender-09bdfe.testnet wNEAR: 100000000000000000000000
+PASS bidder2.tender-09bdfe.testnet USDC: 5000000
+PASS bidder2.tender-09bdfe.testnet wNEAR: 0
+PASS tender-09bdfe.testnet USDC: 390000
+PASS tender-09bdfe.testnet wNEAR: 0
+PASS v1.tender-09bdfe.testnet USDC: 0
+PASS v1.tender-09bdfe.testnet wNEAR: 0
+balances: all match

@@ -1,0 +1,6 @@
+Tender verify · keys · v1.tender-09bdfe.testnet · testnet · block 277053339 (2026-11-10T10:10:23Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · domain 2 key = repo constant
+key log (contract state): 1 request
+  sale 0   2026-11-10T10:09:52Z   ok      block 277053281
+NearBlocks: receipts v1.tender-09bdfe.testnet → v1.signer-prod.testnet.request_app_private_key = 1 (match)
