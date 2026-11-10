@@ -1,9 +1,9 @@
-// verify --sale N: 25 checks recomputed from the contract's current state, all read at one pinned block (P-6).
+// verify --sale N: 27 checks recomputed from the contract's current state, all read at one pinned block (P-6).
 // The mandatory checks need no archival RPC, NearBlocks or 1Click; those three only ever produce WARN.
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { type BidState, type ClearResult, clear } from '@tender/clearing';
 import { type DecryptedBid, type G1Point, appId, checkKey, decryptBids, keyFromCkd } from '@tender/seal';
-import type { ResolvedNetwork } from './config.js';
+import { type ResolvedNetwork, TESTED_INTENTS_CODE_HASH, TESTED_MPC_VERSION } from './config.js';
 import { accountUrl, blockUrl, txUrl } from './explorer.js';
 import { formatUsdc, priceUnit, utcFromNs } from './format.js';
 import { fetchKeyReceipts } from './nearblocks.js';
@@ -147,9 +147,13 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
     else add(1, 'mpc-key', 'PASS', `domain 2 key ${short(liveMpk)} = repo constant = live ${config.mpc} = contract config`);
   }
 
-  // #2 mpc-network (TEE counts are information only)
+  // #2 mpc-network (TEE counts are information only). Resharing gives the current nodes new shares but cannot revoke
+  // the old ones, so former share holders count toward the collusion threshold too (CRYPTO-04).
   {
     const parts = [`${config.mpc} ${mpcVersion} · threshold ${mpcState.threshold ?? '?'} of ${mpcState.participants ?? '?'} (live)`];
+    parts.push(
+      `key epoch ${mpcState.epochId ?? '?'}, participant ids issued ${mpcState.nextId ?? '?'} (next_id): resharing does not revoke old shares, so the threshold counts former share holders too`,
+    );
     parts.push(tee.ok ? `TEE accounts ${tee.v}` : `TEE accounts unavailable (${tee.err})`);
     parts.push(images.ok ? `allowed images ${images.v}` : `allowed images unavailable (${images.err})`);
     let status: Status = 'PASS';
@@ -405,8 +409,12 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
     const shared = sum(bids.map((b) => big(b.penalty_share)));
     if (shared !== 0n) bad.push(`Σ penalty share ${shared} ≠ 0 (the pool must go to nobody)`);
     if (big(result.penalty_pool) !== pool) bad.push(`penalty_pool ${result.penalty_pool} ≠ Σ penalty ${pool}`);
+    // The contract refunds a bid from the seller account (SC-01); a sub-account of the seller can still bid (SC-03).
+    for (const b of bids) if (b.bidder === sale.seller) bad.push(`bid #${b.idx} comes from the seller account ${sale.seller} (the contract refunds those as seller_bid)`);
+    const subs = bids.filter((b) => b.bidder.endsWith(`.${sale.seller}`)).map((b) => `#${b.idx} ${b.bidder}`);
+    const subText = subs.length ? ` · bids from sub-accounts of the seller ${sale.seller} (only it can create them): ${subs.join(', ')}` : '';
     if (bad.length) add(17, 'conservation', 'FAIL', bad.join('; '));
-    else add(17, 'conservation', 'PASS', `USDC in ${formatUsdc(B)} = refunds + seller ${formatUsdc(big(sale.seller_payout.usdc))} + penalty pool ${formatUsdc(pool)}; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller`);
+    else add(17, 'conservation', 'PASS', `USDC in ${formatUsdc(B)} = refunds + seller ${formatUsdc(big(sale.seller_payout.usdc))} + penalty pool ${formatUsdc(pool)}; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller${subText}`);
   }
 
   // #18 uniform-price
@@ -574,6 +582,40 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
     const bad = res.filter(Boolean);
     if (bad.length) add(25, 'archival-tx', 'WARN', `${rows.length - bad.length}/${rows.length} found with the recorded outcome; ${bad.join('; ')}`);
     else add(25, 'archival-tx', 'PASS', `${rows.length}/${rows.length} recorded transactions found with the recorded outcome`);
+  }
+
+  // #26 upstream-code: intents.near and the MPC still run the code the tests ran against (WARN only, X12-10)
+  {
+    const intents = await attempt(() => rpc.viewAccount(config.intents, at));
+    const drift: string[] = [];
+    if (!intents.ok) drift.push(`${config.intents} code_hash unavailable (${intents.err})`);
+    else if (intents.v.code_hash !== TESTED_INTENTS_CODE_HASH) drift.push(`${config.intents} code_hash ${intents.v.code_hash} ≠ tested ${TESTED_INTENTS_CODE_HASH} (upgraded since the tests ran)`);
+    if (mpcVersion !== TESTED_MPC_VERSION) drift.push(`${config.mpc} ${mpcVersion} ≠ tested ${TESTED_MPC_VERSION}`);
+    if (drift.length) add(26, 'upstream-code', 'WARN', drift.join('; '));
+    else add(26, 'upstream-code', 'PASS', `${config.intents} code_hash ${TESTED_INTENTS_CODE_HASH} = the tested intents 0.4.5 wasm · ${config.mpc} ${mpcVersion} = tested version`);
+  }
+
+  // #27 token-decimals: the seller declares the sale's decimals at create and the contract cannot read ft_metadata
+  // (X12-03); the quote token is USDC with 6 decimals
+  {
+    const ftDecimals = async (token: string): Promise<number> => {
+      if (!token.startsWith('nep141:')) throw new Error(`${token} is not a nep141 token`);
+      return (await rpc.view<{ decimals: number }>(token.slice('nep141:'.length), 'ft_metadata', {}, at)).decimals;
+    };
+    const [sd, qd] = await Promise.all([attempt(() => ftDecimals(sale.token)), attempt(() => ftDecimals(sale.quote_token))]);
+    const tok = sale.token.replace(/^nep141:/, '');
+    const quote = short(sale.quote_token.replace(/^nep141:/, ''));
+    const bad: string[] = [];
+    const notes: string[] = [];
+    if (!sd.ok) notes.push(`${tok} ft_metadata unavailable (${sd.err}); sale decimals ${sale.decimals} unchecked`);
+    else if (sd.v !== sale.decimals) bad.push(`${tok} ft_metadata ${sd.v} decimals ≠ sale decimals ${sale.decimals} (prices and amounts are scaled wrong)`);
+    else notes.push(`${tok} ${sd.v} decimals = sale decimals ${sale.decimals}`);
+    if (!qd.ok) notes.push(`quote token ${quote} ft_metadata unavailable (${qd.err})`);
+    else if (qd.v !== 6) bad.push(`quote token ${quote} ft_metadata ${qd.v} decimals ≠ 6`);
+    else notes.push('quote token 6 decimals');
+    if (bad.length) add(27, 'token-decimals', 'FAIL', bad.join('; '));
+    else if (!sd.ok || !qd.ok) add(27, 'token-decimals', 'WARN', notes.join(' · '));
+    else add(27, 'token-decimals', 'PASS', `ft_metadata: ${notes.join(' · ')}`);
   }
 
   return checks.sort((a, b) => a.n - b.n);

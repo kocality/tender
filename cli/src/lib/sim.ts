@@ -15,7 +15,7 @@ import {
   simulateCkdResponse,
 } from '@tender/seal';
 import bs58 from 'bs58';
-import type { Network } from './config.js';
+import { type Network, TESTED_INTENTS_CODE_HASH } from './config.js';
 import { demoSaleFixturePath, fixturePath } from './paths.js';
 import type { BidView, ConfigView, KeyReqView, ResultView, SaleState, SaleView } from './views.js';
 
@@ -106,9 +106,16 @@ export interface World {
   mpcVersion: string;
   mpcThreshold: number;
   mpcParticipants: number;
+  /** state.Running.keyset.epoch_id and parameters.participants.next_id (mainnet 2026-11-11: 16 and 22). */
+  mpcEpoch: number;
+  mpcNextId: number;
   currentSalt: string;
   /** view_account(contract).code_hash. */
   codeHash: string;
+  /** view_account(intents).code_hash. */
+  intentsCodeHash: string;
+  /** ft_metadata().decimals by token account (an account missing here does not exist). */
+  tokenDecimals: Record<string, number>;
   /** Public keys on the contract account (view_access_key_list). */
   accessKeys: string[];
   /** Tender's Intents balances by token id (missing = 0). */
@@ -299,8 +306,12 @@ export function buildWorld(opts: WorldOptions = {}): World {
     mpcVersion: '3.18.0',
     mpcThreshold: 11,
     mpcParticipants: 16,
+    mpcEpoch: 16,
+    mpcNextId: 22,
     currentSalt: '252812b3',
     codeHash: '11111111111111111111111111111111',
+    intentsCodeHash: TESTED_INTENTS_CODE_HASH,
+    tokenDecimals: { [token.replace(/^nep141:/, '')]: decimals, [SIM_USDC.replace(/^nep141:/, '')]: 6 },
     accessKeys: [],
     // What Tender holds in Intents: the escrow and supply of an unsettled sale; once everything is paid, only the
     // penalty pool, which is paid to nobody.
@@ -334,10 +345,11 @@ export function fakeRpc(world: World): typeof fetch {
     }
     if (body.method !== 'query') return rpcError('METHOD_NOT_FOUND', body.method);
     const account = p.account_id as string;
-    const known = [world.contract, world.mpc, world.intents];
+    const known = [world.contract, world.mpc, world.intents, ...Object.keys(world.tokenDecimals)];
     if (!known.includes(account)) return rpcError('UNKNOWN_ACCOUNT', `account ${account} does not exist while viewing`);
     if (p.request_type === 'view_account') {
-      return { result: { amount: '0', locked: '0', code_hash: account === world.contract ? world.codeHash : '11111111111111111111111111111111', storage_usage: 0, block_height: Number(world.block.height) } };
+      const code_hash = account === world.contract ? world.codeHash : account === world.intents ? world.intentsCodeHash : '11111111111111111111111111111111';
+      return { result: { amount: '0', locked: '0', code_hash, storage_usage: 0, block_height: Number(world.block.height) } };
     }
     if (p.request_type === 'view_access_key_list') {
       const keys = account === world.contract ? world.accessKeys.map((public_key) => ({ public_key, access_key: { nonce: 0, permission: 'FullAccess' } })) : [];
@@ -386,10 +398,18 @@ export function fakeRpc(world: World): typeof fetch {
         case 'state':
           return {
             result: viewResult({
-              Running: { parameters: { threshold: world.mpcThreshold, participants: { participants: Array.from({ length: world.mpcParticipants }, (_, i) => [`node${i}.near`, i, {}]) } } },
+              Running: {
+                keyset: { epoch_id: world.mpcEpoch },
+                parameters: {
+                  threshold: world.mpcThreshold,
+                  participants: { next_id: world.mpcNextId, participants: Array.from({ length: world.mpcParticipants }, (_, i) => [`node${i}.near`, i, {}]) },
+                },
+              },
             }),
           };
       }
+    } else if (account in world.tokenDecimals) {
+      if (method === 'ft_metadata') return { result: viewResult({ spec: 'ft-1.0.0', name: account, symbol: 'T', decimals: world.tokenDecimals[account] }) };
     } else {
       switch (method) {
         case 'current_salt':

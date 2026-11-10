@@ -31,6 +31,11 @@ export const NETWORKS: Record<Network, NetworkDefaults> = {
   },
 };
 
+/** code_hash of contract/tests/res/defuse-0.4.5.wasm, the intents.near code the sandbox tests run against. */
+export const TESTED_INTENTS_CODE_HASH = 'BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk';
+/** v1.signer version the S1/S6 spikes and the testnet runs used. */
+export const TESTED_MPC_VERSION = '3.18.0';
+
 /** App key mode used by demo:local until G-S1 picks the mainnet mode. */
 export const DEMO_APP_PK_MODE: AppPkMode = 'identity';
 

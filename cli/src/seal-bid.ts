@@ -1,6 +1,7 @@
 // pnpm seal:bid — seal a bid locally with open-source code (no hosted bundle) and print the unsigned Intents payload.
 // stdout: one JSON object with public fields only. p, q and the salt go to ~/.tender/bids/ (chmod 600), never stdout:
 // with the salt, the low-entropy p and q could be brute-forced from cm.
+import './lib/node-version.js';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

@@ -1,9 +1,13 @@
-import { randomBytes } from '@noble/hashes/utils.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { bytesToB64 } from '@tender/seal';
+import bs58 from 'bs58';
 import { describe, expect, it } from 'vitest';
 import { DEMO_BIDDERS, SIM_USDC, buildWorld, demoSaleInputs, fakeRpc } from '../src/lib/sim.js';
 import { runSaleChecks } from '../src/lib/verify-sale.js';
-import { resolveNetwork } from '../src/lib/config.js';
+import { TESTED_INTENTS_CODE_HASH, resolveNetwork } from '../src/lib/config.js';
+import { repoRoot } from '../src/lib/paths.js';
 import { Rpc } from '../src/lib/rpc.js';
 import { deploy, fakeHttp, moduleImporting, runVerify, writeEvidence } from './verify-helpers.js';
 
@@ -24,12 +28,16 @@ describe('verify --sale', () => {
       expect(r.out[0]).toMatch(/^Tender verify · sale 1 · v1\.tenderseal\.near · mainnet · block 224000000 \(2026-11-10T12:00:00Z\)$/);
       expect(r.out[1]).toBe('rpc https://fake.rpc · archival https://archival-rpc.mainnet.fastnear.com');
       const checks = r.out.slice(2, -1);
-      expect(checks).toHaveLength(25);
+      expect(checks).toHaveLength(27);
       expect(checks.filter((l) => l.startsWith('FAIL'))).toEqual([]);
       expect(checks.filter((l) => l.startsWith('n/a')).map((l) => l.split(' ')[1])).toEqual(['#23', '#24', '#25']);
       expect(checks.filter((l) => l.startsWith('WARN')).map((l) => l.split(' ')[1])).toEqual(['#6', '#22']);
-      expect(r.out.at(-1)).toBe('20/22 checks passed (2 warnings)');
-      expect(r.line(2)).toBe('PASS #2 mpc-network — v1.signer 3.18.0 · threshold 11 of 16 (live) · TEE accounts 17 · allowed images 1');
+      expect(r.out.at(-1)).toBe('22/24 checks passed (2 warnings)');
+      expect(r.line(26)).toBe('PASS #26 upstream-code — intents.near code_hash BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk = the tested intents 0.4.5 wasm · v1.signer 3.18.0 = tested version');
+      expect(r.line(27)).toBe('PASS #27 token-decimals — ft_metadata: wrap.near 24 decimals = sale decimals 24 · quote token 6 decimals');
+      expect(r.line(2)).toBe(
+        'PASS #2 mpc-network — v1.signer 3.18.0 · threshold 11 of 16 (live) · key epoch 16, participant ids issued 22 (next_id): resharing does not revoke old shares, so the threshold counts former share holders too · TEE accounts 17 · allowed images 1',
+      );
       expect(r.line(15)).toBe('PASS #15 clearing-price — P* = 3.60 USDC/NEAR (recomputed = get_result)');
       expect(r.line(12)).toContain('6/6 decrypt');
       expect(r.line(13)).toContain('6/6 match');
@@ -142,6 +150,50 @@ describe('verify --sale', () => {
     r = await runVerify(w);
     expect(r.line(17)).toContain('Σ penalty share 200000 ≠ 0 (the pool must go to nobody)');
     expect(r.status(16)).toBe('FAIL');
+  });
+
+  it('a revealed bid from a sub-account of the seller → #17 PASS names it (SC-03); a bid from the seller itself → #17 FAIL (SC-01)', async () => {
+    const d = demoSaleInputs();
+    expect(d.bids[3]!.bidder).toBe('bidder.tenderseal.near'); // the team-funded NEAR bidder
+    let r = await runVerify(buildWorld({ state: 'Finalized' }));
+    expect(r.line(17)).toMatch(/^PASS #17 conservation — .*, 0 to the seller · bids from sub-accounts of the seller tenderseal\.near \(only it can create them\): #3 bidder\.tenderseal\.near$/);
+    d.bids[3]!.bidder = 'tenderseal.near';
+    r = await runVerify(buildWorld({ state: 'Finalized', bids: d.bids }));
+    expect(r.line(17)).toBe('FAIL #17 conservation — bid #3 comes from the seller account tenderseal.near (the contract refunds those as seller_bid)');
+    expect(r.code).toBe(1);
+  });
+
+  it('intents.near or v1.signer upgraded since the tests ran → #26 WARN, exit 0 (X12-10)', async () => {
+    const w = buildWorld({ state: 'Finalized' });
+    w.intentsCodeHash = '22222222222222222222222222222222';
+    w.mpcVersion = '3.19.0';
+    const r = await runVerify(w);
+    expect(r.line(26)).toBe(
+      'WARN #26 upstream-code — intents.near code_hash 22222222222222222222222222222222 ≠ tested BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk (upgraded since the tests ran); v1.signer 3.19.0 ≠ tested 3.18.0',
+    );
+    expect(r.code).toBe(0);
+  });
+
+  it('the pinned intents code hash is the vendored wasm the sandbox tests run (X12-10)', () => {
+    const hex = readFileSync(join(repoRoot(), 'contract/tests/res/defuse-0.4.5.wasm.sha256'), 'utf8').split(/\s+/)[0]!;
+    expect(bs58.encode(hexToBytes(hex))).toBe(TESTED_INTENTS_CODE_HASH);
+  });
+
+  it('declared decimals ≠ ft_metadata → #27 FAIL; quote token not 6 → FAIL; no ft_metadata → WARN (X12-03)', async () => {
+    const w = buildWorld({ state: 'Finalized' });
+    w.tokenDecimals['wrap.near'] = 18;
+    let r = await runVerify(w);
+    expect(r.line(27)).toBe('FAIL #27 token-decimals — wrap.near ft_metadata 18 decimals ≠ sale decimals 24 (prices and amounts are scaled wrong)');
+    expect(r.code).toBe(1);
+    w.tokenDecimals['wrap.near'] = 24;
+    w.tokenDecimals[SIM_USDC.slice('nep141:'.length)] = 18;
+    r = await runVerify(w);
+    expect(r.line(27)).toMatch(/^FAIL #27 token-decimals — quote token \S+ ft_metadata 18 decimals ≠ 6$/);
+    delete w.tokenDecimals['wrap.near'];
+    w.tokenDecimals[SIM_USDC.slice('nep141:'.length)] = 6;
+    r = await runVerify(w);
+    expect(r.line(27)).toMatch(/^WARN #27 token-decimals — wrap\.near ft_metadata unavailable \(.+\); sale decimals 24 unchecked · quote token 6 decimals$/);
+    expect(r.code).toBe(0);
   });
 
   it('payout in flight (pending) → #19 PASS without counting it, #20 WARN (S-07)', async () => {

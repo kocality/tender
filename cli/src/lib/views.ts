@@ -167,6 +167,10 @@ export interface MpcState {
   status: 'Running' | string;
   threshold: number | null;
   participants: number | null;
+  /** keyset.epoch_id: bumped by every resharing. */
+  epochId: number | null;
+  /** participants.next_id: participant ids issued so far (current and former). */
+  nextId: number | null;
 }
 
 export class MpcViews {
@@ -182,12 +186,14 @@ export class MpcViews {
   async state(block?: bigint): Promise<MpcState> {
     const s = await this.rpc.view<Record<string, unknown>>(this.mpc, 'state', {}, block);
     const status = Object.keys(s)[0] ?? 'unknown';
-    const params = (s[status] as { parameters?: { threshold?: number; participants?: { participants?: unknown[] } } } | undefined)
-      ?.parameters;
+    const st = s[status] as { keyset?: { epoch_id?: number }; parameters?: { threshold?: number; participants?: { next_id?: number; participants?: unknown[] } } } | undefined;
+    const params = st?.parameters;
     return {
       status,
       threshold: params?.threshold ?? null,
       participants: params?.participants?.participants?.length ?? null,
+      epochId: st?.keyset?.epoch_id ?? null,
+      nextId: params?.participants?.next_id ?? null,
     };
   }
 

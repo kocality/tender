@@ -1,6 +1,7 @@
 // pnpm demo:local — the whole sale lifecycle offline in a few seconds, no wallet, no network:
 // seal 6 bids → no key exists → simulated MPC releases the key → decrypt → commitments → uniform clearing.
 // The MPC is simulated with the public near/mpc test vectors; mainnet uses v1.signer.
+import './lib/node-version.js';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { sha256 } from '@noble/hashes/sha2.js';

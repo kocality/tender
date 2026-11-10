@@ -87,7 +87,7 @@ describe('Rpc', () => {
     }) as unknown as typeof fetch;
     const rpc = new Rpc(['https://a'], { fetchImpl });
     const mpc = new MpcViews(rpc, 'v1.signer');
-    expect(await mpc.state(223888346n)).toEqual({ status: 'Running', threshold: 11, participants: 16 });
+    expect(await mpc.state(223888346n)).toEqual({ status: 'Running', threshold: 11, participants: 16, epochId: 16, nextId: 22 });
     expect(await mpc.publicKey(2)).toMatch(/^bls12381g2:24mhN4Rn/);
     expect(await new IntentsViews(rpc, 'intents.near').mtBatchBalanceOf('tenderseal.near', ['a', 'b'])).toEqual([0n, 0n]);
     expect((bodies[0] as { params: Record<string, unknown> }).params).toMatchObject({ block_id: 223888346, method_name: 'state' });

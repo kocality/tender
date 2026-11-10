@@ -1,6 +1,7 @@
 // pnpm seal:try --sale N — seal a test message to sale N's identity and show whether its key exists yet (V8).
 // --try-key <file>: check a CKD response someone else obtained (M15: an EOA asking the MPC for the sale's path
 // gets a real key, but for app_id(EOA, path), which does not open the contract's sale).
+import './lib/node-version.js';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { bytesToHex } from '@noble/hashes/utils.js';

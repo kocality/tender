@@ -1,5 +1,6 @@
 // pnpm verify --sale N | --keys — re-read the contract's state for free and recompute everything: the MPC key,
 // the code, the access keys, every bid's decryption and commitment, the clearing, the payouts and the key ledger.
+import './lib/node-version.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
