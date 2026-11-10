@@ -1,5 +1,5 @@
 {
-  "updated_utc": null,
+  "updated_utc": "2026-11-10T14:46:58.036Z",
   "near": {
     "team": "tenderseal.near",
     "contract": "v1.tenderseal.near",
@@ -9,13 +9,28 @@
     "bidder": "bidder.tenderseal.near"
   },
   "evm": {
-    "EVM-1": { "address": null, "chain": "base" },
-    "EVM-2": { "address": null, "chain": "arb" },
-    "EVM-3": { "address": null, "chain": "base" }
+    "EVM-1": {
+      "address": "0xf807a96d44995a3eab148e5b0721d4baa654bcfc",
+      "chain": "base"
+    },
+    "EVM-2": {
+      "address": "0xae4618477121c8fcd378173709e8d433dd982a26",
+      "chain": "arb"
+    },
+    "EVM-3": {
+      "address": "0x4d84a0c51382cd15db2528a70e87b6e35ebaa8cb",
+      "chain": "base"
+    }
   },
   "sol": {
-    "SOL-1": { "address": null, "intents_account": null },
-    "SOL-2": { "address": null, "intents_account": null }
+    "SOL-1": {
+      "address": "4GzZcvCFa4NcQj4SArhdYhLsZKdBFbfsZGYhuUDVzS4J",
+      "intents_account": "30abdbe2ce9462f87db5f95a85f7500a9a4118925593fbf81d98cff9dead022b"
+    },
+    "SOL-2": {
+      "address": "84WBqX9bkacDrCPh69wW8tw2PezXSqPbG2JExBAa9DJj",
+      "intents_account": "68e78d7575ac8cbff92d8f29370516c59567dd9dcf605b3cefbb30cd518567a4"
+    }
   },
   "note": "Public addresses only. Team-funded demo bidders. Not used by any other project."
 }

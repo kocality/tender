@@ -1,1 +1,33 @@
-[]
+[
+  {
+    "sale": "ops",
+    "step": "birth",
+    "tx_hash": "E7saDEB5zbpnyEYCBvXoBRyAjS4EhGFQRZM3o2UWVS23",
+    "block": 223930047,
+    "explorer_url": "https://nearblocks.io/txns/E7saDEB5zbpnyEYCBvXoBRyAjS4EhGFQRZM3o2UWVS23",
+    "network": "mainnet",
+    "signer_id": "0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620",
+    "receiver_id": "near",
+    "outcome": "success",
+    "snapshot": "evidence/rpc/E7saDEB5zbpnyEYCBvXoBRyAjS4EhGFQRZM3o2UWVS23.json",
+    "snapshot_source": "rpc",
+    "note": "create tenderseal.near (12.1 NEAR) from Tender NEAR implicit",
+    "recorded_utc": "2026-11-10T14:46:56.322Z"
+  },
+  {
+    "sale": "ops",
+    "step": "storage",
+    "tx_hash": "82T8vU5aGB4dfrFFEVBedFp99w9UEJhrQBNAzzoSeBM4",
+    "block": 223930545,
+    "explorer_url": "https://nearblocks.io/txns/82T8vU5aGB4dfrFFEVBedFp99w9UEJhrQBNAzzoSeBM4",
+    "network": "mainnet",
+    "signer_id": "tenderseal.near",
+    "receiver_id": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "contract": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "outcome": "success",
+    "snapshot": "evidence/rpc/82T8vU5aGB4dfrFFEVBedFp99w9UEJhrQBNAzzoSeBM4.json",
+    "snapshot_source": "rpc",
+    "note": "storage_deposit registration_only for tenderseal.near in NEAR-native USDC (H-02 F4 step 1, run by the human)",
+    "recorded_utc": "2026-11-10T14:50:49.274Z"
+  }
+]
