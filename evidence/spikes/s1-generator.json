@@ -1,0 +1,37 @@
+{
+ "gate": "S1",
+ "mode": "generator",
+ "network": "mainnet",
+ "mpc": "v1.signer",
+ "mpc_version": "3.18.0",
+ "caller": "0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620",
+ "path": "tender-spike/s1/generator/1",
+ "app_id_hex": "04a50160562d55d181062539272e30a3ecba6790db5274fa0e4e090620bf6a61",
+ "request": {
+  "derivation_path": "tender-spike/s1/generator/1",
+  "app_public_key": {
+   "AppPublicKeyPV": {
+    "pk1": "bls12381g1:6aGxBiDyBZxEL9RKJz8W2h7VQUUKv9BPqHbC2DNWKExVRM7GWtLk6mTQBYXbpgRHwp",
+    "pk2": "bls12381g2:swVJmkrgSeVKhyDHqRXbDhToeQtR2JPTTnD6fp9Jty9jfLDqDh7sAhgbHBZTfXDFh3kvZxMCwe5w4R7FXbHNt6PUkyJEsuvJ8bsqFocwyuygsJMpjaFYB8914BoaiNFsUiK"
+   }
+  },
+  "domain_id": 2
+ },
+ "response": {
+  "big_y": "bls12381g1:6BH2QyyQAW7oFUJYZLm3yxs9TDsL2ou8JWwVUVtVAExBGDSURVY717pXh6bM4wEtX4",
+  "big_c": "bls12381g1:7AvCUFvQuh8oHD897FwBZBUTHrzeeXwKgeErssUP2R1prTbP55Ub1eD5QR2k68p1pP"
+ },
+ "tx_hash": "6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc",
+ "blocks": {
+  "tx": 223923045,
+  "request": 223923046,
+  "response": 223923052
+ },
+ "latency_blocks": 6,
+ "check": {
+  "pairing": true,
+  "wrong_app_id": false
+ },
+ "result": "PASS",
+ "date_utc": "2026-11-10T13:35:02Z"
+}

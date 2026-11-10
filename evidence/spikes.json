@@ -22,5 +22,59 @@
       "evidence/rpc/6UYSLa86dtWoNhEWqghG79BmZvCzfmt8Xj8byuNyzYAK.json",
       "evidence/rpc/83SUfatuNt34BaWKhWzABwjQZyn7J6crnQiftkrYqozh.json"
     ]
+  },
+  {
+    "gate": "S1",
+    "date_utc": "2026-11-10T13:37:10.948Z",
+    "result": "PASS",
+    "chosen_path": "identity",
+    "tx_hashes": [
+      "8F5AFdFsUSC8BfzRMRZgV4XwvcCW7AuB4tidipC2wbNn",
+      "6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc"
+    ],
+    "blocks": {
+      "request": 223922868,
+      "response": 223922874
+    },
+    "notes": "mainnet v1.signer 3.18.0, signer Tender NEAR implicit account; identity PASS latency 6 blocks (chosen, first PASS per G3); generator PASS latency 6 blocks (record only); wrong app_id false for both; NearBlocks v3 shows both request receipts (S7)",
+    "evidence_files": [
+      "evidence/spikes/s1-identity.json",
+      "evidence/spikes/s1-generator.json",
+      "evidence/spikes/s1-identity.nearblocks.json",
+      "evidence/spikes/s1-generator.nearblocks.json",
+      "evidence/rpc/8F5AFdFsUSC8BfzRMRZgV4XwvcCW7AuB4tidipC2wbNn.json",
+      "evidence/rpc/6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc.json"
+    ]
+  },
+  {
+    "gate": "S1-generator",
+    "date_utc": "2026-11-10T13:37:07.505Z",
+    "result": "PASS",
+    "chosen_path": "none (record only; mode identity chosen)",
+    "tx_hashes": [
+      "6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc"
+    ],
+    "blocks": {
+      "request": 223923046,
+      "response": 223923052
+    },
+    "notes": "mainnet v1.signer 3.18.0, path tender-spike/s1/generator/1, latency 6 blocks, pairing true, wrong app_id false; PASS kept for the record, not the chosen mode",
+    "evidence_files": [
+      "evidence/spikes/s1-generator.json",
+      "evidence/rpc/6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc.json"
+    ]
+  },
+  {
+    "gate": "S7",
+    "date_utc": "2026-11-10T13:47:19.250Z",
+    "result": "PASS",
+    "chosen_path": "NearBlocks v3 receipts",
+    "tx_hashes": [],
+    "blocks": {},
+    "notes": "both S1 request receipts listed on the first query (199 s / 104 s after block; upper bounds, time of the first query)",
+    "evidence_files": [
+      "evidence/spikes/s1-identity.nearblocks.json",
+      "evidence/spikes/s1-generator.nearblocks.json"
+    ]
   }
 ]

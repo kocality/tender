@@ -1,0 +1,16 @@
+{
+ "gate": "S7",
+ "network": "mainnet",
+ "account": "0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620",
+ "tx_hash": "6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc",
+ "query": "https://api.nearblocks.io/v3/accounts/0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620/receipts?method=request_app_private_key&limit=100",
+ "found": true,
+ "receipt_id": "CeHe7iCJJJexzfcKUZXcbSwPd6X3FzNQZmqsLWPEtbvZ",
+ "predecessor_account_id": "0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620",
+ "receiver_account_id": "v1.signer",
+ "block_height": "223923046",
+ "block_timestamp": "1794317699640069286",
+ "queried_at": "2026-11-10T13:36:43.881Z",
+ "delay_s": 104,
+ "queries": 1
+}
