@@ -53,6 +53,7 @@ export interface SalePlan {
   steps: CallStep[];
   stepKinds: Step[];
   createMsg: Record<string, unknown>;
+  saleId: string; // the id the new sale gets: the spec id, or the contract's next id under --allow-id-mismatch
   closeNs: bigint;
   amount: bigint;
   tokenId: string;
@@ -175,7 +176,8 @@ export function planSale(spec: SaleSpec, o: SaleOpts, st: SaleState): SalePlan {
     deposit: "1 yoctoNEAR", gasTgas: 100, network: net,
   });
   stepKinds.push("create");
-  return { steps, stepKinds, createMsg, closeNs: close, amount, tokenId, problems, notes };
+  const saleId = o.allowIdMismatch && st.nextId !== null ? st.nextId : spec.id;
+  return { steps, stepKinds, createMsg, saleId, closeNs: close, amount, tokenId, problems, notes };
 }
 
 export function loadSpec(tag: string, dir = resolve(ROOT, "sales")): SaleSpec {
@@ -283,12 +285,12 @@ export async function main(argv: string[]): Promise<number> {
         return 1;
       }
       if (i === plan.steps.length - 1) {
-        const sale = await getSale(network, o.contract, spec.id);
+        const sale = await getSale(network, o.contract, plan.saleId);
         const good = sale && sale.seller === o.seller && sale.close_ns === plan.closeNs.toString() && sale.supply === plan.amount.toString();
-        if (good) console.log(`OK sale ${spec.id} created`);
+        if (good) console.log(`OK sale ${plan.saleId} created`);
         else {
           const refund = r.logs.filter((l) => /refund/i.test(l));
-          console.error(`FAIL sale ${spec.id} not found or differs from the request; contract log: ${refund.join(" | ") || r.logs.join(" | ") || "(no log)"}`);
+          console.error(`FAIL sale ${plan.saleId} not found or differs from the request; contract log: ${refund.join(" | ") || r.logs.join(" | ") || "(no log)"}`);
           return 1;
         }
       }

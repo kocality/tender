@@ -71,6 +71,11 @@ describe("planSale", () => {
     expect(planSale(loadSpec("1"), opts(), state({ nextId: "0" })).problems[0]).toMatch(/next sale id on v1\.tenderseal\.near is 0 but sale 1 is id 1/);
     expect(planSale(loadSpec("1"), opts({ allowIdMismatch: true }), state({ nextId: "0" })).problems).toEqual([]);
   });
+  it("under --allow-id-mismatch the created sale is looked up at the contract's next id", () => {
+    expect(planSale(loadSpec("1"), opts({ allowIdMismatch: true }), state({ nextId: "4" })).saleId).toBe("4");
+    expect(planSale(loadSpec("1"), opts(), state({ nextId: "1" })).saleId).toBe("1");
+    expect(planSale(loadSpec("1"), opts({ allowIdMismatch: true }), state({ nextId: null })).saleId).toBe("1");
+  });
   it("a contract that does not exist yet skips the id check with the card's note", () => {
     const p = planSale(loadSpec("1"), opts(), state({ nextId: null }));
     expect(p.problems).toEqual([]);
