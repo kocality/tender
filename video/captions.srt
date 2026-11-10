@@ -1,0 +1,204 @@
+1
+00:00:00,000 --> 00:00:03,497
+Two sealed token sales. Same contract,
+same second. This one met
+
+2
+00:00:03,497 --> 00:00:06,885
+its public open conditions, so NEAR's MPC
+network released its
+
+3
+00:00:06,885 --> 00:00:10,273
+key and every bid opens. This one didn't,
+so its key was never
+
+4
+00:00:10,273 --> 00:00:13,989
+requested, and that's a query, not a
+promise: every key that network
+
+5
+00:00:13,989 --> 00:00:17,650
+hands this contract is an on-chain
+receipt. Reading it anyway would
+
+6
+00:00:17,650 --> 00:00:20,000
+take eleven of sixteen MPC nodes
+colluding.
+
+7
+00:00:20,000 --> 00:00:24,597
+Token sales today are public. Every bid
+and deposit is visible,
+
+8
+00:00:24,597 --> 00:00:29,047
+so people snipe and herd. Uniswap says its
+new auction design
+
+9
+00:00:29,047 --> 00:00:33,644
+reduces sniping. On NEAR, meme.cooking has
+launched 267 tokens,
+
+10
+00:00:33,644 --> 00:00:37,000
+every deposit public and only in wrapped
+NEAR.
+
+11
+00:00:37,000 --> 00:00:40,000
+Sources: Uniswap blog, read 2026-11-10
+api.meme.cooking, read 2026-11-10
+
+12
+00:00:40,000 --> 00:00:44,537
+I bid from Solana with Phantom. USDC goes
+to my own
+
+13
+00:00:44,537 --> 00:00:48,897
+NEAR Intents account through 1Click. My
+price and
+
+14
+00:00:48,897 --> 00:00:53,701
+size are encrypted in my browser to a key
+that doesn't
+
+15
+00:00:53,701 --> 00:00:58,238
+exist yet. I sign one Intents transfer,
+and the bid
+
+16
+00:00:58,238 --> 00:01:02,509
+sits on NEAR as ciphertext. MetaMask on
+Base and
+
+17
+00:01:02,509 --> 00:01:05,000
+Arbitrum works the same way.
+
+18
+00:01:05,000 --> 00:01:09,551
+At close, anyone can press open. Only this
+locked
+
+19
+00:01:09,551 --> 00:01:13,916
+contract can ask for its key, and only if
+total
+
+20
+00:01:13,916 --> 00:01:18,375
+escrow and the number of bidders meet the
+sale's
+
+21
+00:01:18,375 --> 00:01:23,390
+public thresholds. Eleven of sixteen MPC
+nodes answer.
+
+22
+00:01:23,390 --> 00:01:28,127
+Every browser decrypts every bid, checks
+it against
+
+23
+00:01:28,127 --> 00:01:32,678
+its commitment, and the same clearing
+price comes
+
+24
+00:01:32,678 --> 00:01:35,000
+out: three dollars sixty.
+
+25
+00:01:35,000 --> 00:01:39,777
+Winners get tokens, losers get refunds,
+all inside
+
+26
+00:01:39,777 --> 00:01:44,554
+NEAR Intents. This bidder pulls USDC back
+to Base.
+
+27
+00:01:44,554 --> 00:01:49,522
+This winner swaps NEAR to SOL. Sale two
+sells 22,400
+
+28
+00:01:49,522 --> 00:01:54,013
+JAMBO, a meme.cooking memecoin we bought
+on the
+
+29
+00:01:54,013 --> 00:01:59,554
+market, in a sealed round open until
+November seventeenth.
+
+30
+00:01:59,554 --> 00:02:03,949
+Its key has not been requested, and anyone
+can
+
+31
+00:02:03,949 --> 00:02:05,000
+check that.
+
+32
+00:02:05,000 --> 00:02:09,541
+Don't trust our UI. One free
+
+33
+00:02:09,541 --> 00:02:14,730
+command re-reads mainnet, checks
+
+34
+00:02:14,730 --> 00:02:19,270
+the key, decrypts every bid,
+
+35
+00:02:19,270 --> 00:02:24,297
+recomputes the price, and lists
+
+36
+00:02:24,297 --> 00:02:28,838
+every key this contract ever
+
+37
+00:02:28,838 --> 00:02:34,189
+requested. No wallet, no archival
+
+38
+00:02:34,189 --> 00:02:35,000
+node.
+
+39
+00:02:35,000 --> 00:02:39,960
+Privacy rests on eleven of sixteen NEAR
+MPC nodes, the network
+
+40
+00:02:39,960 --> 00:02:44,840
+behind Chain Signatures, and those nodes
+also run in attested
+
+41
+00:02:44,840 --> 00:02:50,040
+TEEs. We add no TEE and no committee of
+our own. A bid that never
+
+42
+00:02:50,040 --> 00:02:55,720
+opens costs a ten percent bond, and escrow
+sizes are public. Everything
+
+43
+00:02:55,720 --> 00:02:59,000
+else is in the README. Check it yourself.
+

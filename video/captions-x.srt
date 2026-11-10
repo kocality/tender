@@ -1,0 +1,157 @@
+1
+00:00:00,000 --> 00:00:03,497
+Two sealed token sales. Same contract,
+same second. This one met
+
+2
+00:00:03,497 --> 00:00:06,885
+its public open conditions, so NEAR's MPC
+network released its
+
+3
+00:00:06,885 --> 00:00:10,273
+key and every bid opens. This one didn't,
+so its key was never
+
+4
+00:00:10,273 --> 00:00:13,989
+requested, and that's a query, not a
+promise: every key that network
+
+5
+00:00:13,989 --> 00:00:17,650
+hands this contract is an on-chain
+receipt. Reading it anyway would
+
+6
+00:00:17,650 --> 00:00:20,000
+take eleven of sixteen MPC nodes
+colluding.
+
+7
+00:00:20,000 --> 00:00:24,537
+I bid from Solana with Phantom. USDC goes
+to my own
+
+8
+00:00:24,537 --> 00:00:28,897
+NEAR Intents account through 1Click. My
+price and
+
+9
+00:00:28,897 --> 00:00:33,701
+size are encrypted in my browser to a key
+that doesn't
+
+10
+00:00:33,701 --> 00:00:38,238
+exist yet. I sign one Intents transfer,
+and the bid
+
+11
+00:00:38,238 --> 00:00:42,509
+sits on NEAR as ciphertext. MetaMask on
+Base and
+
+12
+00:00:42,509 --> 00:00:45,000
+Arbitrum works the same way.
+
+13
+00:00:45,000 --> 00:00:49,551
+At close, anyone can press open. Only this
+locked
+
+14
+00:00:49,551 --> 00:00:53,916
+contract can ask for its key, and only if
+total
+
+15
+00:00:53,916 --> 00:00:58,375
+escrow and the number of bidders meet the
+sale's
+
+16
+00:00:58,375 --> 00:01:03,390
+public thresholds. Eleven of sixteen MPC
+nodes answer.
+
+17
+00:01:03,390 --> 00:01:08,127
+Every browser decrypts every bid, checks
+it against
+
+18
+00:01:08,127 --> 00:01:12,678
+its commitment, and the same clearing
+price comes
+
+19
+00:01:12,678 --> 00:01:15,000
+out: three dollars sixty.
+
+20
+00:01:15,000 --> 00:01:18,986
+Winners get tokens, losers get refunds,
+all inside NEAR Intents. This bidder
+
+21
+00:01:18,986 --> 00:01:23,024
+pulls USDC back to Base. Sale two sells
+22,400 JAMBO, a meme.cooking memecoin
+
+22
+00:01:23,024 --> 00:01:26,958
+we bought on the market, in a sealed round
+open until November seventeenth.
+
+23
+00:01:26,958 --> 00:01:30,000
+Its key has not been requested, and anyone
+can check that.
+
+24
+00:01:30,000 --> 00:01:34,557
+Don't trust our UI. One free command
+
+25
+00:01:34,557 --> 00:01:38,734
+re-reads mainnet, checks the key,
+
+26
+00:01:38,734 --> 00:01:43,038
+decrypts every bid, recomputes the
+
+27
+00:01:43,038 --> 00:01:48,101
+price, and lists every key this contract
+
+28
+00:01:48,101 --> 00:01:50,000
+ever requested.
+
+29
+00:01:50,000 --> 00:01:54,960
+Privacy rests on eleven of sixteen NEAR
+MPC nodes, the network
+
+30
+00:01:54,960 --> 00:01:59,840
+behind Chain Signatures, and those nodes
+also run in attested
+
+31
+00:01:59,840 --> 00:02:05,040
+TEEs. We add no TEE and no committee of
+our own. A bid that never
+
+32
+00:02:05,040 --> 00:02:10,720
+opens costs a ten percent bond, and escrow
+sizes are public. Everything
+
+33
+00:02:10,720 --> 00:02:14,000
+else is in the README. Check it yourself.
+
