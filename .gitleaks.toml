@@ -22,3 +22,10 @@ keywords = ["ed25519:"]
 description = "NEAR transaction signatures in JSON"
 regexTarget = "line"
 regexes = ['''"signature"\s*:\s*"ed25519:''']
+
+[[allowlists]]
+description = "Native USDC token contract id on NEAR (public account id): the base64 `args` of the intents.near ft_transfer in the F4 delivery snapshot decode to {token: <that id>, ...}"
+paths = ['''evidence/rpc/3yWs2Rma5zZwX48ttFDYUNLf64sPJFEv8LkXAiLV4bND\.json''']
+regexTarget = "match"
+regexes = ['''token"\s*:\s*"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"''']
+condition = "AND"
