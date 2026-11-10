@@ -10,9 +10,10 @@ import { DRY_RUN_HEADER, parseCommon } from "./lib/cli.js";
 import { EVIDENCE_DIR } from "./lib/evidence.js";
 import { loadKeyPair, writeNewKeyPair } from "./lib/keys.js";
 import { RPC, rpcCall, view, type Network } from "./lib/rpc.js";
+import { getConfig } from "./lib/views.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 
-// Keyless single-transaction birth (DECISIONS C1): CreateAccount + Transfer + DeployContract + FunctionCall(new) in one batch.
+// Keyless single-transaction birth (the contract must have no access key from its first block): CreateAccount + Transfer + DeployContract + FunctionCall(new) in one batch.
 // v1.* never gets a key. rehearsal.* and testnet accounts may get a generated full-access key (PD-05).
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -57,7 +58,7 @@ export function planBirth(o: BirthOpts, wasm: Uint8Array, initArgs: object = {})
     throw new BirthRefusal(`account must be <label>.${o.signer} (one level; the contract's create check needs predecessor == parent), got ${o.account}`);
   }
   if (o.addFullAccessKey) {
-    if (o.account.startsWith("v1.")) throw new BirthRefusal("refusing: v1.* must be born keyless (DECISIONS C1)");
+    if (o.account.startsWith("v1.")) throw new BirthRefusal("refusing: v1.* must be born keyless (the contract must have no access key from its first block)");
     if (o.network !== "testnet" && !o.account.startsWith("rehearsal.")) {
       throw new BirthRefusal("refusing: --add-full-access-key is only for testnet or rehearsal.* accounts (PD-05)");
     }
@@ -127,6 +128,12 @@ function nearCliFallback(o: BirthOpts, specs: ActionSpec[]): string {
     }
   });
   return `near transaction construct-transaction ${o.signer} ${o.account} ${parts.join(" ")} skip network-config ${o.network} sign-with-legacy-keychain send`;
+}
+
+/** new() argument names that get_config returns with a different value. get_config shows every u64 as a string (domain_id), new() takes a number. */
+export function configDiff(initArgs: Record<string, unknown>, cfg: Record<string, unknown>): string[] {
+  const norm = (v: unknown) => JSON.stringify(typeof v === "number" ? String(v) : v);
+  return Object.entries(initArgs).filter(([k, v]) => k in cfg && norm(cfg[k]) !== norm(v)).map(([k]) => k);
 }
 
 export function formatPlan(o: BirthOpts, specs: ActionSpec[]): string {
@@ -240,8 +247,8 @@ export async function main(argv: string[]): Promise<number> {
     if (code.hash !== want) failed = true;
     if (o.initMethod === "new") {
       try {
-        const cfg = (await view<any>(network, o.account, "get_config", {}, { rpc: common.rpc })) ?? {};
-        const diff = Object.entries(initArgs as Record<string, unknown>).filter(([k, v]) => k in cfg && JSON.stringify(cfg[k]) !== JSON.stringify(v)).map(([k]) => k);
+        const cfg = await getConfig(network, o.account, common.rpc);
+        const diff = configDiff(initArgs as Record<string, unknown>, cfg as unknown as Record<string, unknown>);
         console.log(diff.length ? `FAIL get_config differs from init in: ${diff.join(", ")}` : "get_config matches init (fields get_config shows)");
         if (diff.length) failed = true;
       } catch (e) {

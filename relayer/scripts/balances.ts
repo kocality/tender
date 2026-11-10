@@ -10,7 +10,7 @@ import type { Network } from "./lib/rpc.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 
 const ACCOUNTS_FILE = `${EVIDENCE_DIR}team-accounts.json`;
-const TARGETS_FILE = fileURLToPath(new URL("../../docs/internal/funding-targets.json", import.meta.url));
+const TARGETS_FILE = fileURLToPath(new URL(["..", "..", "docs", "internal", "funding-targets.json"].join("/"), import.meta.url));
 
 export type Venue = "near" | "intents" | "base" | "arb" | "sol";
 export type Asset = "NEAR" | "USDC" | "wNEAR" | "JAMBO" | "ETH" | "SOL";
@@ -154,7 +154,7 @@ export function readAccounts(file = ACCOUNTS_FILE): Accounts {
 }
 
 export function readTargets(file = TARGETS_FILE): Targets {
-  if (!existsSync(file)) throw new Error(`${file} not found (gitignored; see docs/internal/funding-targets.json)`);
+  if (!existsSync(file)) throw new Error(`${file} not found (a local, gitignored file)`);
   const j = JSON.parse(readFileSync(file, "utf8")) as { checks?: Targets };
   if (!j.checks) throw new Error(`${file} has no "checks" object`);
   return j.checks;

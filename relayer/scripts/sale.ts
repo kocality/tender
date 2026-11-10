@@ -6,6 +6,7 @@ import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep } from "./
 import { SALE_TAGS, type SaleTag, type Step } from "./lib/evidence.js";
 import { makeAccount, sendStep, explorer } from "./lib/send.js";
 import { view, type Network } from "./lib/rpc.js";
+import { getConfig, getSale } from "./lib/views.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -113,6 +114,10 @@ export function planSale(spec: SaleSpec, o: SaleOpts, st: SaleState): SalePlan {
   if (close > nowNs + 30n * 86_400n * 1_000_000_000n) problems.push(`close ${new Date(Number(close / 1_000_000n)).toISOString()} is more than 30 days from now (C6)`);
   if (spec.create_at_utc) notes.push(`planned creation time: ${spec.create_at_utc}`);
 
+  // decimals + lot_exp must stay inside the contract's create window (refund reason decimals_plus_lot_exp)
+  const scaleExp = spec.msg.decimals + spec.msg.lot_exp;
+  if (scaleExp < 20 || scaleExp > 26) problems.push(`decimals + lot_exp is ${scaleExp}, create needs 20 to 26 (the contract refunds with decimals_plus_lot_exp)`);
+
   // reserve
   let reserve = spec.msg.reserve;
   if (o.reserveOverride !== undefined) {
@@ -178,27 +183,10 @@ export function loadSpec(tag: string, dir = resolve(ROOT, "sales")): SaleSpec {
   return JSON.parse(readFileSync(resolve(dir, `${tag}.json`), "utf8")) as SaleSpec;
 }
 
-/** Views that take u64 as a string or a number depending on the contract: try the string form, then the number form. */
-async function viewEither<T>(network: Network, contract: string, method: string, a: (asNumber: boolean) => object): Promise<T> {
-  try {
-    return await view<T>(network, contract, method, a(false));
-  } catch (e) {
-    if (/UNKNOWN_ACCOUNT|CodeDoesNotExist|does not exist|MethodNotFound/.test((e as Error).message)) throw e;
-    return view<T>(network, contract, method, a(true));
-  }
-}
-
+/** The id the next sale gets = get_config().sales; null when the account (or its code) does not exist yet. */
 async function nextSaleId(network: Network, contract: string): Promise<string | null> {
   try {
-    let count = 0;
-    let last: string | undefined;
-    for (;;) {
-      const page = await viewEither<Array<{ id: string | number }>>(network, contract, "get_sales", (n) => ({ from: n ? count : String(count), limit: n ? 50 : "50" }));
-      for (const s of page ?? []) last = String(s.id);
-      count += page?.length ?? 0;
-      if ((page?.length ?? 0) < 50) break;
-    }
-    return last === undefined ? "0" : String(BigInt(last) + 1n);
+    return (await getConfig(network, contract)).sales;
   } catch (e) {
     if (/UNKNOWN_ACCOUNT|CodeDoesNotExist|does not exist/.test((e as Error).message)) return null;
     throw e;
@@ -295,8 +283,8 @@ export async function main(argv: string[]): Promise<number> {
         return 1;
       }
       if (i === plan.steps.length - 1) {
-        const sale = await view<any>(network, o.contract, "get_sale", { id: spec.id });
-        const good = sale && sale.seller === o.seller && String(sale.close_ns) === plan.closeNs.toString() && String(sale.supply ?? sale.amount) === plan.amount.toString();
+        const sale = await getSale(network, o.contract, spec.id);
+        const good = sale && sale.seller === o.seller && sale.close_ns === plan.closeNs.toString() && sale.supply === plan.amount.toString();
         if (good) console.log(`OK sale ${spec.id} created`);
         else {
           const refund = r.logs.filter((l) => /refund/i.test(l));

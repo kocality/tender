@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BirthRefusal, formatPlan, minBalance, planBirth, sha256Hex, validateInit, type BirthOpts } from "../scripts/birth.js";
+import { BirthRefusal, configDiff, formatPlan, minBalance, planBirth, sha256Hex, validateInit, type BirthOpts } from "../scripts/birth.js";
 
 const wasm = (n: number) => new Uint8Array(n).fill(7);
 const base: BirthOpts = {
@@ -76,4 +76,14 @@ describe("dry-run format", () => {
     expect(l2).toMatch(/^ {6}args=/);
     expect(l3).toMatch(/^ {6}near-cli: near transaction construct-transaction tenderseal\.near v1\.tenderseal\.near add-action create-account/);
   });
+});
+
+describe("configDiff", () => {
+  const init = {
+    mpc: "v1.signer", intents: "intents.near", domain_id: 2, app_pk_mode: "identity", mpc_public_key: "bls12381g2:x",
+    quote_tokens: ["nep141:usdc"], sellers: ["tenderseal.near"],
+  };
+  const cfg = { ...init, domain_id: "2", version: "1.0.0", init_block: "1", init_ns: "1", sales: "0", key_log_len: "0" };
+  it("domain_id 2 in new() and \"2\" in get_config is no difference", () => expect(configDiff(init, cfg)).toEqual([]));
+  it("names every argument that differs", () => expect(configDiff(init, { ...cfg, domain_id: "3", sellers: ["x.near"] })).toEqual(["domain_id", "sellers"]));
 });

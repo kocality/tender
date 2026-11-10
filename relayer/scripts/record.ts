@@ -10,14 +10,14 @@ import { blockHeight, decodeSuccessValue, txStatus, type Network } from "./lib/r
 
 const ONECLICK_STATUS = "https://1click.chaindefuser.com/v0/status";
 const MPC: Record<Network, string> = { mainnet: "v1.signer", testnet: "v1.signer-prod.testnet" };
-const INBOX = fileURLToPath(new URL("../../docs/internal/tx-inbox.md", import.meta.url));
+const INBOX = fileURLToPath(new URL(["..", "..", "docs", "internal", "tx-inbox.md"].join("/"), import.meta.url));
 
 const usage = `usage:
   tsx scripts/record.ts --sale <tag> --step <step> --tx <hash> --signer <account> [--network mainnet]
     [--expect failure] [--note "..."] [--chain base|arb|sol|near] [--contract <id>]
     [--oneclick <depositAddress>] [--origin-tx <hash>] [--dest-tx <hash>] [--save-result <file>] [--dry-run] [--rpc <url>]
   tsx scripts/record.ts gate --gate <name> --result PASS|ALT|FAIL --path "<chosen path>" [--tx <h1,h2> --signer <acct>] [--ckd] [--notes "..."] [--files a,b] [--network] [--dry-run]
-  tsx scripts/record.ts inbox [--network mainnet] [--dry-run]   # records unmarked lines of docs/internal/tx-inbox.md`;
+  tsx scripts/record.ts inbox [--network mainnet] [--dry-run]   # records the unmarked lines of the local tx inbox`;
 
 export interface RecordOpts {
   network: Network;

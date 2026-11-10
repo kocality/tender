@@ -76,6 +76,14 @@ describe("planSale", () => {
     expect(p.problems).toEqual([]);
     expect(p.notes[0]).toBe("next sale id: account v1.tenderseal.near does not exist yet (dry-run continues with id check skipped)");
   });
+  it("decimals + lot_exp outside 20..26 is blocked before sending (contract refund decimals_plus_lot_exp)", () => {
+    const low = loadSpec("1");
+    low.msg.decimals = 19;
+    expect(planSale(low, opts(), state()).problems.join()).toMatch(/decimals \+ lot_exp is 19, create needs 20 to 26/);
+    const high = loadSpec("1");
+    high.msg.lot_exp = 3;
+    expect(planSale(high, opts(), state()).problems.join()).toMatch(/is 27/);
+  });
   it("close closer than 300 s is blocked (C6)", () => {
     const spec = loadSpec("R");
     spec.close = { relative_secs: 299 };
