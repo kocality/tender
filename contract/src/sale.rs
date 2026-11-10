@@ -855,6 +855,12 @@ pub(crate) mod tests {
             let got = transfer(&mut t, "alice.near", USDC, 5, &msg.to_string(), NOW);
             assert_refunded(got, 5, "msg_too_long");
         }
+        // Within the cap the unknown op is echoed: control characters, the most escape-heavy op
+        // a msg can carry, stay a refund (no log-limit panic).
+        let msg = json!({ "op": "\u{1}".repeat(338) }).to_string();
+        assert!(msg.len() <= MAX_SELF_REVEAL_MSG && msg.len() > MAX_SELF_REVEAL_MSG - 16);
+        let got = transfer(&mut t, "alice.near", USDC, 5, &msg, NOW);
+        assert_refunded(got, 5, "bad_msg");
     }
 
     /// SC-01: the seller account cannot bid in its own sale (no shill bid, no bidder count).
