@@ -7,7 +7,7 @@ import {
 } from "@tender/intents";
 import { createRelayHandler, nearDepsFromEnv } from "../src/relay.js";
 
-const RPC = ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org"];
+const RPC = ["https://free.rpc.fastnear.com", "https://near.drpc.org"];
 const USDC = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 
 async function signedBid(tamper: boolean) {

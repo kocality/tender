@@ -1,13 +1,15 @@
-import { Account, FailoverRpcProvider, JsonRpcProvider } from "near-api-js";
+import { Account, FailoverRpcError, FailoverRpcProvider, JsonRpcProvider, type Provider } from "near-api-js";
+import { InvalidNonceError } from "near-api-js/rpc-errors";
 
 // Relayer runtime: near-api-js and Node built-ins only (D4-03), no @tender/* imports.
 
 export type Network = "mainnet" | "testnet";
 type KeyPairString = `ed25519:${string}`;
 
+// rpc.mainnet.near.org and rpc.testnet.near.org are deprecated (they answer -429 DEPRECATED under load): fastnear first, then two live public providers.
 export const RPCS: Record<Network, string[]> = {
-  mainnet: ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org"],
-  testnet: ["https://test.rpc.fastnear.com", "https://rpc.testnet.near.org"],
+  mainnet: ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.shitzuapes.xyz"],
+  testnet: ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://near-testnet.drpc.org"],
 };
 
 /** The contract panicked: `panicMsg` is its own text (for example "insufficient balance or overflow"). */
@@ -18,12 +20,27 @@ export class ViewPanic extends Error {
   }
 }
 
-export function makeProvider(network: Network, urls: string[] = RPCS[network]): FailoverRpcProvider {
-  return new FailoverRpcProvider(urls.map((url) => new JsonRpcProvider({ url })));
+/**
+ * FailoverRpcProvider wraps every error, an InvalidNonce included, in a FailoverRpcError, so Account never sees the
+ * InvalidNonceError that makes it drop its cached nonce and retry. A nonce is not a provider fault: hand it through.
+ */
+export class NonceAwareFailoverProvider extends FailoverRpcProvider {
+  override async sendTransactionUntil(...args: Parameters<FailoverRpcProvider["sendTransactionUntil"]>) {
+    try {
+      return await super.sendTransactionUntil(...args);
+    } catch (e) {
+      const nonce = e instanceof FailoverRpcError ? e.errors.find((x) => x instanceof InvalidNonceError) : undefined;
+      throw nonce ?? e;
+    }
+  }
 }
 
-export function makeAccount(accountId: string, keyPairString: KeyPairString, network: Network, urls?: string[]): Account {
-  return new Account(accountId, makeProvider(network, urls), keyPairString);
+export function makeProvider(network: Network, urls: string[] = RPCS[network]): FailoverRpcProvider {
+  return new NonceAwareFailoverProvider(urls.map((url) => new JsonRpcProvider({ url })));
+}
+
+export function makeAccount(accountId: string, keyPairString: KeyPairString, network: Network, urls?: string[], provider: Provider = makeProvider(network, urls)): Account {
+  return new Account(accountId, provider, keyPairString);
 }
 
 async function rpc(urls: string[], method: string, params: unknown): Promise<any> {
@@ -70,11 +87,41 @@ export async function viewFunction<T>(urls: string[], contractId: string, method
   return (text === "" ? null : JSON.parse(text)) as T;
 }
 
-/** Remaining allowance in yocto; null = full-access key (no allowance) or a function-call key without a cap; throws if the key is unknown. */
-export async function accessKeyAllowance(urls: string[], accountId: string, publicKey: string): Promise<bigint | null> {
-  const r = await rpc(urls, "query", { request_type: "view_access_key", finality: "final", account_id: accountId, public_key: publicKey });
+/** The access key does not exist on chain (a rotated or wrong key); any other failure is an RPC problem, not an answer. */
+export class UnknownAccessKey extends Error {
+  constructor(accountId: string, publicKey: string) {
+    super(`access key ${publicKey} of ${accountId} does not exist`);
+    this.name = "UnknownAccessKey";
+  }
+}
+
+export interface AccessKeyInfo { kind: "FullAccess" | "FunctionCall"; allowance: bigint | null; receiverId?: string; methodNames?: string[] }
+
+/** view_access_key. Throws UnknownAccessKey when the key is not on chain, a plain Error when no node answers. */
+export async function accessKeyInfo(urls: string[], accountId: string, publicKey: string): Promise<AccessKeyInfo> {
+  let r: any;
+  try {
+    r = await rpc(urls, "query", { request_type: "view_access_key", finality: "final", account_id: accountId, public_key: publicKey });
+  } catch (e) {
+    if (/UNKNOWN_ACCESS_KEY/.test((e as Error).message)) throw new UnknownAccessKey(accountId, publicKey);
+    throw e;
+  }
+  if (typeof r.error === "string") {
+    if (/does not exist/.test(r.error)) throw new UnknownAccessKey(accountId, publicKey);
+    throw new Error(`view_access_key: ${r.error.slice(0, 300)}`);
+  }
   const p = r.permission;
-  if (p === "FullAccess") return null;
-  const a = p?.FunctionCall?.allowance;
-  return a === null || a === undefined ? null : BigInt(a);
+  if (p === "FullAccess") return { kind: "FullAccess", allowance: null };
+  const fc = p?.FunctionCall;
+  if (!fc) throw new Error("view_access_key: unknown permission shape");
+  return { kind: "FunctionCall", allowance: fc.allowance === null || fc.allowance === undefined ? null : BigInt(fc.allowance), receiverId: fc.receiver_id, methodNames: fc.method_names };
+}
+
+const YOCTO_PER_STORAGE_BYTE = 10n ** 19n;
+
+/** Balance minus the storage stake, in yocto: what the account can actually burn on gas. */
+export async function spendableBalance(urls: string[], accountId: string): Promise<bigint> {
+  const r = await rpc(urls, "query", { request_type: "view_account", finality: "final", account_id: accountId });
+  const free = BigInt(r.amount) - BigInt(r.storage_usage) * YOCTO_PER_STORAGE_BYTE;
+  return free > 0n ? free : 0n;
 }

@@ -1,8 +1,9 @@
-import { Account, FailoverRpcProvider, JsonRpcProvider, actions, teraToGas } from "near-api-js";
+import { Account, JsonRpcProvider, actions, teraToGas } from "near-api-js";
 import type { CallStep } from "./cli.js";
+import { NonceAwareFailoverProvider } from "../../src/near.js";
 import { loadKeyPair } from "./keys.js";
 import { RPC, blockHeight, type Network } from "./rpc.js";
-import { toUnits } from "./units.js";
+import { fromUnits, toUnits } from "./units.js";
 
 /** "3 NEAR" | "0.00125 NEAR" | "1 yoctoNEAR" | "0 NEAR" -> yocto bigint. */
 export function depositToYocto(s: string): bigint {
@@ -13,8 +14,19 @@ export function depositToYocto(s: string): bigint {
 
 export function makeAccount(network: Network, accountId: string, rpc?: string): Account {
   const urls = rpc ? [rpc] : RPC[network].normal;
-  const provider = new FailoverRpcProvider(urls.map((url) => new JsonRpcProvider({ url })));
+  const provider = new NonceAwareFailoverProvider(urls.map((url) => new JsonRpcProvider({ url })));
   return new Account(accountId, provider, loadKeyPair(network, accountId));
+}
+
+// Signing a call with N Tgas prepaid needs the signer to hold the pessimistic cost of that gas: 300 Tgas = 0.3009 NEAR (measured on testnet:
+// an account with 0.2 NEAR was refused with NotEnoughBalance at 300 Tgas and served at 100 Tgas).
+const YOCTO_PER_TGAS_BALANCE = 1_003_100_000_000_000_000_000n;
+
+/** null = `spendable` (balance minus the storage stake, yocto) covers the prepaid gas; otherwise why the send would be rejected. */
+export function gasBalanceProblem(signer: string, spendable: bigint, gasTgas: number): string | null {
+  const need = BigInt(gasTgas) * YOCTO_PER_TGAS_BALANCE;
+  if (spendable >= need) return null;
+  return `${signer} can spend ${fromUnits(spendable, 24)} NEAR and signing ${gasTgas} Tgas needs ${fromUnits(need, 24)} NEAR: top it up above that or send through a relayer (--via-relay <url>)`;
 }
 
 export interface Sent { hash: string; ok: boolean; block: number; status: unknown; logs: string[] }

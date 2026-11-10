@@ -14,7 +14,8 @@ export const EXPECTED: Record<SaleTag, Step[]> = {
   "2": ["create", "bid", "bid", "attack-early-open", "attack-eoa-ckd"],
   "3": ["create", "bid", "bid", "bid", "open", "attack-wrong-cm", "reveal", "attack-late", "finalize"],
   spike: [],
-  ops: [],
+  // team account and ops steps recorded so far: tenderseal.near, bidder and relayer birth (3), USDC storage (wNEAR swap legs: 2), 1Click and swap funding (5), swap, bidder key, relayer key, spike delete
+  ops: ["birth", "birth", "birth", "storage", "storage", "fund", "fund", "fund", "fund", "fund", "swap", "add-public-key", "key-add", "delete"],
 };
 
 // Earliest UTC at which each EXPECTED slot can exist (same index as EXPECTED). `--until <UTC>` counts only slots due by then.
@@ -27,7 +28,7 @@ export const DUE: Record<SaleTag, string[]> = {
   "2": ["2026-11-13T07:30:00Z", "2026-11-13T08:00:00Z", "2026-11-13T08:00:00Z", "2026-11-13T09:45:00Z", "2026-11-13T09:45:00Z"],
   "3": ["2026-11-13T08:00:00Z", "2026-11-13T09:00:00Z", "2026-11-13T09:00:00Z", "2026-11-13T09:00:00Z", "2026-11-13T10:30:00Z", "2026-11-13T10:30:00Z", "2026-11-13T10:30:00Z", "2026-11-13T10:30:00Z", "2026-11-14T10:30:00Z"],
   spike: [],
-  ops: [],
+  ops: Array(14).fill("2026-11-11T02:00:00Z"),
 };
 
 export interface CheckResult { rows: number; missing: string[]; problems: string[] }

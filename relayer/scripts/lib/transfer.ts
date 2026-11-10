@@ -8,7 +8,8 @@ import type { CallStep, Common } from "./cli.js";
 import type { SaleTag, Step } from "./evidence.js";
 import { loadKeyPair, type KeyPairString } from "./keys.js";
 import { RPC } from "./rpc.js";
-import { makeAccount, sendStep, type Sent } from "./send.js";
+import { spendableBalance } from "../../src/near.js";
+import { gasBalanceProblem, makeAccount, sendStep, type Sent } from "./send.js";
 
 // What the ops scripts that sign one Intents Transfer with a NEAR key (nep413) have in common.
 
@@ -51,7 +52,9 @@ export function liveTransferEnv(c: Common): TransferEnv {
         throw e;
       }
     },
-    executeIntents(signer, intents, mp) {
+    async executeIntents(signer, intents, mp) {
+      const blocked = gasBalanceProblem(signer, await spendableBalance(urls, signer), 300);
+      if (blocked) throw new Error(blocked);
       const step: CallStep = { signer, receiver: intents, method: "execute_intents", args: { signed: [mp] }, deposit: "0 NEAR", gasTgas: 300, network: c.network };
       return sendStep(account(signer), step, c.rpc);
     },

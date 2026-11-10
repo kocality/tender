@@ -28,7 +28,7 @@ describe.skipIf(!enabled)("relay on testnet: the permissionless /relay path with
   const saleId = env.TESTNET_SALE as string;
   const funder = env.TESTNET_FUNDER as string;
   const B = 2_000_000n;
-  const RPC = ["https://test.rpc.fastnear.com", "https://rpc.testnet.near.org"];
+  const RPC = ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com"];
 
   it("deposit to an implicit account, relay its bid: 200 {txHash}, Sealed in get_bids, replay 400, allowance drop printed", async () => {
     // a fresh ed25519 key; its 64-hex public key is the Intents account (D4-15)

@@ -1,0 +1,36 @@
+name: watch
+on:
+  schedule:
+    - cron: '17 * 13-25 11 *'   # hourly, 2026-11-13 to 25 (GitHub cron has no year: the guard job skips other years)
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: watch, cancel-in-progress: false }
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      live: ${{ steps.year.outputs.live }}
+    steps:
+      - id: year
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%Y)" != "2026" ]; then echo "live=false" >> "$GITHUB_OUTPUT"; else echo "live=true" >> "$GITHUB_OUTPUT"; fi
+  watch:
+    needs: guard
+    if: needs.guard.outputs.live == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile --filter "@tender/relayer..."
+      - name: watch (read-only, no secrets)
+        env:
+          RELAY_URL: ${{ vars.RELAY_URL }}
+          APP_URL: ${{ vars.APP_URL }}
+          TENDER_CONTRACT_ID: v1.tenderseal.near
+        run: pnpm --filter @tender/relayer watch

@@ -2,7 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { MAX_BATCH, decide, describeAction, isoSec, main, runKeeper, summaryMarkdown, toCall, type KeeperCrypto, type KeeperDeps, type KeeperOpts } from "../src/keeper.js";
+import { KeyPair } from "near-api-js";
+import { MAX_BATCH, decide, describeAction, isoSec, keeperKeyProblem, main, runKeeper, summaryMarkdown, toCall, type KeeperCrypto, type KeeperDeps, type KeeperOpts } from "../src/keeper.js";
 import type { BidView, SaleView } from "../scripts/lib/views.js";
 import { bidView, configView, saleView } from "./helpers/views.js";
 
@@ -43,9 +44,16 @@ describe("decide: Open", () => {
     expect(decide(open({ escrow_total: "4999999" }), [], CLOSE_NS, noCrypto, CTX)).toEqual([{ kind: "cancel", rule: "a" }]);
     expect(decide(open({ bidders: 2 }), [], CLOSE_NS, noCrypto, CTX)).toEqual([{ kind: "cancel", rule: "a" }]);
   });
-  it("close + 24 h with no key and nothing in flight: cancel b", () => {
-    expect(decide(open({ key_requests: 2 }), [], CLOSE_NS + DAY_NS, noCrypto, CTX)).toEqual([{ kind: "cancel", rule: "b" }]);
-    expect(decide(open({ key_requests: 2 }), [], CLOSE_NS + DAY_NS - 1n, noCrypto, CTX)).toEqual([{ kind: "open" }]);
+  it("close + 24 h: conditions that hold still open (an open can key the sale at any time), key_requests 0 or more", () => {
+    expect(decide(open(), [], CLOSE_NS + DAY_NS, noCrypto, CTX)).toEqual([{ kind: "open" }]);
+    expect(decide(open({ key_requests: 1 }), [], CLOSE_NS + DAY_NS + 1n, noCrypto, CTX)).toEqual([{ kind: "open" }]);
+    expect(decide(open({ key_requests: 2 }), [], CLOSE_NS + 5n * DAY_NS, noCrypto, CTX)).toEqual([{ kind: "open" }]);
+    expect(decide(open(), [], CLOSE_NS + DAY_NS - 1n, noCrypto, CTX)).toEqual([{ kind: "open" }]);
+  });
+  it("close + 24 h with failed conditions and no key: cancel b (earlier before: stop)", () => {
+    const failed = { key_requests: 2, escrow_total: "1000000" };
+    expect(decide(open(failed), [], CLOSE_NS + DAY_NS, noCrypto, CTX)).toEqual([{ kind: "cancel", rule: "b" }]);
+    expect(decide(open(failed), [], CLOSE_NS + DAY_NS - 1n, noCrypto, CTX)[0]).toMatchObject({ kind: "stop" });
   });
   it("a request in flight waits, even after close + 24 h", () => {
     expect(decide(open({ in_flight: true, key_requests: 1 }), [], CLOSE_NS + 2n * DAY_NS, noCrypto, CTX)[0]).toMatchObject({ kind: "wait" });
@@ -192,6 +200,38 @@ describe("runKeeper", () => {
     expect(r.exitCode).toBe(1);
     expect(st.lines.at(-1)).toMatch(/^stop: open\(2\) changed nothing/);
   });
+  it("past close + 24 h an open that leaves the sale Open is followed by cancel b in the same run, then the payouts", async () => {
+    const { st, deps } = chain({ sale: open({ payouts_total: 4 }), bids: [], now: CLOSE_NS + DAY_NS + 10n });
+    st.openGivesKey = false;
+    const r = await runKeeper(OPTS, deps);
+    expect(st.calls).toEqual(["open", "cancel"]);
+    expect(st.lines.at(-1)).toBe("done: Cancelled · paid 4/4 ok");
+    expect(r.exitCode).toBe(0);
+  });
+  it("past close + 24 h with the conditions met the first call is open, not cancel", async () => {
+    const { st, deps } = chain({ sale: open(), bids: [], now: CLOSE_NS + 2n * DAY_NS });
+    await runKeeper({ ...OPTS, once: true }, deps);
+    expect(st.calls).toEqual(["open"]);
+  });
+  it("a reveal batch that loses a race with the app does not end the run: the chain is read again and the rest is revealed", async () => {
+    const { st, deps } = chain({ sale: keyed({ payouts_total: 4 }), bids: sealed(3), now: CLOSE_NS + 10n });
+    const inner = deps.call;
+    let first = true;
+    deps.call = async (c) => {
+      if (c.method === "reveal" && first) {
+        first = false;
+        st.calls.push("reveal(lost race)");
+        st.bids = st.bids.map((b) => (b.idx === 0 ? { ...b, state: "Revealed" } : b)); // the app revealed bid 0 first
+        st.sale = { ...(st.sale as SaleView), revealed: 1 };
+        return { hash: "HX", ok: false, url: "u", error: "bid 0 is not sealed" };
+      }
+      return inner(c);
+    };
+    const r = await runKeeper(OPTS, deps);
+    expect(st.calls).toEqual(["reveal(lost race)", "reveal", "finalize"]);
+    expect(r.exitCode).toBe(0);
+    expect(st.lines.at(-1)).toBe("done: Finalized · paid 4/4 ok");
+  });
   it("a failed payout is retried once and then stops without looping", async () => {
     const { st, deps } = chain({ sale: keyed({ revealed: 3 }), bids: sealed(3), now: CLOSE_NS + 10n });
     st.payFails = true;
@@ -258,6 +298,14 @@ describe("output", () => {
     expect(describeAction({ kind: "finalize", max: 8 }, "2")).toBe("finalize(2, 8)");
     expect(describeAction({ kind: "cancel", rule: "b" }, "2")).toBe("cancel(2) rule b");
   });
+  it("under GitHub Actions the summary tells a human what to record, with the hash and a deadline 2 h after the tx", () => {
+    const rows = [{ turn: 1, action: "open(2)", tx: "H1", url: "https://nearblocks.io/txns/H1", ok: true, step: "open", at: "2026-11-17T12:03:10Z" }, { turn: 2, action: "done: Finalized · paid 4/4 ok" }];
+    const md = summaryMarkdown(OPTS, rows, { signer: "tenderseal.near" });
+    expect(md).toContain("RECORD NEEDED by 2026-11-17T14:03:10Z: `pnpm record --sale 2 --step open --tx H1 --signer tenderseal.near --chain near`");
+    expect(md.match(/RECORD NEEDED/g)).toHaveLength(1);
+    expect(summaryMarkdown(OPTS, rows)).not.toContain("RECORD NEEDED"); // a local run records itself
+    expect(summaryMarkdown({ ...OPTS, contract: "rehearsal.tenderseal.near" }, rows, { signer: "x.near" })).toContain("--sale R ");
+  });
   it("the step summary is a Markdown table with the explorer link", () => {
     const md = summaryMarkdown(OPTS, [{ turn: 1, action: "open(2)", tx: "H1", url: "https://nearblocks.io/txns/H1", ok: true }, { turn: 2, action: "done: Finalized · paid 4/4 ok" }]);
     expect(md).toContain("| 1 | open(2) | [H1](https://nearblocks.io/txns/H1) |");
@@ -277,5 +325,72 @@ describe("main", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("the keeper key (KEEP-05, OPS-03)", () => {
+  const V1 = "v1.tenderseal.near";
+  const fc = (over: Record<string, unknown> = {}) => ({ kind: "FunctionCall" as const, allowance: 500_000_000_000_000_000_000_000n, receiverId: V1, methodNames: ["open", "reveal", "finalize", "cancel"], ...over });
+  const live = { allowFullAccess: false, ci: false };
+  it("the function-call key of H-keys-keeper passes; a subset of the four methods passes", () => {
+    expect(keeperKeyProblem(fc(), V1, live)).toBeNull();
+    expect(keeperKeyProblem(fc({ methodNames: ["open", "reveal"] }), V1, live)).toBeNull();
+    expect(keeperKeyProblem(fc({ allowance: null }), V1, live)).toBeNull();
+  });
+  it("a key for another receiver, other methods, no methods, or an allowance under 0.315 NEAR (a 300 Tgas call) is refused", () => {
+    expect(keeperKeyProblem(fc({ receiverId: "intents.near" }), V1, live)).toMatch(/limited to intents.near/);
+    expect(keeperKeyProblem(fc({ methodNames: ["open", "withdraw"] }), V1, live)).toMatch(/subset/);
+    expect(keeperKeyProblem(fc({ methodNames: [] }), V1, live)).toMatch(/subset/);
+    expect(keeperKeyProblem(fc({ allowance: 314_999_999_999_999_999_999_999n }), V1, live)).toMatch(/below/);
+  });
+  it("a full-access key needs --allow-full-access, and is refused under GitHub Actions even with it", () => {
+    const fa = { kind: "FullAccess" as const, allowance: null };
+    expect(keeperKeyProblem(fa, V1, live)).toMatch(/full-access/);
+    expect(keeperKeyProblem(fa, V1, { allowFullAccess: true, ci: false })).toBeNull();
+    expect(keeperKeyProblem(fa, V1, { allowFullAccess: true, ci: true })).toMatch(/GitHub Actions/);
+  });
+  const key = KeyPair.fromRandom("ed25519").toString();
+  const FULL = async () => ({ kind: "FullAccess" as const, allowance: null });
+  // resolveKey reads process.env and the key directory: stub both so no test touches a real keychain
+  const errors = async (run: () => Promise<number>, vars: Record<string, string> = {}) => {
+    vi.stubEnv("NEAR_CREDENTIALS_DIR", mkdtempSync(join(tmpdir(), "keeper-")));
+    vi.stubEnv("KEEPER_PRIVATE_KEY", "");
+    for (const [k, v] of Object.entries(vars)) vi.stubEnv(k, v);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      return { code: await run(), text: spy.mock.calls.map((c) => String(c[0])).join("\n") };
+    } finally {
+      spy.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  };
+  it("a garbage key exits 2 on --dry-run --check-key (the Friday secret test); without a key it exits 2 too", async () => {
+    const a = await errors(() => main(["--sale", "2", "--dry-run", "--check-key"], { KEEPER_ACCOUNT_ID: "tenderseal.near" }, FULL), { KEEPER_PRIVATE_KEY: "garbage" });
+    expect(a.code).toBe(2);
+    expect(a.text).toMatch(/KEEPER_PRIVATE_KEY is set but is not an "ed25519/);
+    const b = await errors(() => main(["--sale", "2", "--dry-run", "--check-key", "--network", "testnet"], { KEEPER_ACCOUNT_ID: "nobody.testnet" }, FULL));
+    expect(b.code).toBe(2);
+    expect(b.text).toMatch(/no key for nobody\.testnet/);
+  });
+  it("a full-access key exits 2 under GitHub Actions on a live run and on the dry-run check, before any call", async () => {
+    const env = { KEEPER_ACCOUNT_ID: "tenderseal.near", GITHUB_ACTIONS: "true" };
+    const live = await errors(() => main(["--sale", "2", "--yes", "--allow-full-access"], env, FULL), { KEEPER_PRIVATE_KEY: key });
+    expect(live.code).toBe(2);
+    expect(live.text).toMatch(/full-access key; a GitHub Actions run only takes a function-call key/);
+    const dry = await errors(() => main(["--sale", "2", "--dry-run", "--check-key"], env, FULL), { KEEPER_PRIVATE_KEY: key });
+    expect(dry.code).toBe(2);
+    expect(dry.text).toMatch(/GitHub Actions/);
+    const local = await errors(() => main(["--sale", "2", "--dry-run", "--check-key"], { KEEPER_ACCOUNT_ID: "tenderseal.near" }, FULL), { KEEPER_PRIVATE_KEY: key });
+    expect(local.code).toBe(2);
+    expect(local.text).toMatch(/pass --allow-full-access \(humans only\)/);
+  });
+  it("a function-call key for another receiver exits 2; so does a key that is not on chain", async () => {
+    const env = { KEEPER_ACCOUNT_ID: "tenderseal.near" };
+    const other = await errors(() => main(["--sale", "2", "--yes"], env, async () => fc({ receiverId: "intents.near" })), { KEEPER_PRIVATE_KEY: key });
+    expect(other.code).toBe(2);
+    expect(other.text).toMatch(/limited to intents\.near, not v1\.tenderseal\.near/);
+    const gone = await errors(() => main(["--sale", "2", "--yes"], env, async () => { throw new Error("access key does not exist"); }), { KEEPER_PRIVATE_KEY: key });
+    expect(gone.code).toBe(2);
+    expect(gone.text).toMatch(/cannot read the keeper key/);
   });
 });

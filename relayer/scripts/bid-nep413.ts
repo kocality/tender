@@ -13,7 +13,8 @@ import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep, type Comm
 import type { SaleTag, Step } from "./lib/evidence.js";
 import { loadKeyPair, type KeyPairString } from "./lib/keys.js";
 import { RPC } from "./lib/rpc.js";
-import { explorer, makeAccount, sendStep } from "./lib/send.js";
+import { explorer, gasBalanceProblem, makeAccount, sendStep } from "./lib/send.js";
+import { spendableBalance } from "../src/near.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 import { getBids, getConfig, getSale, type BidView, type ConfigView, type SaleView } from "./lib/views.js";
 
@@ -44,6 +45,8 @@ export interface BidEnv {
   bids(id: string): Promise<BidView[]>;
   nowNs(): Promise<bigint>;
   balance(intents: string, account: string, token: string): Promise<bigint>;
+  /** NEAR the signer can burn on gas: balance minus the storage stake, yocto. */
+  spendable(account: string): Promise<bigint>;
   intentsKeys(intents: string, account: string): Promise<string[]>;
   currentSalt(intents: string): Promise<string>;
   simulate(intents: string, mp: MultiPayload): Promise<{ ok: true } | { ok: false; kind: string; message: string }>;
@@ -69,6 +72,7 @@ export function liveEnv(c: Common): BidEnv {
     bids: (id) => getBids(c.network, c.contract, id, c.rpc),
     nowNs: () => blockTimestampNs(urls),
     balance: (intents, account, token) => mtBalanceOf(urls, intents, account, token),
+    spendable: (account) => spendableBalance(urls, account),
     intentsKeys: (intents, account) => intentsPublicKeys(c.network, intents, account),
     currentSalt: (intents) => currentSalt(urls, intents),
     simulate: (intents, mp) => simulateIntents(urls, intents, [mp]),
@@ -282,6 +286,14 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     }
 
     const relayUrl = str("via-relay");
+    if (!relayUrl) {
+      // sending it yourself prepays 300 Tgas, which the signer must be able to cover (a bidder with 0.2 NEAR is refused)
+      const blocked = gasBalanceProblem(signer, await env.spendable(signer), 300);
+      if (blocked) {
+        io.out(`BLOCKED: ${blocked}`);
+        return 1;
+      }
+    }
     const step: CallStep = { signer, receiver: config.intents, method: "execute_intents", args: { signed: ["<nep413 MultiPayload, printed only when sent>"] }, deposit: "0 NEAR", gasTgas: 300, network: common.network };
     io.out(DRY_RUN_HEADER);
     io.out(relayUrl ? `[1/1] POST ${relayUrl}\n      body={"signed":["<nep413 MultiPayload, printed only when sent>"]}` : formatDryRunStep(1, 1, step).split("\n").slice(0, 2).join("\n"));

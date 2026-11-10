@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RPC, decodeSuccessValue, rpcCall, rpcHooks, txStatus } from "../scripts/lib/rpc.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const [N1, N2] = RPC.mainnet.normal as [string, string];
+const [N1, N2] = RPC.mainnet.normal as [string, string, ...string[]];
 const A1 = RPC.mainnet.archival[0] as string;
 
 let calls: string[];
@@ -38,7 +38,7 @@ describe("rpcCall", () => {
     const out = await txStatus("mainnet", "H", "alice.near");
     expect(out.source).toBe("archival");
     expect(out.url).toBe(A1);
-    expect(calls).toEqual([N1, N2, A1]); // no retries on UNKNOWN_*
+    expect(calls).toEqual([...RPC.mainnet.normal, A1]); // each normal node once, no retries on UNKNOWN_*
   });
 
   it("serves from the normal node first (source rpc)", async () => {
@@ -68,5 +68,23 @@ describe("decodeSuccessValue", () => {
     expect(decodeSuccessValue({ SuccessValue: "" })).toBeNull();
     expect(decodeSuccessValue({ Failure: {} })).toBeNull();
     expect(decodeSuccessValue(undefined)).toBeNull();
+  });
+});
+
+describe("RPC providers", () => {
+  const deprecated = /\/\/rpc\.(mainnet|testnet)\.near\.org/;
+  it("the normal lists start with fastnear, have 3 distinct hosts and no deprecated near.org node", () => {
+    for (const net of ["mainnet", "testnet"] as const) {
+      const urls = RPC[net].normal;
+      expect(urls[0]).toMatch(/fastnear\.com/);
+      expect(new Set(urls.map((u) => new URL(u).host)).size).toBeGreaterThanOrEqual(3);
+      expect(urls.filter((u) => deprecated.test(u))).toEqual([]);
+    }
+  });
+  it("the relayer runtime lists match", async () => {
+    const { RPCS } = await import("../src/near.js");
+    for (const net of ["mainnet", "testnet"] as const) {
+      expect(RPCS[net]).toEqual(RPC[net].normal);
+    }
   });
 });

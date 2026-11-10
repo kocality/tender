@@ -7,7 +7,7 @@ import { resolveKey } from "../scripts/lib/keys.js";
 import { rpcCall, type Network } from "../scripts/lib/rpc.js";
 import { explorer, sendStep } from "../scripts/lib/send.js";
 import { getBids, getConfig, getSale, type BidView, type ConfigView, type SaleView } from "../scripts/lib/views.js";
-import { RPCS, accessKeyAllowance, makeAccount } from "./near.js";
+import { RPCS, accessKeyInfo, makeAccount, type AccessKeyInfo } from "./near.js";
 
 // Keeper for a sale: open at close, reveal every bid that decrypts and matches its commitment, finalize, retry failed payouts.
 // Stateless and idempotent: every run reads the chain, decides, acts, and can be repeated or interrupted at any point.
@@ -56,8 +56,8 @@ export function decide(sale: SaleView, bids: BidView[], nowNs: bigint, crypto: K
     if (nowNs < close) return [{ kind: "wait", reason: `would call open(${sale.id}) after ${isoSec(close)}`, until: isoSec(close) }];
     const conditions = BigInt(sale.escrow_total) >= BigInt(sale.min_escrow) && sale.bidders >= sale.min_bidders;
     if (!conditions && sale.key_requests === 0) return [{ kind: "cancel", rule: "a" }];
+    if (conditions) return [{ kind: "open" }]; // open stays possible after close + 24 h; runKeeper falls back to cancel b when an open there changes nothing
     if (nowNs >= close + CANCEL_AFTER_NS && sale.key === null) return [{ kind: "cancel", rule: "b" }];
-    if (conditions) return [{ kind: "open" }];
     return [{ kind: "stop", reason: "open conditions fail although a key was requested (not reachable on chain)" }];
   }
 
@@ -117,7 +117,7 @@ export interface KeeperDeps {
 }
 
 export interface KeeperOpts { network: Network; contract: string; sale: string; dryRun: boolean; once: boolean }
-export interface KeeperRow { turn: number; action: string; tx?: string; url?: string; ok?: boolean }
+export interface KeeperRow { turn: number; action: string; tx?: string; url?: string; ok?: boolean; step?: string; at?: string /* chain time of the turn */ }
 export interface KeeperReport { rows: KeeperRow[]; last: KeeperAction | null; exitCode: 0 | 1 }
 
 export function toCall(a: KeeperAction, sale: string): KeeperCall | null {
@@ -161,6 +161,7 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
 
   let before: { kind: string; sig: string } | null = null;
   let last: KeeperAction | null = null;
+  let lastFailed = false;
   for (let turn = 1; turn <= (opts.once ? 1 : MAX_TURNS); turn++) {
     const sale = await deps.sale(opts.sale);
     if (!sale) {
@@ -169,7 +170,11 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
     }
     const bids = sale.state === "Keyed" ? await deps.bids(opts.sale) : [];
     const sig = [sale.state, sale.revealed, sale.payouts_done].join("|"); // what an action must change
-    const action = decide(sale, bids, await deps.nowNs(), deps.crypto, ctx)[0] as KeeperAction;
+    const nowNs = await deps.nowNs();
+    let action = decide(sale, bids, nowNs, deps.crypto, ctx)[0] as KeeperAction;
+    if (action.kind === "open" && before?.kind === "open" && before.sig === sig && nowNs >= BigInt(sale.close_ns) + CANCEL_AFTER_NS) {
+      action = { kind: "cancel", rule: "b" }; // the open of this run left the sale Open past close + 24 h: refund instead of stopping
+    }
     const text = describeAction(action, opts.sale);
     last = action;
 
@@ -212,7 +217,7 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
 
     const sent = await deps.call(call);
     say(`${text} tx=${sent.hash} status=${sent.ok ? "SuccessValue" : "Failure"} url=${sent.url}${sent.error ? ` error=${sent.error}` : ""}`);
-    rows.push({ turn, action: text, tx: sent.hash, url: sent.url, ok: sent.ok });
+    rows.push({ turn, action: text, tx: sent.hash, url: sent.url, ok: sent.ok, step: call.method, at: isoSec(nowNs) });
     if (deps.record && sent.hash) {
       try {
         await deps.record(call, sent.hash);
@@ -220,26 +225,56 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
         say(`WARN recording failed (run scripts/record.ts by hand within 2 h): ${(e as Error).message}`);
       }
     }
-    if (!sent.ok) return finish(action, 1);
+    // A failed tx does not end the run: read the chain and decide again (a reveal batch can lose a race with the app).
+    // The same action on an unchanged sale stops at the check above.
+    lastFailed = !sent.ok;
     before = { kind: action.kind, sig };
   }
   if (!opts.once) say(`stop after ${MAX_TURNS} turns; the next scheduled run continues`);
-  return finish(last, 0);
+  return finish(last, lastFailed ? 1 : 0);
 }
 
-export function summaryMarkdown(opts: KeeperOpts, rows: KeeperRow[]): string {
+const saleTag = (opts: Pick<KeeperOpts, "contract" | "sale">): string => (opts.contract.startsWith("rehearsal.") ? "R" : opts.sale);
+
+/** `record` (GitHub Actions: the keeper does not record there) adds one RECORD NEEDED line per sent tx: the 2 h window of the non-archival RPC. */
+export function summaryMarkdown(opts: KeeperOpts, rows: KeeperRow[], record?: { signer: string }): string {
   const cell = (s: string) => s.replace(/\|/g, "\\|");
   const lines = [`### keeper · sale ${opts.sale} · ${opts.contract} (${opts.network})${opts.dryRun ? " · dry-run" : ""}`, "", "| turn | action | tx |", "|---|---|---|"];
   for (const r of rows) lines.push(`| ${r.turn} | ${cell(r.action)} | ${r.tx ? `[${r.tx}](${r.url})${r.ok === false ? " (failed)" : ""}` : ""} |`);
+  const todo = record ? rows.filter((r) => r.tx && r.step && r.at) : [];
+  if (record && todo.length) {
+    lines.push("");
+    for (const r of todo) {
+      const by = new Date(Date.parse(r.at as string) + 2 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+      lines.push(`RECORD NEEDED by ${by}: \`pnpm record --sale ${saleTag(opts)} --step ${r.step} --tx ${r.tx} --signer ${record.signer} --chain near\``, "");
+    }
+  }
   return lines.join("\n") + "\n";
 }
 
-const usage = "usage: tsx src/keeper.ts --sale <id> [--network mainnet|testnet] [--contract <id>] [--dry-run | --yes] [--once] [--rpc <url>]";
+const usage = "usage: tsx src/keeper.ts --sale <id> [--network mainnet|testnet] [--contract <id>] [--dry-run | --yes] [--once] [--check-key] [--allow-full-access] [--rpc <url>]";
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+const KEEPER_METHODS = ["open", "reveal", "finalize", "cancel"];
+const MAX_GAS_TGAS = 300; // finalize and cancel prepay 300 Tgas
+
+/** null = the key is fit for the keeper; otherwise why it is not. Full access is for humans (--allow-full-access) and never in GitHub Actions. */
+export function keeperKeyProblem(info: AccessKeyInfo, contract: string, o: { allowFullAccess: boolean; ci: boolean }): string | null {
+  if (info.kind === "FullAccess") {
+    if (o.ci) return "KEEPER_PRIVATE_KEY is a full-access key; a GitHub Actions run only takes a function-call key limited to the sale contract";
+    return o.allowFullAccess ? null : "the keeper key is a full-access key; use the function-call key from H-keys-keeper, or pass --allow-full-access (humans only)";
+  }
+  if (info.receiverId !== contract) return `the keeper key is limited to ${info.receiverId ?? "?"}, not ${contract}`;
+  const methods = info.methodNames ?? [];
+  if (methods.length === 0 || methods.some((m) => !KEEPER_METHODS.includes(m))) return `the keeper key may call [${methods.join(", ")}], it must be a non-empty subset of [${KEEPER_METHODS.join(", ")}]`;
+  const need = BigInt(MAX_GAS_TGAS) * YOCTO_PER_TGAS_NEEDED;
+  if (info.allowance !== null && info.allowance < need) return `the keeper key allowance ${info.allowance} yocto is below ${need} yocto, the cost of a ${MAX_GAS_TGAS} Tgas call`;
+  return null;
+}
+
+export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env, viewKey: typeof accessKeyInfo = accessKeyInfo): Promise<number> {
   let parsed;
   try {
-    parsed = parseCommon(argv, { sale: { type: "string" }, once: { type: "boolean" } });
+    parsed = parseCommon(argv, { sale: { type: "string" }, once: { type: "boolean" }, "check-key": { type: "boolean" }, "allow-full-access": { type: "boolean" } });
   } catch (e) {
     console.error(`error: ${(e as Error).message}\n${usage}`);
     return 2;
@@ -252,6 +287,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   }
   const opts: KeeperOpts = { network: common.network, contract: common.contract, sale, dryRun: common.dryRun, once: values.once === true };
   const urls = common.rpc ? [common.rpc] : RPCS[opts.network];
+  const ci = !!env.GITHUB_ACTIONS;
+  let recordSigner: string | undefined;
 
   let deps: KeeperDeps;
   try {
@@ -260,23 +297,36 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     };
     let allowance: KeeperDeps["allowance"] = async () => null;
     let record: KeeperDeps["record"];
-    if (!opts.dryRun) {
+    if (!opts.dryRun || values["check-key"] === true) {
       const accountId = env.KEEPER_ACCOUNT_ID || env.TENDER_TEAM_ACCOUNT_ID || "tenderseal.near";
       const { privateKey } = resolveKey(opts.network, accountId, { envVar: "KEEPER_PRIVATE_KEY", publicKey: env.KEEPER_PUBLIC_KEY || undefined });
       const publicKey = KeyPair.fromString(privateKey).getPublicKey().toString();
-      const account = makeAccount(accountId, privateKey, opts.network, urls);
-      allowance = () => accessKeyAllowance(urls, accountId, publicKey);
-      call = async (c) => {
-        const r = await sendStep(account, { signer: accountId, receiver: opts.contract, method: c.method, args: c.args, deposit: "0 NEAR", gasTgas: c.gasTgas, network: opts.network }, common.rpc);
-        return { hash: r.hash, ok: r.ok, url: explorer(opts.network, r.hash), error: r.ok ? undefined : JSON.stringify(r.status).slice(0, 300) };
-      };
-      if (opts.network === "mainnet" && !common.noRecord && !env.GITHUB_ACTIONS) {
-        record = async (c, hash) => {
-          const tag = opts.contract.startsWith("rehearsal.") ? "R" : opts.sale;
-          if (!["R", "0", "1", "2", "3"].includes(tag)) return;
-          const { recordTx } = await import("../scripts/record.js");
-          await recordTx({ network: opts.network, sale: tag as "R", step: c.method, txHash: hash, signer: accountId, contract: opts.contract, chain: "near" });
+      let info: AccessKeyInfo;
+      try {
+        info = await viewKey(urls, accountId, publicKey);
+      } catch (e) {
+        throw new Error(`cannot read the keeper key ${publicKey} of ${accountId}: ${(e as Error).message}`);
+      }
+      const problem = keeperKeyProblem(info, opts.contract, { allowFullAccess: values["allow-full-access"] === true, ci });
+      if (problem) throw new Error(problem);
+      if (!opts.dryRun) {
+        const account = makeAccount(accountId, privateKey, opts.network, urls);
+        allowance = async () => (await viewKey(urls, accountId, publicKey)).allowance; // fresh before every call: each one burns allowance
+        call = async (c) => {
+          const r = await sendStep(account, { signer: accountId, receiver: opts.contract, method: c.method, args: c.args, deposit: "0 NEAR", gasTgas: c.gasTgas, network: opts.network }, common.rpc);
+          return { hash: r.hash, ok: r.ok, url: explorer(opts.network, r.hash), error: r.ok ? undefined : JSON.stringify(r.status).slice(0, 300) };
         };
+        if (opts.network === "mainnet" && !common.noRecord) {
+          if (ci) recordSigner = accountId; // no RPC snapshot from a runner: the summary tells a human what to record
+          else {
+            record = async (c, hash) => {
+              const tag = saleTag(opts);
+              if (!["R", "0", "1", "2", "3"].includes(tag)) return;
+              const { recordTx } = await import("../scripts/record.js");
+              await recordTx({ network: opts.network, sale: tag as "R", step: c.method, txHash: hash, signer: accountId, contract: opts.contract, chain: "near" });
+            };
+          }
+        }
       }
     }
     deps = {
@@ -299,7 +349,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   try {
     const report = await runKeeper(opts, deps);
     const summary = env.GITHUB_STEP_SUMMARY;
-    if (summary && report.rows.length) appendFileSync(summary, summaryMarkdown(opts, report.rows));
+    if (summary && report.rows.length) appendFileSync(summary, summaryMarkdown(opts, report.rows, recordSigner ? { signer: recordSigner } : undefined));
     return report.exitCode;
   } catch (e) {
     console.error(`error: ${(e as Error).message}`);

@@ -1,12 +1,14 @@
 export type Network = "mainnet" | "testnet";
 
+// rpc.mainnet.near.org and rpc.testnet.near.org are deprecated: fastnear first, then live public providers (probed 2026-11-11).
+// No other free archival node answered; the near.org archival nodes stay as the last archival URL.
 export const RPC: Record<Network, { normal: string[]; archival: string[] }> = {
   mainnet: {
-    normal: ["https://free.rpc.fastnear.com", "https://rpc.mainnet.near.org"],
+    normal: ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.shitzuapes.xyz"],
     archival: ["https://archival-rpc.mainnet.fastnear.com", "https://archival-rpc.mainnet.near.org"],
   },
   testnet: {
-    normal: ["https://test.rpc.fastnear.com", "https://rpc.testnet.near.org"],
+    normal: ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://near-testnet.drpc.org"],
     archival: ["https://archival-rpc.testnet.fastnear.com", "https://archival-rpc.testnet.near.org"],
   },
 };

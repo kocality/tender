@@ -71,6 +71,7 @@ describe("copy", () => {
 });
 
 describe("wrong-cm", () => {
+  const keyed = env({ sale: async (id) => saleView({ id, state: "Keyed" }) });
   const sealed = (over: Record<string, unknown> = {}) => {
     const file = join(mkdtempSync(join(tmpdir(), "wcm-")), "b.json");
     writeFileSync(file, JSON.stringify({ sale: "3", p: "3500000", q: "1000000", salt: "00112233445566778899aabbccddeeff", cm: "ab".repeat(32), ...over }));
@@ -78,7 +79,7 @@ describe("wrong-cm", () => {
   };
 
   it("flips exactly one bit of the salt and leaves cm alone", async () => {
-    const r = await run(["wrong-cm", "--sale", "3", "--idx", "0", "--sealed", sealed()]);
+    const r = await run(["wrong-cm", "--sale", "3", "--idx", "0", "--sealed", sealed()], keyed);
     expect(r.code).toBe(0);
     const args = JSON.parse(/json-args '([^']+)'/.exec(r.out)![1] as string);
     expect(args).toEqual({ sale: "3", items: [{ idx: 0, p: "3500000", q: "1000000", salt: "01112233445566778899aabbccddeeff" }] });
@@ -96,8 +97,18 @@ describe("wrong-cm", () => {
   });
 
   it("refuses a file of another sale", async () => {
-    const r = await run(["wrong-cm", "--sale", "3", "--idx", "0", "--sealed", sealed({ sale: "2" })]);
+    const r = await run(["wrong-cm", "--sale", "3", "--idx", "0", "--sealed", sealed({ sale: "2" })], keyed);
     expect(r.code).toBe(1);
+  });
+
+  it("while the sale is Open (bids still accepted) it prints no reveal: the call would publish p and q before the key", async () => {
+    const open = env({ sale: async (id) => saleView({ id, state: "Open" }) });
+    const r = await run(["wrong-cm", "--sale", "3", "--idx", "0", "--sealed", sealed()], open);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/is Open, not Keyed/);
+    expect(r.out).not.toContain("near contract call-function");
+    expect(r.out).not.toContain("3500000");
+    expect(r.err).not.toContain("3500000");
   });
 });
 

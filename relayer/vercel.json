@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd .. && npx --yes pnpm@12.18.0 install --frozen-lockfile --filter @tender/relayer...",
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "rewrites": [{ "source": "/relay", "destination": "/api/relay" }],
+  "functions": { "api/relay.ts": { "maxDuration": 60 } }
+}

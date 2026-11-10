@@ -11,6 +11,7 @@
   "scripts": {
     "relay:local": "tsx src/local-server.ts",
     "keeper": "tsx src/keeper.ts",
+    "watch": "tsx scripts/watch.ts",
     "record": "tsx scripts/record.ts",
     "snapshot": "tsx scripts/snapshot.ts",
     "balances": "tsx scripts/balances.ts",

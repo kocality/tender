@@ -151,8 +151,12 @@ export async function main(argv: string[], deps: AttackDeps = {}): Promise<numbe
       }
       if (String(f.sale) !== sale) throw new Error(`--sealed file is for sale ${f.sale}, not sale ${sale}`);
       if (!f.p || !f.q || !f.salt) throw new Error("--sealed file needs p, q and salt");
+      // The reveal call publishes the real p and q (and a salt one bit away from the real one) in the transaction: only once the key is out.
+      const info = await env().sale(sale);
+      if (!info) throw new Error(`sale ${sale} not found on ${common.contract}`);
+      if (info.state !== "Keyed") throw new Error(`sale ${sale} is ${info.state}, not Keyed: the printed reveal would publish this bid's p and q before the key is released. Run it after open() delivered the key`);
       printStep(io, revealStep({ signer, contract: common.contract, sale, idx: Number(str("idx")), p: f.p, q: f.q, salt: flipSalt(f.salt), network: common.network }));
-      io.out("expected: panic (commitment mismatch); run it only after the sale is open. Record with --step attack-wrong-cm --expect failure");
+      io.out("expected: panic (commitment mismatch); run it only after open() delivered the key (state Keyed). Record with --step attack-wrong-cm --expect failure");
       return 0;
     }
     if (sub === "early-open") {

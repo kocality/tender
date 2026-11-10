@@ -1,0 +1,86 @@
+{
+  "status": "SUCCESS",
+  "updatedAt": "2026-11-10T18:41:41.000Z",
+  "correlationId": "a5bb4f80-1671-4587-abac-56b605c9eed5",
+  "swapDetails": {
+    "depositedAmount": "1000000",
+    "depositedAmountUsd": "0.999614000000",
+    "depositedAmountFormatted": "1.0",
+    "intentHashes": [
+      "3vEbbbn8S3BvgT236KsSDwbCBz2TeLjEaEK9GUuPSGbX",
+      "2twaebdMdrRKAb1MbYXjC1tYEchLFcfZTSswLJGbWGkm"
+    ],
+    "nearTxHashes": [
+      "6UerNgoyYR6wv3F51bmZhfC2L6fNaLQyZVC7xodQdgBY",
+      "8tsfD9t1kZHAvj4LjHwCoQGgL9eL9hez2Vb9xktwGMeq",
+      "BD55Avj69VmtgGs4XmMQyG33vCKuxQbkZEcyeXyqGD7R",
+      "6Scmu2xgk4HfVHGk5J89sQ36ib6J8tER3gC58DqaKhdw"
+    ],
+    "amountIn": "1000000",
+    "amountInFormatted": "1.0",
+    "amountInUsd": "0.999614000000",
+    "amountOut": "997398",
+    "amountOutFormatted": "0.997398",
+    "amountOutUsd": "0.997013004372",
+    "slippage": 0,
+    "refundedAmount": "0",
+    "refundedAmountFormatted": "0",
+    "refundedAmountUsd": "0",
+    "refundReason": null,
+    "refundFee": "0",
+    "withdrawFee": "2400",
+    "originChainTxHashes": [],
+    "destinationChainTxHashes": [
+      {
+        "hash": "0x54fa2d223ebeb95b6ef3b64182bfe054b86cfb9624bffea95d015f99ba284137",
+        "explorerUrl": ""
+      }
+    ]
+  },
+  "quoteResponse": {
+    "timestamp": "2026-11-10T18:40:54.473Z",
+    "signature": "ed25519:4hNpVvBYfZmgAMUZrypQkJCfnFGUMSi2SsDMNCD9gNZ3ZK7zJZXJWgcxWGtBot9NcSgxHm1Q71rNh9q87sJkSobZ",
+    "quoteRequest": {
+      "dry": false,
+      "swapType": "EXACT_INPUT",
+      "depositMode": "SIMPLE",
+      "slippageTolerance": 100,
+      "originAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "depositType": "INTENTS",
+      "destinationAsset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "amount": "1000000",
+      "refundTo": "0xf807a96d44995a3eab148e5b0721d4baa654bcfc",
+      "refundType": "INTENTS",
+      "recipient": "0xf807a96d44995a3eab148e5b0721d4baa654bcfc",
+      "recipientType": "DESTINATION_CHAIN",
+      "deadline": "2026-11-10T19:10:54.044Z",
+      "appFees": [
+        {
+          "limitOrderId": null,
+          "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+          "fee": 1
+        }
+      ],
+      "virtualChainRecipient": null,
+      "virtualChainRefundRecipient": null,
+      "referral": null,
+      "confidentiality": "public"
+    },
+    "quote": {
+      "amountIn": "1000000",
+      "amountInFormatted": "1.0",
+      "amountInUsd": "0.999614000000",
+      "minAmountIn": "1000000",
+      "amountOut": "997398",
+      "amountOutFormatted": "0.997398",
+      "amountOutUsd": "0.997013004372",
+      "minAmountOut": "987424",
+      "timeWhenInactive": "2026-11-13T19:10:54.044Z",
+      "depositAddress": "65846272990afbc5a0d5043621d3184f71fbd117f2c6dd6dd2aa3a900050bdb9",
+      "deadline": "2026-11-13T19:10:54.044Z",
+      "timeEstimate": 12,
+      "refundFee": "0",
+      "withdrawFee": "2400"
+    }
+  }
+}

@@ -21,7 +21,7 @@ const baseSale = (over: Partial<SaleView> = {}): SaleView => saleView({
 
 interface Fake { env: BidEnv; calls: string[]; sent: MultiPayload[]; bids: BidView[]; balance: { v: bigint }; keys: { v: string[] } }
 
-function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean } = {}): Fake {
+function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; native?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean } = {}): Fake {
   const kp = o.secret === undefined ? KeyPair.fromRandom("ed25519") : o.secret;
   const calls: string[] = [];
   const sent: MultiPayload[] = [];
@@ -38,6 +38,7 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
     bids: async () => bids,
     nowNs: async () => NOW_NS,
     balance: async () => balance.v,
+    spendable: async () => o.native ?? 5n * 10n ** 24n,
     intentsKeys: async () => keys.v,
     currentSalt: async () => "252812b3",
     simulate: async (_i, mp) => {
@@ -72,6 +73,32 @@ async function run(args: string[], f: Fake, dir = mkdtempSync(join(tmpdir(), "bi
 }
 
 const BASE = ["--sale", "3", "--price", "3.5", "--size", "1", "--escrow", "3", "--signer", SIGNER, "--contract", CONTRACT];
+
+describe("signer gas balance (OPS-01): a 300 Tgas execute_intents needs 0.3009 NEAR in the signer", () => {
+  const BIDDER_NEAR = 199_600_000_000_000_000_000_000n; // bidder.tenderseal.near on 2026-11-11: 0.1996 NEAR
+  it("a dry-run for a bidder with 0.1996 NEAR prints BLOCKED and exits 1 (it used to pass and fail at --yes)", async () => {
+    const f = fake({ native: BIDDER_NEAR });
+    const r = await run(BASE, f);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/BLOCKED: bidder\.tenderseal\.near can spend 0\.1996 NEAR and signing 300 Tgas needs 0\.30093 NEAR/);
+    expect(r.out).toContain("--via-relay");
+    expect(f.calls).not.toContain("execute");
+  });
+  it("--yes with that balance sends nothing", async () => {
+    const f = fake({ native: BIDDER_NEAR });
+    const r = await run([...BASE, "--yes"], f);
+    expect(r.code).toBe(1);
+    expect(f.calls).not.toContain("execute");
+    expect(f.calls).not.toContain("relay");
+  });
+  it("--via-relay does not need the balance; a topped-up bidder (0.45 NEAR) passes", async () => {
+    const viaRelay = fake({ native: BIDDER_NEAR });
+    const r = await run([...BASE, "--via-relay", "http://localhost:8787/relay"], viaRelay);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("BLOCKED");
+    expect((await run(BASE, fake({ native: 450_000_000_000_000_000_000_000n }))).code).toBe(0);
+  });
+});
 
 describe("bid payload", () => {
   it("transfer fields match the Intents contract of the card", async () => {

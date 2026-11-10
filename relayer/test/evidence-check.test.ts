@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -115,5 +115,41 @@ describe("evidence-check", () => {
     write([]);
     writeFileSync(join(dir, "oneclick", "m.json"), `{"method_name": "request_app_private_key"}\n`);
     expect(scanSecrets(dir)).toEqual([]);
+  });
+});
+
+describe("the committed evidence (S-10, CLM-08)", () => {
+  const real = new URL("../../evidence/", import.meta.url).pathname;
+  const rows = JSON.parse(readFileSync(join(real, "mainnet.json"), "utf8")) as MainnetRow[];
+  const gates = JSON.parse(readFileSync(join(real, "spikes.json"), "utf8")) as Array<{ gate: string; tx_hashes: string[]; evidence_files: string[] }>;
+
+  it("every due slot has its row, including the ops steps (accounts, keys, swap, spike delete), and nothing is malformed", async () => {
+    expect(EXPECTED.ops.length).toBe(DUE.ops.length);
+    expect(EXPECTED.ops).toEqual(expect.arrayContaining(["birth", "add-public-key", "key-add", "delete", "swap"]));
+    const r = await checkEvidence({ offline: true, until: new Date("2026-11-11T12:00:00Z") });
+    expect(r.missing).toEqual([]);
+    expect(r.problems).toEqual([]);
+  });
+  it("the ops txs cited in the notes are recorded", () => {
+    for (const h of ["5VPsGsJMkVNCYDpuDuL26YarXT3sSSMdDRgwYVsx6uxP", "Fd48NjqCwgUPRPcMbYmHSTxXpnUXVueN9KhLF2mQoySt", "5zwSygff85pr6nXLoeyA13Wjw65XzBswUtijZyfCDGxd", "5LxcbZPZZitZdFEvYgZMKft8yGjnSMjjAcZ9bAE6uqve", "498HZWz7nymmDLu3b3HaUxmwaHY8D6N4NteZUGw5Y2r5"]) {
+      expect(rows.some((r) => r.tx_hash === h && r.sale === "ops"), h).toBe(true);
+    }
+  });
+  it("every file a gate row cites exists, and every transaction it cites is in a mainnet row or one of its NEAR hashes (testnet gates aside)", () => {
+    const known = new Set(rows.flatMap((r) => [r.tx_hash, r.destination_tx ?? "", ...(r.near_tx_hashes ?? [])]));
+    for (const g of gates) {
+      for (const f of g.evidence_files) expect(existsSync(join(real, "..", f)), `${g.gate}: ${f}`).toBe(true);
+    }
+    for (const g of gates.filter((x) => x.gate === "S3" || x.gate === "S5")) for (const h of g.tx_hashes) expect(known.has(h), `${g.gate} ${h}`).toBe(true);
+  });
+  it("the S7 gate row names the transactions whose receipts it timed", () => {
+    expect(gates.find((g) => g.gate === "S7")?.tx_hashes).toEqual(gates.find((g) => g.gate === "S1")?.tx_hashes);
+  });
+  it("the 1Click funding rows are not labelled 'S5 near' and the S5 forward leg is an ops/fund row", () => {
+    const by = (p: string) => rows.find((r) => r.tx_hash.startsWith(p));
+    expect(by("3yWs2Rma")?.note).toMatch(/F4 step 2/);
+    expect(by("F1Msmuhh")?.note).toMatch(/bidder\.tenderseal\.near/);
+    expect(rows.filter((r) => r.note === "S5 near")).toEqual([]);
+    expect(by("6vTvL3WT")).toMatchObject({ sale: "ops", step: "fund" });
   });
 });

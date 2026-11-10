@@ -1,0 +1,83 @@
+{
+  "status": "SUCCESS",
+  "updatedAt": "2026-11-10T18:18:03.000Z",
+  "correlationId": "1eb68859-0e7b-4b84-9379-8943777ce4f7",
+  "swapDetails": {
+    "depositedAmount": "1200000000000000000000000",
+    "depositedAmountUsd": "4.260000000000",
+    "depositedAmountFormatted": "1.2",
+    "intentHashes": [
+      "FnoZ8AcyCAHQ55p8pYkgELrt7qsVnBo1XKHTuuRk3z9d"
+    ],
+    "nearTxHashes": [
+      "4PmogP1jrzmBnyftVA9oC7Bvt1B66BtWg4s1deP2po6Q",
+      "33f5BVi1xBkkJT5VTi6fswkGcaWbJ7Jfe4aV18Mp2wWi"
+    ],
+    "amountIn": "1200000000000000000000000",
+    "amountInFormatted": "1.2",
+    "amountInUsd": "4.260000000000",
+    "amountOut": "22464974331514694017509",
+    "amountOutFormatted": "22464.974331514694017509",
+    "amountOutUsd": "4.244966470612",
+    "slippage": 0,
+    "refundedAmount": "0",
+    "refundedAmountFormatted": "0",
+    "refundedAmountUsd": "0",
+    "refundReason": null,
+    "refundFee": "0",
+    "withdrawFee": "0",
+    "originChainTxHashes": [],
+    "destinationChainTxHashes": [
+      {
+        "hash": "33f5BVi1xBkkJT5VTi6fswkGcaWbJ7Jfe4aV18Mp2wWi",
+        "explorerUrl": ""
+      }
+    ]
+  },
+  "quoteResponse": {
+    "timestamp": "2026-11-10T18:17:27.081Z",
+    "signature": "ed25519:4tGz97EhMMCHjGGhUFUFyDYQapmxEoE2bXw66yRRL1jfjzZfizbBJs1dFJ27RnYNhbBXzpRiRcfiTSoVzmaqXsrJ",
+    "quoteRequest": {
+      "dry": false,
+      "swapType": "EXACT_INPUT",
+      "depositMode": "SIMPLE",
+      "slippageTolerance": 100,
+      "originAsset": "nep141:wrap.near",
+      "depositType": "INTENTS",
+      "destinationAsset": "nep141:jambo-1679.meme-cooking.near",
+      "amount": "1200000000000000000000000",
+      "refundTo": "tenderseal.near",
+      "refundType": "INTENTS",
+      "recipient": "tenderseal.near",
+      "recipientType": "INTENTS",
+      "deadline": "2026-11-10T18:47:24.544Z",
+      "appFees": [
+        {
+          "limitOrderId": null,
+          "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+          "fee": 20
+        }
+      ],
+      "virtualChainRecipient": null,
+      "virtualChainRefundRecipient": null,
+      "referral": null,
+      "confidentiality": "public"
+    },
+    "quote": {
+      "amountIn": "1200000000000000000000000",
+      "amountInFormatted": "1.2",
+      "amountInUsd": "4.248000000000",
+      "minAmountIn": "1200000000000000000000000",
+      "amountOut": "22464974331514694017509",
+      "amountOutFormatted": "22464.974331514694017509",
+      "amountOutUsd": "4.233008818582",
+      "minAmountOut": "22240324588199547077333",
+      "timeWhenInactive": "2026-11-13T18:47:24.544Z",
+      "depositAddress": "e580f332b5d6dc6a635bf1b625c17b047e97f4f5ad55b428245bf65cbfcde297",
+      "deadline": "2026-11-13T18:47:24.544Z",
+      "timeEstimate": 12,
+      "refundFee": "0",
+      "withdrawFee": "0"
+    }
+  }
+}

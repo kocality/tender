@@ -2,7 +2,8 @@ name: keeper
 on:
   schedule:
     - cron: '*/10 12-23 17 11 *'   # 2026-11-17 12:00-23:50 UTC; sale 2 closes 12:00Z
-    - cron: '*/30 * 18-19 11 *'    # 2026-11-18 and 19: reveal deadline, finalize, payout retries
+    - cron: '*/30 * 18-20 11 *'    # 2026-11-18 to 20: open after close + 24 h, reveal deadline (key + 24 h), finalize, payout retries
+    # GitHub cron has no year: the guard job skips scheduled runs outside 2026. Delete this schedule after sale 2 is paid out.
   workflow_dispatch:
     inputs:
       sale:
@@ -17,12 +18,25 @@ on:
 permissions: { contents: read }
 concurrency: { group: keeper, cancel-in-progress: false }
 jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      live: ${{ steps.year.outputs.live }}
+    steps:
+      - id: year
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%Y)" != "2026" ]; then echo "live=false" >> "$GITHUB_OUTPUT"; else echo "live=true" >> "$GITHUB_OUTPUT"; fi
   keeper:
+    needs: guard
+    if: needs.guard.outputs.live == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile --filter "@tender/relayer..."
@@ -35,5 +49,5 @@ jobs:
           # a scheduled run has no inputs: DRY is 0 there, on purpose (the schedule is the real run)
           DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
         run: |
-          if [ "$DRY" = "1" ]; then pnpm keeper --sale "$SALE" --network mainnet --dry-run
+          if [ "$DRY" = "1" ]; then pnpm keeper --sale "$SALE" --network mainnet --dry-run --check-key
           else pnpm keeper --sale "$SALE" --network mainnet --yes; fi
