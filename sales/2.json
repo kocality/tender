@@ -1,0 +1,21 @@
+{
+  "tag": "2",
+  "id": "2",
+  "contract": "v1.tenderseal.near",
+  "seller": "tenderseal.near",
+  "token_id": "nep141:jambo-1679.meme-cooking.near",
+  "amount": "intents_balance",
+  "close": { "utc": "2026-11-17T12:00:00Z" },
+  "create_at_utc": "2026-11-13T07:00:00Z",
+  "msg": {
+    "op": "create",
+    "reveal_secs": "86400",
+    "reserve": "auto:oneclick_x0.9",
+    "min_escrow": "2000000",
+    "min_bidders": 2,
+    "quote_token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "max_bids": 64,
+    "decimals": 18,
+    "lot_exp": 3
+  }
+}

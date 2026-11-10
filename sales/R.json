@@ -1,0 +1,21 @@
+{
+  "tag": "R",
+  "id": "0",
+  "contract": "rehearsal.tenderseal.near",
+  "seller": "tenderseal.near",
+  "token_id": "nep141:wrap.near",
+  "amount": "100000000000000000000000",
+  "wrap_near": "0.1",
+  "close": { "relative_secs": 1200 },
+  "msg": {
+    "op": "create",
+    "reveal_secs": "86400",
+    "reserve": "3000000",
+    "min_escrow": "1000000",
+    "min_bidders": 1,
+    "quote_token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "max_bids": 8,
+    "decimals": 24,
+    "lot_exp": 0
+  }
+}

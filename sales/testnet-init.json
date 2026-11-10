@@ -1,0 +1,9 @@
+{
+  "mpc": "v1.signer-prod.testnet",
+  "intents": "intents-<6hex>.testnet",
+  "domain_id": 2,
+  "app_pk_mode": "<identity|generator|plain>",
+  "mpc_public_key": "bls12381g2:xeYho48G2Sr9oJz4gw9sLGZGspeeKpHZvMDAwWvoNTRnVMFJH96GxX98TT2MRhTtsot1wcGR1Ti2Xh8PCsbYJ2enbLNdJXDvTYSK8aTE3nJ5NZXU7Kt1F6mFtReWs5pR4kj",
+  "quote_tokens": ["nep141:usdc-<6hex>.testnet"],
+  "sellers": ["tender-<6hex>.testnet"]
+}

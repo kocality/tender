@@ -1,0 +1,9 @@
+{
+  "mpc": "v1.signer",
+  "intents": "intents.near",
+  "domain_id": 2,
+  "app_pk_mode": "<identity|generator|plain>",
+  "mpc_public_key": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+  "quote_tokens": ["nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"],
+  "sellers": ["tenderseal.near"]
+}
