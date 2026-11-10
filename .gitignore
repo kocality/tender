@@ -1,0 +1,53 @@
+# dependencies and build output
+node_modules/
+dist/
+.vite/
+.vercel/
+*.tsbuildinfo
+coverage/
+
+# rust
+target/
+**/target/
+
+# secrets: never commit
+.env
+.env.*
+!.env.example
+keys/
+**/keys/
+*.key.json
+*_key.json
+*-key.json
+*keypair*.json
+id.json
+.near-credentials/
+neardev/
+*.pem
+*.seed
+seed*.txt
+
+# submission payload (contains personal data, HACKATHON.md)
+/submission*.json
+/payload*.json
+
+# local scratch
+*.log
+.DS_Store
+
+# internal planning: never committed (DECISIONS P11)
+KICKOFF.md
+KICKOFF-v3.md
+DECISIONS.md
+PLAN*.md
+OPEN-QUESTIONS.md
+/STATUS.md
+tasks/
+docs/internal/
+submission/
+
+# raw video and local scanner reports
+video/raw/
+gitleaks-report*.json
+
+# local agent settings and local-only agent instructions (W0-11)

@@ -1,0 +1,17 @@
+title = "tender"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public CKD test vectors from near/mpc (the msk fields are published test data, not keys)"
+paths = [
+  '''prototype/vec\.json''',
+  '''fixtures/ckd_test_vectors\.json''',
+]
+
+[[rules]]
+id = "near-ed25519-private-key"
+description = "NEAR ed25519 private key (base58, 64 bytes; public keys are 43-44 characters and do not match)"
+regex = '''ed25519:[1-9A-HJ-NP-Za-km-z]{85,90}'''
+keywords = ["ed25519:"]

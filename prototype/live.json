@@ -1,0 +1,8 @@
+{
+ "pk": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+ "path": "tempered/service/f08af39fa77d847d8ba953d9703ca276/seed-v1",
+ "acct": "ckd-auth.logunov.near",
+ "pk2": "bls12381g2:xnwNyu3EwCWPWBzkoTfPGaC95XeYPCYicaJVvJg1Z9dAnEKkvXGagyHCnqXgD7v6Q3MW5GnVTmuKARSYE1vpL2wwkn1GF2XzYvVrBafjVJ6Hcmen7iKeXcbbY9zCZXxUar4",
+ "big_y": "bls12381g1:6aAstP4kauK2u1VU6H9tEKDb84MY2TqDFmywetjUjywyz82zTz5csCtUy4CGNiq6tM",
+ "big_c": "bls12381g1:77iXuBMiT9aGxeEJCLzEa4Lcf4UprLdmky4z6SmKfi3JqikNDAj4t8s2FA9pUrpxp3"
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@tender/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Judge-facing CLI: verify, seal:try, seal:bid, demo:local. Depends only on @tender/seal, @tender/clearing, @tender/intents, noble, bs58 and fetch.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "verify": "tsx src/verify.ts",
+    "seal:try": "tsx src/seal-try.ts",
+    "seal:bid": "tsx src/seal-bid.ts",
+    "demo:local": "tsx src/demo-local.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@tender/clearing": "workspace:*",
+    "@tender/intents": "workspace:*",
+    "@tender/seal": "workspace:*",
+    "bs58": "6.0.0"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

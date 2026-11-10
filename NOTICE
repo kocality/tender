@@ -1,0 +1,18 @@
+Tender
+Copyright (c) 2026 Tender contributors. Licensed under the MIT License (see LICENSE).
+
+This product includes or adapts third-party work. Fill in each entry when the code is
+actually ported; remove entries that end up unused.
+
+- drand/tlock-js, src/crypto/ibe.ts (Apache-2.0 OR MIT)
+  https://github.com/drand/tlock-js
+  Adapted in packages/seal/src/ibe.ts: noble 2.x API, NEAR hash-to-curve DST, identity pk || app_id.
+
+- defdone/annon, contracts/mock-mpc and check-imports.mjs (Apache-2.0)
+  https://github.com/defdone/annon
+  Adapted in contract/mock-mpc/ and contract/scripts/check-imports.mjs.
+  <Copy the upstream copyright line and the Apache-2.0 NOTICE text here when ported.>
+
+- near/mpc 3.17.0, crates/threshold-signatures/tests/vectors/ckd_test_vectors.json (MIT)
+  https://github.com/near/mpc
+  Copyright (c) 2025 NEAR One Limited. Used as test fixtures (prototype/vec.json, fixtures/).

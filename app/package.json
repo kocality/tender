@@ -1,0 +1,35 @@
+{
+  "name": "@tender/app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tender frontend: sale page, sealed bid wizard (MetaMask, Phantom, NEAR Connect), open, decrypt and reveal, withdraw",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hot-labs/near-connect": "0.12.0",
+    "@tender/clearing": "workspace:*",
+    "@tender/intents": "workspace:*",
+    "@tender/seal": "workspace:*",
+    "near-api-js": "7.4.0",
+    "qrcode": "1.5.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@defuse-protocol/intents-sdk": "0.95.0",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

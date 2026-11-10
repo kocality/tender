@@ -1,0 +1,27 @@
+import { webcrypto } from "node:crypto"; if (!globalThis.crypto) globalThis.crypto = webcrypto;
+import { bls12_381 as bls } from '@noble/curves/bls12-381.js';
+import { sha3_256 } from '@noble/hashes/sha3.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import bs58 from 'bs58';
+const DST = 'NEAR BLS12381G1_XMD:SHA-256_SSWU_RO_';
+const mpkStr = 'bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR';
+const mpkBytes = bs58.decode(mpkStr.split(':')[1]);
+console.log('mpk bytes', mpkBytes.length);
+const G1 = bls.G1.Point ?? bls.G1.ProjectivePoint, G2 = bls.G2.Point ?? bls.G2.ProjectivePoint;
+const MPK = G2.fromBytes ? G2.fromBytes(mpkBytes) : G2.fromHex(mpkBytes);
+MPK.assertValidity(); console.log('mainnet MPC domain-2 key decodes as valid G2 point');
+// simulate the MPC side with a fake msk, then decrypt as the app would (mirrors ckd.rs test)
+const n = bls.fields.Fr.ORDER;
+const rnd = () => bls.utils.randomSecretKey ? BigInt('0x'+Buffer.from(bls.utils.randomSecretKey()).toString('hex')) % n : 7n;
+const msk = rnd(), a = rnd(), y = rnd();
+const mpk = G2.BASE.multiply(msk);
+const appId = sha3_256(new TextEncoder().encode('near-mpc v0.1.0 app_id derivation:alice.near,offrecord/vault/v1'));
+const H = (pk) => bls.G1.hashToCurve(new Uint8Array([...pk.toBytes(true), ...appId]), { DST });
+const sig = H(mpk).multiply(msk);
+const bigY = G1.BASE.multiply(y), bigC = sig.add(G1.BASE.multiply((a*y)%n));
+const secret = bigC.subtract(bigY.multiply(a));
+const ok = bls.fields.Fp12.eql(bls.pairing(H(mpk), mpk), bls.pairing(secret, G2.BASE)); const bad = bls.fields.Fp12.eql(bls.pairing(bls.G1.hashToCurve(new Uint8Array([...mpk.toBytes(true), ...sha3_256(new TextEncoder().encode("near-mpc v0.1.0 app_id derivation:mallory.near,offrecord/vault/v1"))]), { DST }), mpk), bls.pairing(secret, G2.BASE)); console.log("wrong-account verify", bad);
+console.log('pairing verify', ok, 'secret==sig', secret.equals(sig));
+const key = hkdf(sha256, secret.toBytes(true), new TextEncoder().encode('near-mpc-ckd-hkdf-v1'), new TextEncoder().encode('offrecord-vault-kek-v1'), 32);
+console.log('key len', key.length);

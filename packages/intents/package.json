@@ -1,0 +1,23 @@
+{
+  "name": "@tender/intents",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NEAR Intents payloads for sealed bids: versioned nonce, erc191 / raw_ed25519 / nep413 wrapping, simulate_intents",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "bs58": "6.0.0"
+  },
+  "devDependencies": {
+    "@noble/curves": "2.4.0",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

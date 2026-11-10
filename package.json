@@ -1,0 +1,29 @@
+{
+  "name": "tender",
+  "private": true,
+  "description": "Sealed-bid token sales from any chain, opened by NEAR's MPC network",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "verify": "pnpm --filter @tender/cli verify",
+    "seal:try": "pnpm --filter @tender/cli seal:try",
+    "seal:bid": "pnpm --filter @tender/cli seal:bid",
+    "demo:local": "pnpm --filter @tender/cli demo:local",
+    "vectors": "pnpm --filter @tender/seal vectors",
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter @tender/app dev",
+    "keeper": "pnpm --filter @tender/relayer keeper",
+    "relay:local": "pnpm --filter @tender/relayer relay:local",
+    "check-imports": "node contract/scripts/check-imports.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

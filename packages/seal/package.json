@@ -1,0 +1,24 @@
+{
+  "name": "@tender/seal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Encrypt now to a NEAR contract's future MPC CKD key; decrypt once the contract requests it",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "vectors": "vitest run src/vectors.test.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "bs58": "6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

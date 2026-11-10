@@ -1,0 +1,25 @@
+{
+  "name": "@tender/relayer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Permissionless relayer (POST /relay: simulate_intents then execute_intents), keeper and ops scripts",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "relay:local": "tsx src/local-server.ts",
+    "keeper": "tsx src/keeper.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@tender/clearing": "workspace:*",
+    "@tender/intents": "workspace:*",
+    "@tender/seal": "workspace:*",
+    "near-api-js": "7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}
