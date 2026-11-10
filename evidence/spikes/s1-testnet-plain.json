@@ -1,0 +1,34 @@
+{
+ "gate": "S1-testnet",
+ "mode": "plain",
+ "network": "testnet",
+ "mpc": "v1.signer-prod.testnet",
+ "mpc_version": "3.18.0",
+ "caller": "tender-s1-164b59.testnet",
+ "path": "tender-spike/s1-testnet/plain/1",
+ "app_id_hex": "c6da2b7114a25ffcea713fd2a29b2a6e82ba815d76b8eb045dbdb7cc2a3bf9ad",
+ "request": {
+  "derivation_path": "tender-spike/s1-testnet/plain/1",
+  "app_public_key": {
+   "AppPublicKey": "bls12381g1:6aGxBiDyBZxEL9RKJz8W2h7VQUUKv9BPqHbC2DNWKExVRM7GWtLk6mTQBYXbpgRHwp"
+  },
+  "domain_id": 2
+ },
+ "response": {
+  "big_y": "bls12381g1:7Rgu791rdAr2M1taXkNDQXvUWG9ZzbFL8uiEKcZ4r3vuSEQq7Hhf3vohNiBs6qpeRZ",
+  "big_c": "bls12381g1:7AdyDWJeJgE7KxoCyoS2Q8TVjp9VoBYqiXyE9MWW6DMcd6365xxgPbK5tdK6bW7dZE"
+ },
+ "tx_hash": "83SUfatuNt34BaWKhWzABwjQZyn7J6crnQiftkrYqozh",
+ "blocks": {
+  "tx": 276995467,
+  "request": 276995468,
+  "response": 276995473
+ },
+ "latency_blocks": 5,
+ "check": {
+  "pairing": true,
+  "wrong_app_id": false
+ },
+ "result": "PASS",
+ "date_utc": "2026-11-10T00:44:04Z"
+}

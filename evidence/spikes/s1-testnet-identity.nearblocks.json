@@ -1,0 +1,16 @@
+{
+ "gate": "S7",
+ "network": "testnet",
+ "account": "tender-s1-164b59.testnet",
+ "tx_hash": "3z2dKCG7h3yRYHa9pLKpb9jw3rwveBbiDPPM6MSPfNd4",
+ "query": "https://api-testnet.nearblocks.io/v3/accounts/tender-s1-164b59.testnet/receipts?method=request_app_private_key&limit=100",
+ "found": true,
+ "receipt_id": "94CvDuZNsniDmofPP5icctoLfqcqCoxRf5nPsQ6rB6w2",
+ "predecessor_account_id": "tender-s1-164b59.testnet",
+ "receiver_account_id": "v1.signer-prod.testnet",
+ "block_height": "276995419",
+ "block_timestamp": "1794271411326053285",
+ "queried_at": "2026-11-10T00:44:39.585Z",
+ "delay_s": 68,
+ "queries": 1
+}
