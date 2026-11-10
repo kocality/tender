@@ -19,6 +19,9 @@
     "sale": "tsx scripts/sale.ts",
     "bid": "tsx scripts/bid-nep413.ts",
     "attack": "tsx scripts/attack-bids.ts",
+    "s3b": "tsx scripts/s3b.ts",
+    "s5": "tsx scripts/s5-return.ts",
+    "swap": "tsx scripts/swap-intents.ts",
     "evidence-check": "tsx scripts/evidence-check.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
