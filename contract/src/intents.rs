@@ -11,7 +11,10 @@ use crate::sale::{
     Payout, RevealMsg, Sale, SaleState,
 };
 use crate::seal::hex_lower;
-use crate::{BID_STORAGE_BYTES, CREATE_STORAGE_BYTES, Tender, TenderExt, events, storage_ok};
+use crate::{
+    BID_STORAGE_BYTES, CREATE_STORAGE_BYTES, OPEN_STORAGE_BYTES, REVEAL_STORAGE_BYTES, Tender,
+    TenderExt, events, storage_ok,
+};
 
 fn refund(reason: &str, sender: &AccountId, token: &str, amounts: &[U128], op: &str) -> Vec<U128> {
     let amount = amounts
@@ -95,9 +98,11 @@ impl Tender {
         if let Err(reason) = sale::validate_create(&ctx, &m) {
             return refund(reason, sender, token, &amounts, "create");
         }
-        if !storage_ok(CREATE_STORAGE_BYTES) {
+        // F6: also room for this sale's open, on top of what earlier sales keep back.
+        if !storage_ok(CREATE_STORAGE_BYTES + OPEN_STORAGE_BYTES + self.reserved_bytes) {
             return refund("storage", sender, token, &amounts, "create");
         }
+        self.reserved_bytes += OPEN_STORAGE_BYTES;
         let id = self.sales.len() as u64;
         let seed = env::random_seed_array();
         let path = format!("tender/{id}/{}", hex_lower(&seed[..16]));
@@ -171,9 +176,11 @@ impl Tender {
             Ok(p) => p,
             Err(reason) => return refund(reason, sender, token, &amounts, "bid"),
         };
-        if !storage_ok(BID_STORAGE_BYTES) {
+        // F6: also room for this bid's reveal, on top of what open sales keep back.
+        if !storage_ok(BID_STORAGE_BYTES + REVEAL_STORAGE_BYTES + self.reserved_bytes) {
             return refund("storage", sender, token, &amounts, "bid");
         }
+        self.reserved_bytes += REVEAL_STORAGE_BYTES;
         let new_bidder = self.bidder_seen.insert((sale_id, sender.clone()));
         let Some(s) = self.sale_mut(sale_id) else {
             return refund("no_sale", sender, token, &amounts, "bid");

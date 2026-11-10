@@ -32,7 +32,8 @@ pub const CREATE_STORAGE_BYTES: u64 = 800;
 pub const BID_STORAGE_BYTES: u64 = 725;
 /// A key request still in flight this long after `open` is dead (its `on_key` receipt failed;
 /// the MPC's own yield timeout is ~200 blocks): `open` may ask again and cancel rule (b) applies
-/// (C-02).
+/// (C-02). Assumption (F8): no MPC answer arrives this late. One that did would be discarded as
+/// stale by `on_key` but would still be public in its receipt.
 pub const IN_FLIGHT_TIMEOUT_SECS: u64 = 3_600;
 /// Storage `open` must leave room for above the C26 reserve before it asks for the key (C-02):
 /// its ledger entry, `on_key` and the first `finalize` (79 + 186 + 106 B measured, × 1.25).
@@ -58,6 +59,15 @@ pub struct Tender {
     bids: LookupMap<(u64, u16), Bid>,
     key_log: Vector<KeyReq>,
     bidder_seen: LookupSet<(u64, AccountId)>,
+    /// F6: storage kept free for what unsettled sales still need (`open_bytes` of each), so a
+    /// bid or sale admitted now cannot take the room an earlier sale needs for its `open`.
+    reserved_bytes: u64,
+}
+
+/// What `open` must leave room for above the C26 reserve (C-02): its entry, `on_key` and
+/// settle, plus one reveal per bid still Sealed.
+pub(crate) fn open_bytes(s: &Sale) -> u64 {
+    OPEN_STORAGE_BYTES + REVEAL_STORAGE_BYTES * u64::from(s.bids - s.revealed)
 }
 
 /// C26: true when `extra_bytes` more storage still leaves STORAGE_RESERVE_YOCTO free.
@@ -226,6 +236,7 @@ impl Tender {
             bids: LookupMap::new(b"b"),
             key_log: Vector::new(b"k"),
             bidder_seen: LookupSet::new(b"u"),
+            reserved_bytes: 0,
         }
     }
 
@@ -253,11 +264,7 @@ impl Tender {
             s.bidders >= s.min_bidders,
             "open: fewer bidders than min_bidders"
         );
-        let sealed = u64::from(s.bids - s.revealed);
-        require!(
-            storage_ok(OPEN_STORAGE_BYTES + REVEAL_STORAGE_BYTES * sealed),
-            "open: storage"
-        );
+        require!(storage_ok(open_bytes(s)), "open: storage");
         let args = seal::ckd_args(&s.path, self.app_pk_mode, self.domain_id);
         self.close_dead_request(id);
 
@@ -373,6 +380,7 @@ impl Tender {
         );
         let reason = if a { "conditions" } else { "no_key_24h" };
         let n = s.bids;
+        self.reserved_bytes = self.reserved_bytes.saturating_sub(open_bytes(s));
         self.close_dead_request(id);
         for i in 0..n {
             if let Some(bid) = self.bids.get_mut(&(id, i)) {
@@ -561,7 +569,8 @@ impl Tender {
     }
 
     /// Ends a dead in-flight request (callers checked `request_dead`): its ledger entry becomes
-    /// Err and its late `on_key`, if one ever runs, is stale.
+    /// Err, with the same `key_error` event `on_key` emits (F7), and its late `on_key`, if one
+    /// ever runs, is stale.
     fn close_dead_request(&mut self, id: u64) {
         let s = self.sale_mut(id).unwrap();
         if !s.in_flight {
@@ -569,12 +578,20 @@ impl Tender {
         }
         let log_idx = s.pending_log.take();
         s.in_flight = false;
-        if let Some(entry) = log_idx
-            .and_then(|i| u32::try_from(i).ok())
-            .and_then(|i| self.key_log.get_mut(i))
+        let key_requests = s.key_requests;
+        if let Some(i) = log_idx
+            && let Some(entry) = u32::try_from(i).ok().and_then(|i| self.key_log.get_mut(i))
         {
             entry.outcome = KeyOutcome::Err;
             entry.resolved_block = Some(env::block_height());
+            events::emit(
+                "key_error",
+                json!({
+                    "sale": id.to_string(),
+                    "log_idx": i.to_string(),
+                    "key_requests": key_requests,
+                }),
+            );
         }
     }
 
@@ -630,6 +647,8 @@ impl Tender {
         bid.revealed_by = Some(by.clone());
         bid.state = BidState::Revealed;
         self.sale_mut(id).unwrap().revealed += 1;
+        // F6: this reveal now uses the room its bid kept back.
+        self.reserved_bytes = self.reserved_bytes.saturating_sub(REVEAL_STORAGE_BYTES);
         events::emit(
             "reveal",
             json!({
@@ -654,6 +673,7 @@ impl Tender {
         );
         let (supply, decimals, lot_exp, reserve) = (s.supply, s.decimals, s.lot_exp, s.reserve);
         let (n, escrow_total) = (s.bids, s.escrow_total);
+        self.reserved_bytes = self.reserved_bytes.saturating_sub(open_bytes(s));
         let input: Vec<clearing::ClearBid> = (0..n)
             .map(|i| {
                 let b = self.bids.get(&(id, i)).expect("bid");
@@ -1155,6 +1175,14 @@ mod tests {
         (t, close)
     }
 
+    /// `log_idx` of the `key_error` event in this context's logs (F7).
+    fn key_error_log_idx() -> Option<String> {
+        get_logs().iter().find_map(|l| {
+            let v: Value = serde_json::from_str(l.strip_prefix("EVENT_JSON:")?).ok()?;
+            (v["event"] == "key_error").then(|| v["data"][0]["log_idx"].as_str().unwrap().into())
+        })
+    }
+
     /// S-08: while the key request is in flight, open is refused.
     #[test]
     #[should_panic(expected = "open: request already in flight")]
@@ -1221,6 +1249,7 @@ mod tests {
         let later = close + IN_FLIGHT_TIMEOUT_SECS * NS_PER_SEC;
         at(KEEPER, later);
         t.open(U64(0));
+        assert_eq!(key_error_log_idx(), Some("0".into()));
         let s = t.get_sale(U64(0)).unwrap();
         assert_eq!((s.key_requests, s.in_flight), (2, true));
         let log = t.get_key_log(U64(0), 10);
@@ -1247,6 +1276,7 @@ mod tests {
         let (mut t, close) = opened();
         at(KEEPER, close + sale::MIN_REVEAL_SECS * NS_PER_SEC);
         t.cancel(U64(0));
+        assert_eq!(key_error_log_idx(), Some("0".into()));
         let s = t.get_sale(U64(0)).unwrap();
         assert_eq!((s.state.as_str(), s.in_flight), ("Cancelled", false));
         assert_eq!(t.get_key_log(U64(0), 10)[0].outcome, "Err");
@@ -1277,6 +1307,49 @@ mod tests {
             .storage_usage(usage);
         testing_env!(c.build());
         t.open(U64(0));
+    }
+
+    /// F6: bid admission keeps free what `open` will need for the sale (its entry and one reveal
+    /// per sealed bid), so every bid it admits can still be opened without a top-up.
+    #[test]
+    fn bid_admission_keeps_room_for_open() {
+        let mut t = with_sale(|m| {
+            m["min_bidders"] = json!(1);
+            m["min_escrow"] = json!("1000000");
+        });
+        let close = t.sale(0).unwrap().close_ns;
+        // 2,000 B above the reserve. The mock never grows storage_usage, so only what admission
+        // keeps back shrinks the room.
+        let usage = near_sdk::env::storage_usage();
+        let balance = (usage as u128 + 2_000) * near_sdk::env::storage_byte_cost().as_yoctonear()
+            + STORAGE_RESERVE_YOCTO;
+        let room = |who: &str, now: u64| {
+            let mut c = ctx(who, now);
+            c.account_balance(near_sdk::NearToken::from_yoctonear(balance))
+                .storage_usage(usage);
+            testing_env!(c.build());
+        };
+        let msg = json!({ "op": "bid", "sale": "0", "ct": ct_b64(160), "cm": "ab".repeat(32) });
+        let mut admitted = 0;
+        for i in 0..16 {
+            room(crate::sale::tests::INTENTS, NOW + NS_PER_SEC);
+            let who: AccountId = bidder(i).parse().unwrap();
+            let got = t.mt_on_transfer(
+                who.clone(),
+                vec![who],
+                vec![USDC.into()],
+                vec![U128(1_000_000)],
+                msg.to_string(),
+            );
+            if got[0].0 != 0 {
+                break;
+            }
+            admitted += 1;
+        }
+        room(KEEPER, close);
+        t.open(U64(0));
+        assert!(t.get_sale(U64(0)).unwrap().in_flight);
+        assert!((1..16).contains(&admitted), "admitted {admitted}");
     }
 
     /// X12A-01: a twin sale whose min_escrow is above the per-sale escrow cap can never be

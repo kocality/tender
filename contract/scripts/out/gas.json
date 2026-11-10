@@ -1,6 +1,6 @@
 {
-  "wasm_sha256": "32b3ab9d58710e9541c3c2c68ec5b35551d7ffab4b40fbb3f16dffb914215737",
-  "wasm_bytes": 274799,
+  "wasm_sha256": "1789de4e57ff60b22cab482dbcd5253dbbae894cce4aa206d436bcd7bd097e4b",
+  "wasm_bytes": 275569,
   "bids": 64,
   "gas_tgas": {
     "create": 1.8,
@@ -8,17 +8,18 @@
     "bid_mt_on_transfer_receipt": 2.12,
     "open_total": 6.73,
     "on_key": 2.06,
-    "reveal_8": 4.93,
-    "self_reveal": 4.8,
-    "finalize_first_64_bids": 70.86,
+    "reveal_8": 4.94,
+    "self_reveal": 4.81,
+    "finalize_first_64_bids": 70.89,
     "finalize_first_64_bids_receipt": 23.36,
-    "finalize_8_payouts": 59.66,
+    "finalize_8_payouts": 59.69,
     "mt_batch_transfer_receipt": 4.47,
     "on_paid": 2.02,
-    "cancel": 56.68
+    "cancel": 68.66,
+    "cancel_64_bids_receipt": 21.53
   },
   "storage_bytes": {
-    "config": 439,
+    "config": 447,
     "per_sale": 313,
     "per_bid": 580,
     "per_key_log": 79,

@@ -1057,10 +1057,10 @@ async fn s16_d_plus_lot_exp_bound() -> anyhow::Result<()> {
 #[tokio::test]
 async fn s20_storage_guard() -> anyhow::Result<()> {
     let w = world().await?;
-    // Code storage (1 NEAR per 100 KB) + 0.32 NEAR: only a few bids fit above the 0.3 NEAR
-    // reserve (C26).
+    // Code storage (1 NEAR per 100 KB) + 0.33 NEAR: only a few bids fit above the 0.3 NEAR
+    // reserve (C26) and the room kept back for the sale's open (F6).
     let wasm = read_wasm(&tender_wasm_path()).len() as u128;
-    let balance = wasm * 10u128.pow(19) + 320 * 10u128.pow(21);
+    let balance = wasm * 10u128.pow(19) + 330 * 10u128.pow(21);
     let r = deploy_tender_with(
         &w,
         &s1_mode(),
@@ -1097,23 +1097,10 @@ async fn s20_storage_guard() -> anyhow::Result<()> {
     assert_eq!(mt_balance(&w.intents, late, USDC).await?, 2 * ONE_USDC);
     assert_eq!(get_sale(&w, &t, id).await?["bids"], refused);
 
-    // C-02: open will not start a key request whose on_key, reveals and settle would not fit
-    // above the reserve (on_key used to fail with LackBalanceForState and strand the sale in
-    // flight). Nothing is requested or logged; anyone can top the keyless account up.
+    // F6: the bids already in kept room for the sale's open (C-02: its on_key, reveals and
+    // settle), so it opens, reveals, finalizes and pays out with no top-up of the keyless
+    // account.
     close_now(&w, &t, id).await?;
-    let r = call_tender(&w.root, &t, "open", json!({ "sale": id.to_string() })).await?;
-    assert_fails_with(&r, "open: storage");
-    let s = get_sale(&w, &t, id).await?;
-    assert_eq!(
-        (s["in_flight"].clone(), s["key_requests"].clone()),
-        (json!(false), json!(0))
-    );
-    assert_eq!(mpc_calls(&w).await?, 0);
-    assert_eq!(key_log(&w, &t).await?.as_array().unwrap().len(), 0);
-    let top_up = near_workspaces::types::NearToken::from_near(1);
-    w.root.transfer_near(&t, top_up).await?.into_result()?;
-
-    // The bids already in then open, reveal, finalize and pay out.
     let r = call_tender(&w.root, &t, "open", json!({ "sale": id.to_string() })).await?;
     assert!(event(&r.logs(), "key").is_some(), "{:?}", r.logs());
     assert_ok(&reveal(&w, &t, id, &items).await?);
@@ -1548,7 +1535,8 @@ fn payout_gas(r: &Exec, w: &World, t: &Id) -> (u64, u64, usize) {
 
 /// Gas and storage of every contract path, worst cases: a 64-bid sale (one bid from a 64-hex
 /// implicit account with the longest origin), an 8-item reveal and self-reveal, the first
-/// finalize (clearing + penalty + 8 payouts), a later 8-payout finalize and an 8-payout cancel.
+/// finalize (clearing + penalty + 8 payouts), a later 8-payout finalize and the first cancel of a
+/// 64-bid sale (64 bid rewrites + 8 payouts).
 /// Writes `contract/scripts/out/gas.json` for `scripts/wasm-report.mjs`.
 /// `cargo test --test sandbox gas_report -- --ignored --nocapture`
 #[tokio::test]
@@ -1669,13 +1657,17 @@ async fn gas_report() -> anyhow::Result<()> {
     assert_eq!(pool, json!("1600000"));
     assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 1_600_000);
 
-    // cancel with 8 payouts: 7 bids + the seller, min_escrow not met.
+    // cancel of a full sale (INFO-1): 64 bids rewritten + the first 8 payouts, min_escrow not
+    // met. Own world: two 64-bid sales are too much state for close_now's view_state.
+    let w = world().await?;
+    let t = deploy_tender(&w).await?;
     let id1 = create_sale(&w, &t, ONE_NEAR, |m| {
+        m["max_bids"] = json!(64);
         m["min_bidders"] = json!(1);
-        m["min_escrow"] = json!("50000000");
+        m["min_escrow"] = json!("500000000");
     })
     .await?;
-    for i in 0..7 {
+    for i in 0..n {
         let who = Who::Named(i % BIDDERS.len());
         fund(&w, who, 2 * ONE_USDC).await?;
         let r = send(
@@ -1695,6 +1687,7 @@ async fn gas_report() -> anyhow::Result<()> {
     assert_eq!(k, 8);
     (batch, on_paid) = (batch.max(b), on_paid.max(p));
     let cancel_total = r.total_gas_burnt.as_gas();
+    let cancel_receipt = receipt_gas(&r, &t)[0];
 
     let gas = json!({
         "create": tgas_of(create),
@@ -1710,6 +1703,7 @@ async fn gas_report() -> anyhow::Result<()> {
         "mt_batch_transfer_receipt": tgas_of(batch),
         "on_paid": tgas_of(on_paid),
         "cancel": tgas_of(cancel_total),
+        "cancel_64_bids_receipt": tgas_of(cancel_receipt),
     });
     let report = json!({
         "wasm_sha256": to_hex(&near_sdk::env::sha256(&wasm)),
@@ -1743,6 +1737,8 @@ async fn gas_report() -> anyhow::Result<()> {
         ("on_paid", on_paid, 4),
         ("finalize_first_64_bids", finalize_first, 240),
         ("open_total", open_total, 80),
+        // 300 Tgas prepaid − 8 payouts × (20 + 10) Tgas static = 60 Tgas for the receipt.
+        ("cancel_64_bids_receipt", cancel_receipt, 48),
     ];
     for (name, g, max) in limits {
         assert!(g < max * 1_000_000_000_000, "{name}: {} Tgas", tgas_of(g));
