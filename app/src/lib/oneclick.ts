@@ -151,6 +151,54 @@ export async function quoteDeposit(o: {
   });
 }
 
+/**
+ * Request body of a withdrawal quote: tokens already in the signer's Intents account leave to a chain address.
+ * `originAsset` is an Intents token id, `refundTo` the signer's Intents account id, `recipient` a chain address.
+ */
+export function withdrawQuoteBody(o: {
+  originAsset: string;
+  destinationAsset: string;
+  amount: bigint;
+  signerId: string;
+  recipient: string;
+  dry: boolean;
+  nowMs?: number;
+}) {
+  return {
+    dry: o.dry,
+    swapType: 'EXACT_INPUT',
+    slippageTolerance: 100,
+    originAsset: o.originAsset,
+    depositType: 'INTENTS',
+    destinationAsset: o.destinationAsset,
+    amount: o.amount.toString(),
+    refundTo: o.signerId,
+    refundType: 'INTENTS',
+    recipient: o.recipient,
+    recipientType: 'DESTINATION_CHAIN',
+    deadline: new Date((o.nowMs ?? Date.now()) + QUOTE_TTL_MS).toISOString(),
+  };
+}
+
+/**
+ * Quote a withdrawal from the Intents account `signerId` to `recipient` on another chain. With `dry: false` the
+ * response carries `depositAddress`, an Intents account id (not a chain address) that receives the signed Transfer.
+ */
+export async function quoteWithdraw(o: {
+  originAsset: string;
+  destinationAsset: string;
+  amount: bigint;
+  signerId: string;
+  recipient: string;
+  dry: boolean;
+}): Promise<QuoteResponse> {
+  return call<QuoteResponse>('/v0/quote', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(withdrawQuoteBody(o)),
+  });
+}
+
 export function getStatus(depositAddress: string): Promise<StatusResponse> {
   return call<StatusResponse>(`/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
 }

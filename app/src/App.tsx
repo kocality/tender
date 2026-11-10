@@ -4,16 +4,8 @@ import { Keys } from './pages/Keys';
 import { Sale } from './pages/Sale';
 import { Try } from './pages/Try';
 import { Twin } from './pages/Twin';
+import { Withdraw } from './pages/Withdraw';
 import { useHashRoute } from './router';
-
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div>
-      <h1>{title}</h1>
-      <p className="muted">This screen is not built yet.</p>
-    </div>
-  );
-}
 
 export function App() {
   const route = useHashRoute();
@@ -35,7 +27,7 @@ export function App() {
       page = <Keys />;
       break;
     case '/withdraw':
-      page = <ComingSoon title="Withdraw to chain" />;
+      page = <Withdraw />;
       break;
     default:
       page = (
