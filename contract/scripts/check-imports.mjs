@@ -47,6 +47,7 @@ const ALLOWED = new Set([
 // Never allowed: these can change the account's code, keys or existence (lock claim, K7).
 const FORBIDDEN_PREFIXES = [
   'promise_batch_action_add_key',
+  'promise_batch_action_add_gas_key',
   'promise_batch_action_deploy_contract',
   'promise_batch_action_delete_account',
   'promise_batch_action_deploy_global_contract',

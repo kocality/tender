@@ -59,6 +59,33 @@ test('rejects_use_global_contract', () => {
   assert.match(r.stderr, /FAIL forbidden: env\.promise_batch_action_use_global_contract/);
 });
 
+test('rejects_add_gas_key', () => {
+  const r = check(['promise_batch_action_add_gas_key_with_function_call']);
+  assert.equal(r.code, 2);
+  assert.match(r.stderr, /FAIL forbidden: env\.promise_batch_action_add_gas_key_with_function_call/);
+});
+
+// Everything `pnpm verify` check #5 rejects (cli/src/lib/wasm.ts FORBIDDEN_IMPORT_RE) must be forbidden here too.
+test('forbids_every_verify_import_family', () => {
+  const names = [
+    'promise_batch_action_add_key_with_full_access',
+    'promise_batch_action_add_key_with_function_call',
+    'promise_batch_action_add_gas_key_with_full_access',
+    'promise_batch_action_add_gas_key_with_function_call',
+    'promise_batch_action_deploy_contract',
+    'promise_batch_action_use_global_contract',
+    'promise_batch_action_use_global_contract_by_account_id',
+    'promise_batch_action_deploy_global_contract',
+    'promise_batch_action_deploy_global_contract_by_account_id',
+    'promise_batch_action_delete_account',
+  ];
+  const r = check(names, '--json');
+  assert.equal(r.code, 2);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.forbidden, [...names].sort());
+  assert.deepEqual(out.unknown, []);
+});
+
 test('rejects_unknown', () => {
   const r = check(['storage_read', 'ecrecover']);
   assert.equal(r.code, 1);
