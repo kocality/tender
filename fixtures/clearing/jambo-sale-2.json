@@ -1,0 +1,56 @@
+{
+ "name": "jambo-sale-2",
+ "note": "Sale #2 parameters (M13): 22,400 JAMBO (d 18), lot_exp 3 (p per 1000 JAMBO), reserve 174,000. Demand is below supply: P* = reserve, unsold tokens go back to the seller.",
+ "sale": {
+  "S": "22400000000000000000000",
+  "decimals": 18,
+  "lot_exp": 3,
+  "reserve": "174000"
+ },
+ "bids": [
+  {
+   "idx": 0,
+   "B": "2000000",
+   "p": "200000",
+   "q": "2000000",
+   "state": "Revealed"
+  },
+  {
+   "idx": 1,
+   "B": "2000000",
+   "p": "185000",
+   "q": "1500000",
+   "state": "Revealed"
+  }
+ ],
+ "expected": {
+  "P_star": "174000",
+  "alloc": [
+   "11494252873563218390804",
+   "8620689655172413793103"
+  ],
+  "spend": [
+   "2000000",
+   "1500000"
+  ],
+  "refund": [
+   "0",
+   "500000"
+  ],
+  "penalty": [
+   "0",
+   "0"
+  ],
+  "penalty_share": [
+   "0",
+   "0"
+  ],
+  "final_state": [
+   "Revealed",
+   "Revealed"
+  ],
+  "seller_usdc": "3500000",
+  "seller_tokens_back": "2285057471264367816093",
+  "dust": "0"
+ }
+}

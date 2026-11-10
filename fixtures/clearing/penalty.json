@@ -1,0 +1,82 @@
+{
+ "name": "penalty",
+ "note": "Two bids stay Sealed (broken ciphertext and a copied bid): each loses B/10; the pool goes pro rata by B to both revealed bids, including the one below reserve; the seller gets none of it.",
+ "sale": {
+  "S": "100000000000000000000000",
+  "decimals": 24,
+  "lot_exp": 0,
+  "reserve": "3000000"
+ },
+ "bids": [
+  {
+   "idx": 0,
+   "B": "1000000",
+   "p": "3500000",
+   "q": "1000000",
+   "state": "Revealed"
+  },
+  {
+   "idx": 1,
+   "B": "1000000",
+   "p": null,
+   "q": null,
+   "state": "Sealed"
+  },
+  {
+   "idx": 2,
+   "B": "1000000",
+   "p": null,
+   "q": null,
+   "state": "Sealed"
+  },
+  {
+   "idx": 3,
+   "B": "2000000",
+   "p": "2000000",
+   "q": "1000000",
+   "state": "Revealed"
+  }
+ ],
+ "expected": {
+  "P_star": "3500000",
+  "alloc": [
+   "100000000000000000000000",
+   "0",
+   "0",
+   "0"
+  ],
+  "spend": [
+   "350000",
+   "0",
+   "0",
+   "0"
+  ],
+  "refund": [
+   "716667",
+   "900000",
+   "900000",
+   "2133333"
+  ],
+  "penalty": [
+   "0",
+   "100000",
+   "100000",
+   "0"
+  ],
+  "penalty_share": [
+   "66667",
+   "0",
+   "0",
+   "133333"
+  ],
+  "final_state": [
+   "Revealed",
+   "Penalized",
+   "Penalized",
+   "Revealed"
+  ],
+  "seller_usdc": "350000",
+  "seller_tokens_back": "0",
+  "dust": "0"
+ }
+}

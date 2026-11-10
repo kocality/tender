@@ -1,0 +1,56 @@
+{
+ "name": "all-below-reserve",
+ "note": "Every revealed bid is below reserve: nothing clears, full refunds, supply back to the seller.",
+ "sale": {
+  "S": "100000000000000000000000",
+  "decimals": 24,
+  "lot_exp": 0,
+  "reserve": "3000000"
+ },
+ "bids": [
+  {
+   "idx": 0,
+   "B": "1000000",
+   "p": "2000000",
+   "q": "1000000",
+   "state": "Revealed"
+  },
+  {
+   "idx": 1,
+   "B": "2000000",
+   "p": "2999999",
+   "q": "2000000",
+   "state": "Revealed"
+  }
+ ],
+ "expected": {
+  "P_star": null,
+  "alloc": [
+   "0",
+   "0"
+  ],
+  "spend": [
+   "0",
+   "0"
+  ],
+  "refund": [
+   "1000000",
+   "2000000"
+  ],
+  "penalty": [
+   "0",
+   "0"
+  ],
+  "penalty_share": [
+   "0",
+   "0"
+  ],
+  "final_state": [
+   "Revealed",
+   "Revealed"
+  ],
+  "seller_usdc": "0",
+  "seller_tokens_back": "100000000000000000000000",
+  "dust": "0"
+ }
+}
