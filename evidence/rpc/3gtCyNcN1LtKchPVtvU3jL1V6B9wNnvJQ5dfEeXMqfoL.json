@@ -1,0 +1,178 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-10T14:58:01.939Z",
+    "rpc_url": "https://free.rpc.fastnear.com",
+    "method": "EXPERIMENTAL_tx_status",
+    "label": "snapshot, not live",
+    "source": "rpc"
+  },
+  "result": {
+    "final_execution_status": "FINAL",
+    "receipts": [
+      {
+        "predecessor_id": "system",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              {
+                "Transfer": {
+                  "deposit": "5525333639784000000000"
+                }
+              }
+            ],
+            "gas_price": "0",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "spike.tenderseal.near",
+            "signer_public_key": "ed25519:DDfG7ZTDQwERtTekDDB3jozeT4k2sswttvUihqhftcqz"
+          }
+        },
+        "receipt_id": "5LQq4iX5a8qmpRrYYANTveLfz96NB7qepDYehZkwUwKX",
+        "receiver_id": "spike.tenderseal.near"
+      }
+    ],
+    "receipts_outcome": [
+      {
+        "block_hash": "5JZSyE6cMV4i6Gh5i29NWSk8x9oR472jp3SdwoQeNnt9",
+        "id": "BHvUXx7u7RuML5NL41YGSLyVVnFnF4ycdHUjDstjYaav",
+        "outcome": {
+          "executor_id": "spike.tenderseal.near",
+          "gas_burnt": 6139259599760,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [
+            "5LQq4iX5a8qmpRrYYANTveLfz96NB7qepDYehZkwUwKX"
+          ],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "613925959976000000000"
+        },
+        "proof": [
+          {
+            "direction": "Left",
+            "hash": "7NDwEbRNkpoWTywVkAoaBfZV1QmB9MRDEeUH6HSZEhNf"
+          },
+          {
+            "direction": "Right",
+            "hash": "16mmpzbb1H4tmsETJ88dqWcQoN2vyrAM29vsYPKjvSz"
+          },
+          {
+            "direction": "Right",
+            "hash": "Czg6m7uyx7RGadT7yS6KXCg1dNPa2b8XuxGDcaqCQJ8C"
+          },
+          {
+            "direction": "Right",
+            "hash": "EAt1LXnFJoWmzns1pcKc3AAWsCLvyMLbyj4Cg6xDEBQm"
+          }
+        ]
+      },
+      {
+        "block_hash": "6P8JFuK4JQSLjG2QLvWg3s5MWBRydDF8QasGfqTfQmFT",
+        "id": "5LQq4iX5a8qmpRrYYANTveLfz96NB7qepDYehZkwUwKX",
+        "outcome": {
+          "executor_id": "spike.tenderseal.near",
+          "gas_burnt": 223182562500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              {
+                "local": "hvTCpDpzNAZ2Ft54gekUMyXVikp1ckCAxmE8bNmrHX3"
+              }
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "0"
+        },
+        "proof": [
+          {
+            "direction": "Right",
+            "hash": "FwPemEXHNoTAyL4LXDniZqaXtStddt5J58jK59qx74rr"
+          },
+          {
+            "direction": "Right",
+            "hash": "21tPhjKNJh736JYPY5P6M3TD7Y1KrEJynjGGTGU1JPcG"
+          },
+          {
+            "direction": "Right",
+            "hash": "9UAfaMFunr8bXxotE6C1uKPyfPB3tPhMDXtmKK7xxrA3"
+          },
+          {
+            "direction": "Left",
+            "hash": "5Bfxr3AgGUocCg8daNaouG9a7MAjhPaYAwGuAzZiEDAr"
+          }
+        ]
+      }
+    ],
+    "status": {
+      "SuccessValue": ""
+    },
+    "transaction": {
+      "actions": [
+        {
+          "DeployContract": {
+            "code": "CnurpV+R10tHp4kBNir4kXJWzyeQKw1mmg3THPJgtpY="
+          }
+        }
+      ],
+      "hash": "3gtCyNcN1LtKchPVtvU3jL1V6B9wNnvJQ5dfEeXMqfoL",
+      "nonce": 223931019000001,
+      "priority_fee": 0,
+      "public_key": "ed25519:DDfG7ZTDQwERtTekDDB3jozeT4k2sswttvUihqhftcqz",
+      "receiver_id": "spike.tenderseal.near",
+      "signature": "ed25519:2KjE2YWNA7Zerd5UufbEVg5X8pG3aGF2hp5RMQ6km4nQHRb4RYsd1D7Hhj6Ra72BaXqmgjD1RZNhaVpbN3DbdEzE",
+      "signer_id": "spike.tenderseal.near"
+    },
+    "transaction_outcome": {
+      "block_hash": "5JZSyE6cMV4i6Gh5i29NWSk8x9oR472jp3SdwoQeNnt9",
+      "id": "3gtCyNcN1LtKchPVtvU3jL1V6B9wNnvJQ5dfEeXMqfoL",
+      "outcome": {
+        "executor_id": "spike.tenderseal.near",
+        "gas_burnt": 909674179460,
+        "logs": [],
+        "metadata": {
+          "gas_profile": null,
+          "version": 1
+        },
+        "receipt_ids": [
+          "BHvUXx7u7RuML5NL41YGSLyVVnFnF4ycdHUjDstjYaav"
+        ],
+        "status": {
+          "SuccessReceiptId": "BHvUXx7u7RuML5NL41YGSLyVVnFnF4ycdHUjDstjYaav"
+        },
+        "tokens_burnt": "90967417946000000000"
+      },
+      "proof": [
+        {
+          "direction": "Right",
+          "hash": "3Rj8Bf6xpVJKMpwXP4jXNy2iwpsiA3HA4XZTZLRLdAGt"
+        },
+        {
+          "direction": "Right",
+          "hash": "16mmpzbb1H4tmsETJ88dqWcQoN2vyrAM29vsYPKjvSz"
+        },
+        {
+          "direction": "Right",
+          "hash": "Czg6m7uyx7RGadT7yS6KXCg1dNPa2b8XuxGDcaqCQJ8C"
+        },
+        {
+          "direction": "Right",
+          "hash": "EAt1LXnFJoWmzns1pcKc3AAWsCLvyMLbyj4Cg6xDEBQm"
+        }
+      ]
+    }
+  }
+}

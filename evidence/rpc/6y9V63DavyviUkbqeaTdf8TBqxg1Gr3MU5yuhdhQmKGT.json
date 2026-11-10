@@ -1,0 +1,217 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-10T14:58:01.870Z",
+    "rpc_url": "https://free.rpc.fastnear.com",
+    "method": "EXPERIMENTAL_tx_status",
+    "label": "snapshot, not live",
+    "source": "rpc"
+  },
+  "result": {
+    "final_execution_status": "FINAL",
+    "receipts": [
+      {
+        "predecessor_id": "tenderseal.near",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              "CreateAccount",
+              {
+                "Transfer": {
+                  "deposit": "2000000000000000000000000"
+                }
+              },
+              {
+                "AddKey": {
+                  "access_key": {
+                    "nonce": 0,
+                    "permission": "FullAccess"
+                  },
+                  "public_key": "ed25519:DDfG7ZTDQwERtTekDDB3jozeT4k2sswttvUihqhftcqz"
+                }
+              }
+            ],
+            "gas_price": "1000000000",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "tenderseal.near",
+            "signer_public_key": "ed25519:KKazXfgAN3uH53AiDpt5imcawMs8qHvSYvJitncw8Uy"
+          }
+        },
+        "receipt_id": "7wnWxPdxwukrFMqfEiXoXWpxMSCV9iAu4LEo6VLQgcJW",
+        "receiver_id": "spike.tenderseal.near"
+      },
+      {
+        "predecessor_id": "system",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              {
+                "Transfer": {
+                  "deposit": "492452918750000000000"
+                }
+              }
+            ],
+            "gas_price": "0",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "tenderseal.near",
+            "signer_public_key": "ed25519:KKazXfgAN3uH53AiDpt5imcawMs8qHvSYvJitncw8Uy"
+          }
+        },
+        "receipt_id": "3N56aows649pkg55JsyKfdTsd3fFKim5NCcUK6GgQeYj",
+        "receiver_id": "tenderseal.near"
+      }
+    ],
+    "receipts_outcome": [
+      {
+        "block_hash": "FSPvHDox2p38ywqVdSE65mUvttV2ruRVSeuBfoy6keQq",
+        "id": "7wnWxPdxwukrFMqfEiXoXWpxMSCV9iAu4LEo6VLQgcJW",
+        "outcome": {
+          "executor_id": "spike.tenderseal.near",
+          "gas_burnt": 7524947687500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null,
+              null,
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [
+            "3N56aows649pkg55JsyKfdTsd3fFKim5NCcUK6GgQeYj"
+          ],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "7032494768750000000000"
+        },
+        "proof": [
+          {
+            "direction": "Left",
+            "hash": "EtoKwQoVP8KPXSuRFTN8KwYueUS6nuoAfZdEwhWfFUxh"
+          },
+          {
+            "direction": "Left",
+            "hash": "FGhngppGENGprg4VCPP32n8TtKVkM8K8PW1HttzqQBd5"
+          },
+          {
+            "direction": "Right",
+            "hash": "8XKrAzXE2wXPJe8xviDr6PemT5tiDT9MSSeW5XMJjUhh"
+          },
+          {
+            "direction": "Right",
+            "hash": "AGV8uYA4nvtqLL9HmmBb9a3nzFRNxXDqqUUCYqwu9dyU"
+          }
+        ]
+      },
+      {
+        "block_hash": "3BXjt7ZFAWiUjE2fBdXnb9vEF4Qtwgf5iwSAhQpLbx9P",
+        "id": "3N56aows649pkg55JsyKfdTsd3fFKim5NCcUK6GgQeYj",
+        "outcome": {
+          "executor_id": "tenderseal.near",
+          "gas_burnt": 223182562500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "0"
+        },
+        "proof": [
+          {
+            "direction": "Right",
+            "hash": "Ahq4KRywqyRZWCcXrGgsPNUVVwNqveFnq5AmvGooS948"
+          },
+          {
+            "direction": "Right",
+            "hash": "81EApjZLqPUUmKYkLH62fuhJEJtZTUuAuphAxXKyZkNp"
+          },
+          {
+            "direction": "Left",
+            "hash": "FCemu1qPHxnjhFrJgo7owa64LyWRwHoZ8VhB3jdBxW1y"
+          }
+        ]
+      }
+    ],
+    "status": {
+      "SuccessValue": ""
+    },
+    "transaction": {
+      "actions": [
+        "CreateAccount",
+        {
+          "Transfer": {
+            "deposit": "2000000000000000000000000"
+          }
+        },
+        {
+          "AddKey": {
+            "access_key": {
+              "nonce": 0,
+              "permission": "FullAccess"
+            },
+            "public_key": "ed25519:DDfG7ZTDQwERtTekDDB3jozeT4k2sswttvUihqhftcqz"
+          }
+        }
+      ],
+      "hash": "6y9V63DavyviUkbqeaTdf8TBqxg1Gr3MU5yuhdhQmKGT",
+      "nonce": 223930048000002,
+      "priority_fee": 0,
+      "public_key": "ed25519:KKazXfgAN3uH53AiDpt5imcawMs8qHvSYvJitncw8Uy",
+      "receiver_id": "spike.tenderseal.near",
+      "signature": "ed25519:9T3YeHyEsSwdd4sR7fuExK1va7169S1UbshfUcoyfXKeYMYVYxPcxKVGMb3bZNE6e8w84RBQbwLuZ3QinhmEx8m",
+      "signer_id": "tenderseal.near"
+    },
+    "transaction_outcome": {
+      "block_hash": "8wdrPySUPyc7vTxtc4DuCKqFBL6VXzXJP6HzEKciMm3W",
+      "id": "6y9V63DavyviUkbqeaTdf8TBqxg1Gr3MU5yuhdhQmKGT",
+      "outcome": {
+        "executor_id": "tenderseal.near",
+        "gas_burnt": 824947687500,
+        "logs": [],
+        "metadata": {
+          "gas_profile": null,
+          "version": 1
+        },
+        "receipt_ids": [
+          "7wnWxPdxwukrFMqfEiXoXWpxMSCV9iAu4LEo6VLQgcJW"
+        ],
+        "status": {
+          "SuccessReceiptId": "7wnWxPdxwukrFMqfEiXoXWpxMSCV9iAu4LEo6VLQgcJW"
+        },
+        "tokens_burnt": "82494768750000000000"
+      },
+      "proof": [
+        {
+          "direction": "Right",
+          "hash": "CpNHZyRQSHy4nouFkqtYZdnWEDaVyMUQf9MXhgwCGSuW"
+        },
+        {
+          "direction": "Left",
+          "hash": "8XnpJ2AwN7ACuKnH9VSBZCYi7Z3yCMpgF7sqsv1N4J7S"
+        },
+        {
+          "direction": "Right",
+          "hash": "7uZVVB76wZzYWk7bU497b6tQ33KFNeuYnVThwgsGPviJ"
+        },
+        {
+          "direction": "Right",
+          "hash": "BNFw8R5FCnuRNWhcRiLyxdvaULYBohAMHGnxMd2VRoCs"
+        }
+      ]
+    }
+  }
+}

@@ -95,5 +95,39 @@
       "evidence/spikes/s2-result.json",
       "evidence/rpc/E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b.json"
     ]
+  },
+  {
+    "gate": "S6",
+    "date_utc": "2026-11-10T14:58:01.939Z",
+    "result": "PASS",
+    "chosen_path": "spike deploy, no Link Error",
+    "tx_hashes": [
+      "6y9V63DavyviUkbqeaTdf8TBqxg1Gr3MU5yuhdhQmKGT",
+      "3gtCyNcN1LtKchPVtvU3jL1V6B9wNnvJQ5dfEeXMqfoL"
+    ],
+    "blocks": {},
+    "notes": "spike.tenderseal.near created with 2 NEAR, tender_spike.wasm sha256 0a7baba5…b696 deployed (code hvTCpDpz…HX3), ping ok",
+    "evidence_files": [
+      "evidence/rpc/6y9V63DavyviUkbqeaTdf8TBqxg1Gr3MU5yuhdhQmKGT.json",
+      "evidence/rpc/3gtCyNcN1LtKchPVtvU3jL1V6B9wNnvJQ5dfEeXMqfoL.json"
+    ]
+  },
+  {
+    "gate": "S6-ckd",
+    "date_utc": "2026-11-10T14:58:02.405Z",
+    "result": "PASS",
+    "chosen_path": "identity",
+    "tx_hashes": [
+      "EFtUJfnVANFgbv1Mkp9y3o7yxt3Xy82d6Z96DXfBNzNP"
+    ],
+    "blocks": {
+      "request": 223931685,
+      "response": 223931691
+    },
+    "notes": "contract-initiated CKD: predecessor spike.tenderseal.near, 6 blocks, s1-check identity PASS, wrong app_id rejected",
+    "evidence_files": [
+      "evidence/spikes/s6-ckd.json",
+      "evidence/rpc/EFtUJfnVANFgbv1Mkp9y3o7yxt3Xy82d6Z96DXfBNzNP.json"
+    ]
   }
 ]
