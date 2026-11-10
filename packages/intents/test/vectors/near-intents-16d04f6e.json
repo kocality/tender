@@ -1,0 +1,33 @@
+{
+  "_source": "near/intents @16d04f6ec4401263f8914638710260da50bb46b0 (tests copied verbatim) + intents-sdk 0.95.0 golden nonce (tasks/WS3.md F10)",
+  "versioned_nonce": {
+    "_source": "intents-sdk 0.95.0 VersionedNonceBuilder.encodeNonce",
+    "salt_hex": "252812b3",
+    "deadline_iso": "2026-11-13T02:10:00.000Z",
+    "random15_hex": "070707070707070707070707070707",
+    "nonce_b64": "Vij2xgAlKBKzALC4X8145xgHBwcHBwcHBwcHBwcHBwc="
+  },
+  "erc191_recover": {
+    "_source": "crates/signatures/erc191/src/lib.rs recover_ok",
+    "public_key_uncompressed_hex": "85a66984273f338ce4ef7b85e5430b008307e8591bb7c1b980852cf6423770b801f41e9438155eb53a5e20f748640093bb42ae3aeca035f7b7fd7a1a21f22f68",
+    "msg": "Hello world!",
+    "signature_hex": "7800a70d05cde2c49ed546a6ce887ce6027c2c268c0285f6efef0cdfc4366b23643790f67a86468ee8301ed12cfffcb07c6530f90a9327ec057800fabd332e4701"
+  },
+  "raw_ed25519": {
+    "_source": "contracts/defuse/core/src/payload/multi.rs tests::raw_ed25519",
+    "_note": "Fields of the upstream MultiPayload JSON, unchanged; the test reassembles it. The signature is stored without its ed25519: prefix because the secret scanner rule for base58 private keys also matches 64-byte signatures.",
+    "standard": "raw_ed25519",
+    "payload": "{\"signer_id\":\"74affa71ab030d400fdfa1bed033dfa6fd3ae34f92d17c046ebe368e80d53751\",\"verifying_contract\":\"intents.near\",\"deadline\":{\"timestamp\":1732035219},\"nonce\":\"XVoKfmScb3G+XqH9ke/fSlJ/3xO59sNhCxhpG821BH8=\",\"intents\":[{\"intent\":\"token_diff\",\"diff\":{\"nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near\":\"-1000\",\"nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near\":\"998\"}}]}",
+    "public_key": "ed25519:8rVvtHWFr8hasdQGGD5WiQBTyr4iH2ruEPPVfj491RPN",
+    "signature_b58": "3vtbNQJHZfuV1s5DykzyjkbNLc583hnkrhTz57eDhd966iqzkor6Twgr4Loh2C195SCSEsiGfrd6KcxpjNq9ZbVj",
+    "intent_hash_b58": "8LKE47o44ybZQR9ozLyDnvMDTh4Ao5ipy2mJWsYByG5Q"
+  },
+  "nep413_verify": {
+    "_source": "crates/signatures/nep413/src/lib.rs verify_ok",
+    "public_key_hex": "e2e9cb7ac57cb46d4da1ce1d1cc2c33bdfe17407c517916b522724a8ea2c6c50",
+    "message": "Hello, world!",
+    "nonce_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+    "recipient": "intents.near",
+    "signature_hex": "e2ff6254871a3fec1853c167b42f0f14248c4cf7fef5452dc24d8dbdc5c4bf183ab707322b4d782d5f5a05571bae476c5f7ee41c473f3002e600865e46b75d0f"
+  }
+}
