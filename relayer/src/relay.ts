@@ -155,7 +155,6 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
     if (!v.ok) return fail(v.status, v.code, v.detail);
     const signed = v.signed as unknown[];
     const signers = [...new Set(v.signers ?? [])];
-    for (const id of signers) if (!deps.limiter.hit(`signer:${id}`, deps.now())) return fail(429, "rate_limited", "too many requests for this signer, try again in a minute");
 
     const key = createHash("sha256").update(signed.map((s) => String((s as { signature?: unknown }).signature)).join(",")).digest("hex");
     const refusedUntil = failed.get(key);
@@ -168,9 +167,7 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
       const o = await running; // a duplicate (an app retry, a timeout resend) gets the first answer and costs nothing
       return json(o.status, o.body);
     }
-    if (signers.some((id) => busySigners.has(id))) return fail(409, "signer_busy", "another payload of this signer is being relayed, retry in a few seconds");
-
-    for (const id of signers) busySigners.add(id);
+    let holds = false; // this request marked its signers busy
     const run = (async (): Promise<Outcome> => {
       try {
         let health: RelayHealth | undefined;
@@ -194,6 +191,11 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
 
         const sim = await deps.simulate(signed);
         if (!sim.ok) return failBody(400, "simulate_failed", sim.error);
+        // The signer id is only proven by simulate: a forged body naming someone must not use up or lock their slot.
+        for (const id of signers) if (!deps.limiter.hit(`signer:${id}`, deps.now())) return failBody(429, "rate_limited", "too many requests for this signer, try again in a minute");
+        if (signers.some((id) => busySigners.has(id))) return failBody(409, "signer_busy", "another payload of this signer is being relayed, retry in a few seconds");
+        for (const id of signers) busySigners.add(id);
+        holds = true;
 
         const out = await deps.execute(signed);
         log(`relay signers=${signers.join(",")} tx=${out.txHash || "none"} ok=${out.ok}`); // never the payload or signature
@@ -211,7 +213,7 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
       return json(o.status, o.body);
     } finally {
       inFlight.delete(key);
-      for (const id of signers) busySigners.delete(id);
+      if (holds) for (const id of signers) busySigners.delete(id);
     }
   };
 }

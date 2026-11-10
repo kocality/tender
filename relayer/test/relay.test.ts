@@ -228,6 +228,28 @@ describe("gas griefing: the relayer only pays for what the app sends (REL-01)", 
     for (let i = 0; i < 20; i++) expect((await h(post(body(raw({ nonce: `n${i}` })), { "x-forwarded-for": `10.0.0.${i}` }))).status).toBe(200);
     expect((await h(post(body(raw({ nonce: "n21" })), { "x-forwarded-for": "10.0.1.1" }))).status).toBe(429);
   });
+  const forgedSim = (gate?: Promise<void>) =>
+    vi.fn(async (s: unknown[]) => {
+      if (!JSON.stringify(s).includes("forged")) return { ok: true } as const;
+      await gate;
+      return { ok: false, error: "invalid signature" } as const;
+    });
+  it("forged payloads naming a signer (simulate refuses them) do not use up that signer's bucket", async () => {
+    sim = forgedSim();
+    const h = make();
+    for (let i = 0; i < 20; i++) expect((await h(post(body({ ...raw(), signature: `ed25519:forged${i}` }), { "x-forwarded-for": "6.6.6.6" }))).status).toBe(400);
+    expect((await h(post(body(raw()), { "x-forwarded-for": "1.2.3.4" }))).status).toBe(200);
+  });
+  it("a forged payload still in simulate does not make the signer it names busy", async () => {
+    let release!: () => void;
+    sim = forgedSim(new Promise<void>((r) => (release = r)));
+    const h = make();
+    const forged = h(post(body({ ...raw(), signature: "ed25519:forged" }), { "x-forwarded-for": "6.6.6.6" }));
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await h(post(body(raw()), { "x-forwarded-for": "1.2.3.4" }))).status).toBe(200);
+    release();
+    expect((await forged).status).toBe(400);
+  });
 });
 
 describe("idempotency (REL-02)", () => {
