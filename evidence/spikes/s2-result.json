@@ -1,0 +1,18 @@
+{
+ "gate": "S2",
+ "path": "tender-spike/s2/0950355d57958129",
+ "tx_hash": "E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b",
+ "mode": "identity",
+ "response": {
+  "big_y": "bls12381g1:7THJqJME2Q4P8Dj9mMiWQKjQUyH4FQXBnXrHbXEUEU9CTGLpGEjjTVjFK75QzWiCbQ",
+  "big_c": "bls12381g1:6wgUtLRyz4B3FQg4VetvgQ7vFJoprdmdKb6t41zEKwdrQHpF8tCesgsqZXK916MJNQ"
+ },
+ "checks": {
+  "checkKey": true,
+  "plaintext_equal": true,
+  "wrong_key": "FO check failed",
+  "vectors": "4/4"
+ },
+ "result": "PASS",
+ "date_utc": "2026-11-10T14:43:54Z"
+}

@@ -76,5 +76,24 @@
       "evidence/spikes/s1-identity.nearblocks.json",
       "evidence/spikes/s1-generator.nearblocks.json"
     ]
+  },
+  {
+    "gate": "S2",
+    "date_utc": "2026-11-10T14:44:05.111Z",
+    "result": "PASS",
+    "chosen_path": "identity",
+    "tx_hashes": [
+      "E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b"
+    ],
+    "blocks": {
+      "request": 223930227,
+      "response": 223930234
+    },
+    "notes": "ciphertext created 13:37:33Z before the key request; live identity-mode CKD decrypts it; wrong key rejected; vectors 4/4",
+    "evidence_files": [
+      "evidence/spikes/s2-ct.json",
+      "evidence/spikes/s2-result.json",
+      "evidence/rpc/E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b.json"
+    ]
   }
 ]
