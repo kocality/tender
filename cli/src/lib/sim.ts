@@ -107,6 +107,18 @@ export interface World {
   mpcThreshold: number;
   mpcParticipants: number;
   currentSalt: string;
+  /** view_account(contract).code_hash. */
+  codeHash: string;
+  /** Public keys on the contract account (view_access_key_list). */
+  accessKeys: string[];
+  /** Tender's Intents balances by token id (missing = 0). */
+  balances: Record<string, bigint>;
+  teeAccounts: number;
+  allowedImages: number;
+  /** contract_source_metadata; null = the view is missing. */
+  sourceMetadata: object | null;
+  /** Further sales of the same contract (verify --keys, #19). */
+  more: { sale: SaleView; bids: BidView[]; result: ResultView | null }[];
 }
 
 export const SIM_USDC = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
@@ -286,6 +298,14 @@ export function buildWorld(opts: WorldOptions = {}): World {
     mpcThreshold: 11,
     mpcParticipants: 16,
     currentSalt: '252812b3',
+    codeHash: '11111111111111111111111111111111',
+    accessKeys: [],
+    // What Tender holds in Intents: the escrow and supply of an unsettled sale, nothing once everything is paid.
+    balances: state === 'Open' || state === 'Keyed' ? { [SIM_USDC]: escrowTotal, [token]: supply } : {},
+    teeAccounts: 17,
+    allowedImages: 1,
+    sourceMetadata: null,
+    more: [],
   };
 }
 
@@ -314,29 +334,37 @@ export function fakeRpc(world: World): typeof fetch {
     const known = [world.contract, world.mpc, world.intents];
     if (!known.includes(account)) return rpcError('UNKNOWN_ACCOUNT', `account ${account} does not exist while viewing`);
     if (p.request_type === 'view_account') {
-      return { result: { amount: '0', locked: '0', code_hash: '11111111111111111111111111111111', storage_usage: 0, block_height: Number(world.block.height) } };
+      return { result: { amount: '0', locked: '0', code_hash: account === world.contract ? world.codeHash : '11111111111111111111111111111111', storage_usage: 0, block_height: Number(world.block.height) } };
     }
-    if (p.request_type === 'view_access_key_list') return { result: { keys: [], block_height: Number(world.block.height) } };
+    if (p.request_type === 'view_access_key_list') {
+      const keys = account === world.contract ? world.accessKeys.map((public_key) => ({ public_key, access_key: { nonce: 0, permission: 'FullAccess' } })) : [];
+      return { result: { keys, block_height: Number(world.block.height) } };
+    }
     if (p.request_type !== 'call_function') return rpcError('UNSUPPORTED', String(p.request_type));
     const method = p.method_name as string;
     const args = JSON.parse(Buffer.from(p.args_base64 as string, 'base64').toString('utf8') || '{}') as Record<string, unknown>;
-    const s = world.sale;
+    const all = [{ sale: world.sale, bids: world.bids, result: world.result }, ...world.more];
+    const one = all.find((x) => x.sale.id === args.id);
     if (account === world.contract) {
       switch (method) {
         case 'get_config':
           return { result: viewResult(world.config) };
         case 'get_sale':
-          return { result: viewResult(args.id === s.id ? s : null) };
+          return { result: viewResult(one?.sale ?? null) };
         case 'get_sales': {
           const from = Number(args.from ?? 0);
-          return { result: viewResult([s].filter((x) => Number(x.id) >= from).slice(0, Number(args.limit ?? 50))) };
+          const sales = all.map((x) => x.sale).sort((a, b) => Number(a.id) - Number(b.id));
+          return { result: viewResult(sales.filter((x) => Number(x.id) >= from).slice(0, Number(args.limit ?? 50))) };
         }
         case 'get_bids': {
           const from = Number(args.from ?? 0);
-          return { result: viewResult(args.id === s.id ? world.bids.slice(from, from + Number(args.limit ?? 64)) : []) };
+          return { result: viewResult(one ? one.bids.slice(from, from + Number(args.limit ?? 64)) : []) };
         }
         case 'get_result':
-          return { result: viewResult(args.id === s.id ? world.result : null) };
+          return { result: viewResult(one?.result ?? null) };
+        case 'contract_source_metadata':
+          if (world.sourceMetadata) return { result: viewResult(world.sourceMetadata) };
+          break;
         case 'get_key_log': {
           const from = Number(args.from ?? 0);
           return { result: viewResult(world.keyLog.slice(from, from + Number(args.limit ?? 100))) };
@@ -348,6 +376,10 @@ export function fakeRpc(world: World): typeof fetch {
           return { result: viewResult(world.mpcVersion) };
         case 'public_key':
           return { result: viewResult(world.mpk) };
+        case 'get_tee_accounts':
+          return { result: viewResult(Array.from({ length: world.teeAccounts }, (_, i) => ({ account_id: `node${i}.near` }))) };
+        case 'allowed_docker_image_hashes':
+          return { result: viewResult(Array.from({ length: world.allowedImages }, (_, i) => ({ image_hash: String(i).padStart(64, '0') }))) };
         case 'state':
           return {
             result: viewResult({
@@ -360,7 +392,7 @@ export function fakeRpc(world: World): typeof fetch {
         case 'current_salt':
           return { result: viewResult(world.currentSalt) };
         case 'mt_batch_balance_of':
-          return { result: viewResult((args.token_ids as string[]).map(() => '0')) };
+          return { result: viewResult((args.token_ids as string[]).map((t) => (world.balances[t] ?? 0n).toString())) };
       }
     }
     return rpcError('CONTRACT_EXECUTION_ERROR', `wasm execution failed: MethodResolveError(MethodNotFound) ${method}`);

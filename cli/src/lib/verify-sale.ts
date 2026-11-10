@@ -1,0 +1,501 @@
+// verify --sale N: 25 checks recomputed from the contract's current state, all read at one pinned block (P-6).
+// The mandatory checks need no archival RPC, NearBlocks or 1Click; those three only ever produce WARN.
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { type BidState, type ClearResult, clear } from '@tender/clearing';
+import { type DecryptedBid, type G1Point, appId, checkKey, decryptBids, keyFromCkd } from '@tender/seal';
+import type { ResolvedNetwork } from './config.js';
+import { accountUrl, blockUrl, txUrl } from './explorer.js';
+import { formatUsdc, priceUnit, utcFromNs } from './format.js';
+import { fetchKeyReceipts } from './nearblocks.js';
+import { fetchStatus } from './oneclick.js';
+import type { Check, Status } from './report.js';
+import type { Rpc } from './rpc.js';
+import { type BidView, IntentsViews, MpcViews, type SaleView, type SourceMetadata, TenderViews } from './views.js';
+import { FORBIDDEN_IMPORT_RE, codeHashB58, wasmImports } from './wasm.js';
+
+export const CANCELLED_NEVER = 'Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)';
+
+/** One row of evidence/mainnet.json (written by the relayer's record script). */
+export interface EvidenceRow {
+  sale: string;
+  step: string;
+  tx_hash: string;
+  signer_id?: string;
+  network?: 'mainnet' | 'testnet';
+  contract?: string;
+  deposit_address?: string;
+  outcome?: 'success' | 'failure';
+  expected?: 'success' | 'failure';
+}
+
+export type RebuildResult = { kind: 'hash'; codeHash: string; rev: string } | { kind: 'unavailable'; reason: string };
+
+export interface VerifyCtx {
+  net: ResolvedNetwork;
+  saleId: bigint;
+  rpc: Rpc;
+  archival: Rpc;
+  /** The pinned block every view reads; its timestamp is "now". */
+  block: { height: bigint; timestamp_ns: bigint };
+  wasm: { path: string; bytes: Uint8Array<ArrayBuffer> | null };
+  /** rows = null when the evidence file does not exist. */
+  evidence: { path: string; rows: EvidenceRow[] | null };
+  /** Domain-2 MPC key the repository pins for this network. */
+  repoMpk: string;
+  /** Set only with --rebuild. */
+  rebuild?: (meta: SourceMetadata) => Promise<RebuildResult>;
+  /** fetch for NearBlocks and 1Click (tests). */
+  fetchImpl?: typeof fetch;
+}
+
+export class SaleNotFound extends Error {}
+
+/** Evidence tag of a sale: rehearsal-contract rows are tagged R, the locked contract's rows by sale id. */
+export function evidenceRows(rows: EvidenceRow[], net: ResolvedNetwork, saleId: bigint): EvidenceRow[] {
+  const tag = /^rehearsal\./.test(net.contract) ? 'R' : saleId.toString();
+  return rows.filter((r) => r.sale === tag && (r.network ?? 'mainnet') === net.network && (!r.contract || r.contract === net.contract));
+}
+
+const big = (s: string | null | undefined): bigint => BigInt(s ?? '0');
+const sum = (xs: bigint[]): bigint => xs.reduce((a, x) => a + x, 0n);
+const short = (s: string): string => (s.length > 24 ? `${s.slice(0, 16)}…${s.slice(-4)}` : s);
+const settled = (s: SaleView) => s.state === 'Finalized' || s.state === 'Cancelled';
+
+async function attempt<T>(f: () => Promise<T>): Promise<{ ok: true; v: T } | { ok: false; err: string }> {
+  try {
+    return { ok: true, v: await f() };
+  } catch (e) {
+    return { ok: false, err: (e as Error).message.split('\n')[0]!.slice(0, 160) };
+  }
+}
+
+function txOutcome(r: unknown): 'success' | 'failure' | 'pending' {
+  const st = (r as { status?: Record<string, unknown> } | null)?.status ?? {};
+  if ('SuccessValue' in st) return 'success';
+  if ('Failure' in st) return 'failure';
+  return 'pending';
+}
+
+export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
+  const { net, saleId, rpc } = ctx;
+  const at = ctx.block.height;
+  const now = ctx.block.timestamp_ns;
+  const views = new TenderViews(rpc, net.contract);
+
+  // Mandatory state: any provider failure here propagates (verify.ts turns it into exit 2).
+  const [config, sale] = await Promise.all([views.config(at), views.sale(saleId, at)]);
+  if (!sale) throw new SaleNotFound(`sale ${saleId} not found on ${net.contract}`);
+  const mpc = new MpcViews(rpc, config.mpc);
+  const [bids, result, sales, keyLog, account, keys, mpcVersion, mpcState, liveMpk] = await Promise.all([
+    views.bids(saleId, at),
+    views.result(saleId, at),
+    views.sales(at),
+    views.keyLog(at),
+    rpc.viewAccount(net.contract, at),
+    rpc.viewAccessKeyList(net.contract, at),
+    mpc.version(at),
+    mpc.state(at),
+    mpc.publicKey(Number(config.domain_id), at),
+  ]);
+  const [tee, images, meta] = await Promise.all([
+    attempt(() => mpc.teeAccounts(at)),
+    attempt(() => mpc.allowedImages(at)),
+    attempt(() => views.sourceMetadata(at)),
+  ]);
+
+  const checks: Check[] = [];
+  const add = (n: number, name: string, status: Status, detail: string, link?: string) =>
+    checks.push({ n, name, status, detail, ...(link ? { link } : {}) });
+  const acct = accountUrl(net.network, net.contract);
+  const unit = priceUnit(sale);
+  const finalized = sale.state === 'Finalized';
+
+  // #1 mpc-key
+  {
+    const bad: string[] = [];
+    if (config.mpc !== net.mpc) bad.push(`config.mpc ${config.mpc} ≠ ${net.mpc}`);
+    if (config.domain_id !== '2') bad.push(`domain_id ${config.domain_id} ≠ 2`);
+    if (config.mpc_public_key !== ctx.repoMpk) bad.push(`contract key ${short(config.mpc_public_key)} ≠ repo constant ${short(ctx.repoMpk)}`);
+    if (liveMpk !== ctx.repoMpk) bad.push(`live ${config.mpc}.public_key ${short(liveMpk)} ≠ repo constant`);
+    if (bad.length) add(1, 'mpc-key', 'FAIL', bad.join('; '));
+    else add(1, 'mpc-key', 'PASS', `domain 2 key ${short(liveMpk)} = repo constant = live ${config.mpc} = contract config`);
+  }
+
+  // #2 mpc-network (TEE counts are information only)
+  {
+    const parts = [`${config.mpc} ${mpcVersion} · threshold ${mpcState.threshold ?? '?'} of ${mpcState.participants ?? '?'} (live)`];
+    parts.push(tee.ok ? `TEE accounts ${tee.v}` : `TEE accounts unavailable (${tee.err})`);
+    parts.push(images.ok ? `allowed images ${images.v}` : `allowed images unavailable (${images.err})`);
+    let status: Status = 'PASS';
+    if (mpcState.status !== 'Running') {
+      status = 'WARN';
+      parts.unshift(`MPC state is ${mpcState.status}, not Running`);
+    }
+    if (!tee.ok || !images.ok) status = 'WARN';
+    add(2, 'mpc-network', status, parts.join(' · '));
+  }
+
+  // #3 code-hash
+  const localHash = ctx.wasm.bytes ? codeHashB58(ctx.wasm.bytes) : null;
+  if (!localHash) add(3, 'code-hash', 'WARN', `local wasm not found: ${ctx.wasm.path} (pass --wasm <file>)`, acct);
+  else if (localHash === account.code_hash) add(3, 'code-hash', 'PASS', `${account.code_hash} = sha256(${ctx.wasm.path})`, acct);
+  else add(3, 'code-hash', 'FAIL', `on chain ${account.code_hash} ≠ sha256(${ctx.wasm.path}) ${localHash}`, acct);
+
+  // #4 no-access-keys
+  if (keys.keys.length === 0) add(4, 'no-access-keys', 'PASS', `${net.contract} has no access keys: nobody can sign for it or redeploy it`, acct);
+  else add(4, 'no-access-keys', 'FAIL', `${keys.keys.length} access key(s): ${keys.keys.map((k) => k.public_key).join(', ')}`, acct);
+
+  // #5 wasm-imports
+  if (!ctx.wasm.bytes) add(5, 'wasm-imports', 'WARN', `local wasm not found: ${ctx.wasm.path}`);
+  else {
+    const imports = wasmImports(ctx.wasm.bytes);
+    const bad = imports.filter((i) => i.module === 'env' && FORBIDDEN_IMPORT_RE.test(i.name)).map((i) => i.name);
+    if (bad.length) add(5, 'wasm-imports', 'FAIL', `forbidden host functions imported: ${bad.join(', ')}`);
+    else add(5, 'wasm-imports', 'PASS', `${imports.length} imports, none can add a key, deploy code or delete the account`);
+  }
+
+  // #6 reproducible-build
+  {
+    const snap = meta.ok ? meta.v.build_info?.source_code_snapshot : undefined;
+    const src = meta.ok ? (snap ? `source ${snap}` : 'contract_source_metadata has no source_code_snapshot') : `contract_source_metadata unavailable (${meta.err})`;
+    if (!ctx.rebuild) add(6, 'reproducible-build', 'WARN', `rebuild not performed; run with --rebuild (Docker + cargo-near 0.23.0) · ${src}`);
+    else if (!meta.ok || !snap) add(6, 'reproducible-build', 'WARN', `cannot rebuild: ${src}`);
+    else {
+      const r = await ctx.rebuild(meta.v);
+      if (r.kind === 'unavailable') add(6, 'reproducible-build', 'WARN', `rebuild not performed: ${r.reason}`);
+      else if (r.codeHash === account.code_hash) add(6, 'reproducible-build', 'PASS', `Docker rebuild of ${r.rev.slice(0, 12)} → ${r.codeHash} = on-chain code_hash`);
+      else add(6, 'reproducible-build', 'FAIL', `Docker rebuild of ${r.rev.slice(0, 12)} → ${r.codeHash} ≠ on-chain ${account.code_hash}`);
+    }
+  }
+
+  // #7 init-before-sale
+  if (big(config.init_block) < big(sale.created_block) && big(config.init_ns) < big(sale.created_ns)) {
+    add(7, 'init-before-sale', 'PASS', `init block ${config.init_block} (${utcFromNs(config.init_ns)}) < sale created block ${sale.created_block} (${utcFromNs(sale.created_ns)})`);
+  } else {
+    add(7, 'init-before-sale', 'FAIL', `init block ${config.init_block} / ns ${config.init_ns} not before sale created block ${sale.created_block} / ns ${sale.created_ns}`);
+  }
+
+  // #8 sale-identity (P-3: the app_id account is the contract, the MPC's caller)
+  const id = appId(net.contract, sale.path);
+  if (sale.id === saleId.toString() && new RegExp(`^tender/${saleId}/[0-9a-f]{32}$`).test(sale.path)) {
+    add(8, 'sale-identity', 'PASS', `path ${sale.path} · app_id(${net.contract}, path) = ${bytesToHex(id)}`);
+  } else {
+    add(8, 'sale-identity', 'FAIL', `sale id ${sale.id}, path "${sale.path}" does not match tender/${saleId}/<32 hex>`);
+  }
+
+  // #9 bid-count
+  {
+    const bad: string[] = [];
+    if (bids.length !== sale.bids) bad.push(`get_bids returned ${bids.length}, sale.bids = ${sale.bids}`);
+    if (sale.bids > sale.max_bids) bad.push(`bids ${sale.bids} > max_bids ${sale.max_bids}`);
+    if (bids.some((b, i) => b.idx !== i)) bad.push('bid idx not 0..n-1');
+    const distinct = new Set(bids.map((b) => b.bidder)).size;
+    if (distinct !== sale.bidders) bad.push(`distinct bidders ${distinct} ≠ sale.bidders ${sale.bidders}`);
+    const escrow = sum(bids.map((b) => big(b.escrow)));
+    if (escrow !== big(sale.escrow_total)) bad.push(`Σ escrow ${escrow} ≠ escrow_total ${sale.escrow_total}`);
+    if (bad.length) add(9, 'bid-count', 'FAIL', bad.join('; '));
+    else add(9, 'bid-count', 'PASS', `${sale.bids} bids (max ${sale.max_bids}) from ${sale.bidders} bidders · escrow ${formatUsdc(escrow)} USDC`);
+  }
+
+  // #10-#14 need the key
+  const key = sale.key;
+  let S: G1Point | null = null;
+  let dec: DecryptedBid[] = [];
+  const good = new Set<number>(); // decrypted and the commitment matches
+  if (!key) {
+    for (const [n, name] of [
+      [10, 'key-after-close'],
+      [11, 'key-pairing'],
+      [12, 'ciphertexts-decrypt'],
+      [13, 'plaintext-matches-commitment'],
+      [14, 'reveal-states'],
+    ] as const) {
+      add(n, name, 'n/a', `no key (state ${sale.state}, ${sale.key_requests} key request${sale.key_requests === 1 ? '' : 's'})`);
+    }
+  } else {
+    const keyLink = blockUrl(net.network, key.block);
+    // #10
+    if (big(key.ns) >= big(sale.close_ns) && big(key.block) > big(sale.created_block)) {
+      add(10, 'key-after-close', 'PASS', `key at ${utcFromNs(key.ns)} (block ${key.block}) ≥ close ${utcFromNs(sale.close_ns)}`, keyLink);
+    } else {
+      add(10, 'key-after-close', 'FAIL', `key ns ${key.ns} / block ${key.block} vs close_ns ${sale.close_ns} / created block ${sale.created_block}`, keyLink);
+    }
+    // #11
+    let keyErr = '';
+    try {
+      S = keyFromCkd(key, config.app_pk_mode);
+    } catch (e) {
+      keyErr = (e as Error).message;
+    }
+    const keyOk = S !== null && checkKey(S, config.mpc_public_key, id);
+    const plain = config.app_pk_mode === 'plain' ? ' (off-chain pairing; no on-chain PV in plain mode)' : '';
+    if (keyOk) add(11, 'key-pairing', 'PASS', `checkKey true: e(S, G2) = e(H(pk ‖ app_id), mpk), mode ${config.app_pk_mode}${plain}`, keyLink);
+    else add(11, 'key-pairing', 'FAIL', keyErr ? `key does not parse: ${keyErr}` : `checkKey false for app_id(${net.contract}, ${sale.path}), mode ${config.app_pk_mode}`, keyLink);
+
+    // #12
+    dec = S
+      ? decryptBids({ S, contract: net.contract, path: sale.path, sale: saleId, bids: bids.map((b) => ({ idx: b.idx, bidder: b.bidder, B: big(b.escrow), ct: b.ct, cm: b.cm })) })
+      : bids.map((b) => ({ idx: b.idx, ok: false, reason: 'no valid key' }));
+    const okN = dec.filter((d) => d.ok).length;
+    const failed = dec.filter((d) => !d.ok);
+    const mustDecrypt = failed.filter((d) => {
+      const b = bids[d.idx]!;
+      return b.state === 'Revealed' && b.revealed_by !== b.bidder;
+    });
+    const failText = failed.map((d) => `#${d.idx} ${d.reason}`).join(', ');
+    if (mustDecrypt.length) {
+      add(12, 'ciphertexts-decrypt', 'FAIL', `${okN}/${bids.length} decrypt; revealed by a third party but not decryptable: ${mustDecrypt.map((d) => `#${d.idx}`).join(', ')} (${failText})`);
+    } else {
+      add(12, 'ciphertexts-decrypt', 'PASS', `${okN}/${bids.length} decrypt${failed.length ? ` · cannot decrypt: ${failText}` : ''}`);
+    }
+
+    // #13
+    const opened = dec.filter((d) => d.ok);
+    for (const d of opened) if (d.cmOk) good.add(d.idx);
+    const mism = opened.filter((d) => !d.cmOk).map((d) => `#${d.idx}`);
+    const differs = opened.filter((d) => {
+      const b = bids[d.idx]!;
+      return d.cmOk && b.state === 'Revealed' && (big(b.p) !== d.p || big(b.q) !== d.q || (b.salt !== null && b.salt !== d.salt_hex));
+    });
+    const mismText = mism.length ? ` · commitment mismatch (e.g. a copied ct + cm): ${mism.join(', ')}` : '';
+    if (differs.length) add(13, 'plaintext-matches-commitment', 'FAIL', `revealed p/q/salt differ from the decrypted plaintext: ${differs.map((d) => `#${d.idx}`).join(', ')}`);
+    else add(13, 'plaintext-matches-commitment', 'PASS', `${good.size}/${opened.length} match${mismText}`);
+
+    // #14
+    const bad: string[] = [];
+    const sealedGood: number[] = [];
+    for (const b of bids) {
+      const g = good.has(b.idx);
+      if (g && b.state === 'Penalized') bad.push(`#${b.idx} decrypts and matches its commitment but is Penalized`);
+      if (g && b.state === 'Sealed') sealedGood.push(b.idx);
+      if (!g && b.state === 'Revealed' && b.revealed_by !== b.bidder) bad.push(`#${b.idx} Revealed by ${b.revealed_by} without a matching decryption`);
+    }
+    const windowOpen = !finalized && sale.reveal_deadline_ns !== null && now < big(sale.reveal_deadline_ns);
+    if (sealedGood.length && !windowOpen) bad.push(`${sealedGood.map((i) => `#${i}`).join(', ')} decrypt and match but were never revealed`);
+    const counts = (['Revealed', 'Penalized', 'Sealed'] as const).map((s) => `${bids.filter((b) => b.state === s).length} ${s}`).join(', ');
+    if (bad.length) add(14, 'reveal-states', 'FAIL', bad.join('; '));
+    else if (sealedGood.length) add(14, 'reveal-states', 'WARN', `reveal window open until ${utcFromNs(sale.reveal_deadline_ns!)}: ${sealedGood.length} decryptable bid(s) still Sealed · ${counts}`);
+    else add(14, 'reveal-states', 'PASS', `${counts}; every decryptable bid with a matching commitment is Revealed`);
+  }
+
+  // #15-#18 recompute the clearing (Finalized only)
+  let rc: ClearResult | null = null;
+  const finalizeRow = ctx.evidence.rows ? evidenceRows(ctx.evidence.rows, net, saleId).find((r) => r.step === 'finalize') : undefined;
+  const finLink = finalizeRow ? txUrl(net.network, finalizeRow.tx_hash) : undefined;
+  const scale = 10n ** BigInt(sale.decimals + sale.lot_exp);
+  if (!finalized || !result) {
+    for (const [n, name] of [
+      [15, 'clearing-price'],
+      [16, 'allocations'],
+    ] as const) {
+      add(n, name, 'n/a', `state ${sale.state}: no clearing`);
+    }
+  } else {
+    rc = clear(
+      { S: big(sale.supply), decimals: sale.decimals, lot_exp: sale.lot_exp, reserve: big(sale.reserve) },
+      bids.map((b) =>
+        b.state === 'Revealed'
+          ? { idx: b.idx, B: big(b.escrow), p: big(b.p), q: big(b.q), state: 'Revealed' as BidState }
+          : { idx: b.idx, B: big(b.escrow), p: null, q: null, state: 'Sealed' as BidState },
+      ),
+    );
+    const chainP = result.p_star === null ? null : big(result.p_star);
+    const pText = (p: bigint | null) => (p === null ? 'nothing cleared' : `P* = ${formatUsdc(p)} ${unit}`);
+    if (chainP === rc.P_star) add(15, 'clearing-price', 'PASS', `${pText(chainP)} (recomputed = get_result)`, finLink);
+    else add(15, 'clearing-price', 'FAIL', `get_result ${pText(chainP)}, recomputed ${pText(rc.P_star)}`, finLink);
+
+    // #16
+    const diffs: string[] = [];
+    const cmp = (what: string, chain: string | bigint | null, want: string | bigint | null) => {
+      if (String(chain) !== String(want)) diffs.push(`${what} chain ${chain} ≠ ${want}`);
+    };
+    for (const b of bids) {
+      const i = b.idx;
+      cmp(`#${i} alloc`, b.alloc, rc.alloc[i]!);
+      cmp(`#${i} spend`, b.spend, rc.spend[i]!);
+      cmp(`#${i} penalty`, b.penalty, rc.penalty[i]!);
+      cmp(`#${i} penalty_share`, b.penalty_share, rc.penalty_share[i]!);
+      cmp(`#${i} state`, b.state, rc.final_state[i]!);
+      cmp(`#${i} paid.tokens`, b.paid.tokens, rc.alloc[i]!);
+      cmp(`#${i} paid.usdc`, b.paid.usdc, rc.refund[i]!);
+    }
+    cmp('sold', result.sold, sum(rc.alloc));
+    cmp('seller_usdc', result.seller_usdc, rc.seller_usdc);
+    cmp('seller_tokens_back', result.seller_tokens_back, rc.seller_tokens_back);
+    cmp('token_dust', result.token_dust, rc.dust);
+    cmp('penalty_pool', result.penalty_pool, sum(rc.penalty));
+    cmp('seller_payout.usdc', sale.seller_payout.usdc, rc.seller_usdc);
+    cmp('seller_payout.tokens', sale.seller_payout.tokens, rc.seller_tokens_back);
+    if (diffs.length) add(16, 'allocations', 'FAIL', `${diffs.length} difference(s): ${diffs.slice(0, 6).join('; ')}${diffs.length > 6 ? '; …' : ''}`);
+    else {
+      const winners = rc.alloc.filter((a) => a > 0n).length;
+      add(16, 'allocations', 'PASS', `${bids.length} bids: alloc, spend, refund, penalty and penalty share = recomputed (${winners} winner${winners === 1 ? '' : 's'}) · seller ${formatUsdc(rc.seller_usdc)} USDC`);
+    }
+  }
+
+  // #17 conservation (chain values only)
+  if (!settled(sale) || !result) add(17, 'conservation', 'n/a', `state ${sale.state}: nothing paid out yet`);
+  else {
+    const bad: string[] = [];
+    const B = sum(bids.map((b) => big(b.escrow)));
+    const usdcOut = sum(bids.map((b) => big(b.paid.usdc))) + big(sale.seller_payout.usdc);
+    const tokOut = sum(bids.map((b) => big(b.paid.tokens))) + big(sale.seller_payout.tokens);
+    if (usdcOut !== B) bad.push(`USDC: Σ refunds + seller ${usdcOut} ≠ Σ escrow ${B}`);
+    if (tokOut !== big(sale.supply)) bad.push(`tokens: Σ allocations + seller ${tokOut} ≠ supply ${sale.supply}`);
+    if (big(result.sold) + big(result.seller_tokens_back) !== big(sale.supply)) bad.push(`sold + seller_tokens_back ≠ supply`);
+    const spend = sum(bids.map((b) => big(b.spend)));
+    if (big(result.seller_usdc) !== spend) bad.push(`seller_usdc ${result.seller_usdc} ≠ Σ spend ${spend} (the penalty pool never goes to the seller)`);
+    const pool = sum(bids.map((b) => big(b.penalty)));
+    if (pool !== sum(bids.map((b) => big(b.penalty_share)))) bad.push(`Σ penalty ${pool} ≠ Σ penalty share`);
+    if (bad.length) add(17, 'conservation', 'FAIL', bad.join('; '));
+    else add(17, 'conservation', 'PASS', `USDC in ${formatUsdc(B)} = refunds + seller ${formatUsdc(big(sale.seller_payout.usdc))}; tokens in = out; penalty pool ${formatUsdc(pool)} USDC → revealed bidders, 0 to the seller`);
+  }
+
+  // #18 uniform-price
+  if (!finalized || !result) add(18, 'uniform-price', 'n/a', `state ${sale.state}: no clearing`);
+  else {
+    const P = result.p_star === null ? null : big(result.p_star);
+    const bad: string[] = [];
+    if (P !== null && P < big(sale.reserve)) bad.push(`P* ${P} below reserve ${sale.reserve}`);
+    for (const b of bids) {
+      const alloc = big(b.alloc);
+      const spend = big(b.spend);
+      if (b.state !== 'Revealed' || P === null || big(b.p) < P) {
+        if (alloc !== 0n || spend !== 0n) bad.push(`#${b.idx} gets ${alloc} tokens / pays ${spend} without a winning revealed price`);
+        continue;
+      }
+      const p = big(b.p);
+      const q = big(b.q);
+      if (p === P && alloc === 0n && spend === 0n) continue; // a marginal bid can get nothing when the supply runs out
+      const full = spend === q && alloc === (q * scale) / P;
+      const marginal = p === P && spend === (alloc * P + scale - 1n) / scale && spend <= q;
+      if (!full && !marginal) bad.push(`#${b.idx} p ${p} q ${q}: alloc ${alloc} spend ${spend} is neither full at P* nor marginal at P*`);
+    }
+    if (bad.length) add(18, 'uniform-price', 'FAIL', bad.join('; '));
+    else add(18, 'uniform-price', 'PASS', P === null ? 'nothing cleared: no winner, no spend' : `every winner pays one price ${formatUsdc(P)} ${unit} ≤ its bid; full winners pay q, marginal ones ceil(alloc·P*/scale); losers get 0`);
+  }
+
+  // #19 escrow-balance: Tender's Intents balances vs what it still owes, over every sale of the contract
+  {
+    const owed = new Map<string, bigint>();
+    const owe = (t: string, v: bigint) => owed.set(t, (owed.get(t) ?? 0n) + v);
+    await Promise.all(
+      sales.map(async (s) => {
+        owe(s.quote_token, 0n);
+        owe(s.token, 0n);
+        if (!settled(s)) {
+          owe(s.quote_token, big(s.escrow_total));
+          owe(s.token, big(s.supply));
+          return;
+        }
+        if (!s.seller_payout.ok) {
+          owe(s.quote_token, big(s.seller_payout.usdc));
+          owe(s.token, big(s.seller_payout.tokens));
+        }
+        if (s.payouts_done === s.payouts_total) return;
+        const bs: BidView[] = s.id === sale.id ? bids : await views.bids(BigInt(s.id), at);
+        for (const b of bs) {
+          if (b.paid.ok) continue;
+          owe(s.quote_token, big(b.paid.usdc));
+          owe(s.token, big(b.paid.tokens));
+        }
+      }),
+    );
+    const tokens = [...owed.keys()];
+    const have = await new IntentsViews(rpc, config.intents).mtBatchBalanceOf(net.contract, tokens, at);
+    const parts: string[] = [];
+    const deficits: string[] = [];
+    tokens.forEach((t, i) => {
+      const h = have[i]!;
+      const o = owed.get(t)!;
+      const surplus = h > o ? ` (surplus ${h - o}: unsolicited transfers)` : '';
+      parts.push(`${t} ${h} ≥ owed ${o}${surplus}`);
+      if (h < o) deficits.push(`${t} holds ${h} < owed ${o}`);
+    });
+    if (deficits.length) add(19, 'escrow-balance', 'FAIL', `deficit: ${deficits.join('; ')}`, acct);
+    else add(19, 'escrow-balance', 'PASS', `${sales.length} sale(s): ${parts.join(' · ')}`, acct);
+  }
+
+  // #20 payouts
+  if (!settled(sale)) add(20, 'payouts', 'n/a', `state ${sale.state}: no payouts yet`);
+  else {
+    const unpaid = bids.filter((b) => !b.paid.ok).map((b) => `#${b.idx}`);
+    if (!sale.seller_payout.ok) unpaid.push('seller');
+    if (unpaid.length || sale.payouts_done !== sale.payouts_total) {
+      add(20, 'payouts', 'FAIL', `payouts pending ${sale.payouts_done}/${sale.payouts_total}: call finalize again (unpaid: ${unpaid.join(', ') || 'none listed'})`);
+    } else add(20, 'payouts', 'PASS', `${sale.payouts_done}/${sale.payouts_total} payouts ok (bids + seller)`);
+  }
+
+  // #21 key-ledger
+  {
+    const mine = keyLog.filter((k) => k.sale === sale.id);
+    const ok = mine.filter((k) => k.outcome === 'Ok');
+    const bad: string[] = [];
+    if (keyLog.length !== Number(config.key_log_len)) bad.push(`key log has ${keyLog.length} entries, key_log_len ${config.key_log_len}`);
+    if (keyLog.some((k, i) => k.i !== String(i))) bad.push('key log index not 0..n-1');
+    if (mine.length !== sale.key_requests) bad.push(`${mine.length} ledger entries for this sale ≠ key_requests ${sale.key_requests}`);
+    if (ok.length > 1) bad.push(`${ok.length} Ok entries`);
+    if (key && ok.length === 0) bad.push('a key is stored but no Ok entry exists');
+    if (!key && ok.length > 0) bad.push('an Ok entry exists but no key is stored');
+    if (key && ok.length === 1 && (ok[0]!.resolved_block !== key.block || big(key.ns) < big(ok[0]!.ns))) {
+      bad.push(`Ok entry #${ok[0]!.i} (block ${ok[0]!.block}, resolved ${ok[0]!.resolved_block}) does not match the key at block ${key.block}`);
+    }
+    const pendingN = mine.filter((k) => k.outcome === 'Pending').length;
+    if (pendingN !== (sale.in_flight ? 1 : 0)) bad.push(`${pendingN} Pending entries, in_flight ${sale.in_flight}`);
+    const seq = mine.map((k) => k.outcome).join(', ') || 'none';
+    if (bad.length) add(21, 'key-ledger', 'FAIL', bad.join('; '));
+    else add(21, 'key-ledger', 'PASS', `${mine.length} request${mine.length === 1 ? '' : 's'} for this sale (${seq}) = key_requests; ${keyLog.length} in the contract's key log`);
+  }
+
+  // #22 nearblocks-receipts (independent indexer, WARN only)
+  {
+    const nb = await fetchKeyReceipts({
+      base: net.nearblocks,
+      account: net.contract,
+      mpc: config.mpc,
+      ...(net.nearblocksApiKey ? { apiKey: net.nearblocksApiKey } : {}),
+      ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
+    });
+    if (!nb.ok) add(22, 'nearblocks-receipts', 'WARN', `${nb.warn} (the key ledger in contract state is the record)`);
+    else if (nb.truncated) add(22, 'nearblocks-receipts', 'WARN', `NearBlocks shows ≥ ${nb.count} request receipts (more pages), key log ${keyLog.length}`);
+    else if (nb.count !== keyLog.length) add(22, 'nearblocks-receipts', 'WARN', `NearBlocks shows ${nb.count} request receipts, key log ${keyLog.length} (indexing lag? run again in 10 min)`);
+    else add(22, 'nearblocks-receipts', 'PASS', `NearBlocks: ${nb.count} ${net.contract} → ${config.mpc}.request_app_private_key receipts = key log ${keyLog.length}`);
+  }
+
+  // #23 cancelled-sealed
+  if (sale.state !== 'Cancelled') add(23, 'cancelled-sealed', 'n/a', `state ${sale.state}`);
+  else if (sale.key_requests === 0) add(23, 'cancelled-sealed', 'PASS', CANCELLED_NEVER);
+  else add(23, 'cancelled-sealed', 'WARN', `cancelled after ${sale.key_requests} requests: may be decryptable`);
+
+  // #24, #25 evidence file (WARN only)
+  const rows = ctx.evidence.rows ? evidenceRows(ctx.evidence.rows, net, saleId) : null;
+  const noRows = rows === null ? `no evidence file (${ctx.evidence.path})` : `no rows for this sale in ${ctx.evidence.path}`;
+  const deposits = rows?.filter((r) => r.deposit_address) ?? [];
+  if (net.network !== 'mainnet') add(24, 'oneclick-status', 'n/a', `1Click runs on mainnet only`);
+  else if (!deposits.length) add(24, 'oneclick-status', 'n/a', rows === null ? noRows : 'no 1Click deposits recorded for this sale');
+  else {
+    const st = await Promise.all(deposits.map((r) => fetchStatus(r.deposit_address!, ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {})));
+    const notOk = st.map((s, i) => ('status' in s && s.status === 'SUCCESS' ? null : `${short(deposits[i]!.deposit_address!)}: ${'status' in s ? s.status : s.warn}`)).filter(Boolean);
+    if (notOk.length) add(24, 'oneclick-status', 'WARN', `${deposits.length - notOk.length}/${deposits.length} SUCCESS; ${notOk.join('; ')}`);
+    else add(24, 'oneclick-status', 'PASS', `${deposits.length}/${deposits.length} 1Click deposits SUCCESS`);
+  }
+  if (!rows?.length) add(25, 'archival-tx', 'n/a', noRows);
+  else {
+    const res = await Promise.all(
+      rows.map(async (r) => {
+        const sender = r.signer_id ?? net.contract;
+        let got = await attempt(() => rpc.txStatus(r.tx_hash, sender));
+        if (!got.ok) got = await attempt(() => ctx.archival.txStatus(r.tx_hash, sender));
+        if (!got.ok) return `${r.step} ${short(r.tx_hash)}: ${got.err}`;
+        const want = r.expected ?? 'success';
+        const o = txOutcome(got.v);
+        return o === want ? null : `${r.step} ${short(r.tx_hash)}: ${o}, expected ${want}`;
+      }),
+    );
+    const bad = res.filter(Boolean);
+    if (bad.length) add(25, 'archival-tx', 'WARN', `${rows.length - bad.length}/${rows.length} found with the recorded outcome; ${bad.join('; ')}`);
+    else add(25, 'archival-tx', 'PASS', `${rows.length}/${rows.length} recorded transactions found with the recorded outcome`);
+  }
+
+  return checks.sort((a, b) => a.n - b.n);
+}

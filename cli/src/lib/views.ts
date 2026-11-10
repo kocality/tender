@@ -140,6 +140,11 @@ export class TenderViews {
     return this.rpc.view(this.contract, 'get_result', { id: String(id) }, block);
   }
 
+  /** NEP-330 metadata (version, link, build_info.source_code_snapshot) that cargo-near embeds. */
+  sourceMetadata(block?: bigint): Promise<SourceMetadata> {
+    return this.rpc.view(this.contract, 'contract_source_metadata', {}, block);
+  }
+
   async keyLog(block?: bigint): Promise<KeyReqView[]> {
     const out: KeyReqView[] = [];
     for (let from = 0n; ; from += BigInt(KEYLOG_PAGE)) {
@@ -148,6 +153,12 @@ export class TenderViews {
       out.push(...page);
     }
   }
+}
+
+export interface SourceMetadata {
+  version?: string | null;
+  link?: string | null;
+  build_info?: { build_environment?: string; contract_path?: string; source_code_snapshot?: string } | null;
 }
 
 export interface MpcState {
@@ -180,6 +191,15 @@ export class MpcViews {
 
   publicKey(domain: number, block?: bigint): Promise<string> {
     return this.rpc.view(this.mpc, 'public_key', { domain_id: domain }, block);
+  }
+
+  /** Entries of `get_tee_accounts` (information only; one operator can appear more than once). */
+  async teeAccounts(block?: bigint): Promise<number> {
+    return (await this.rpc.view<unknown[]>(this.mpc, 'get_tee_accounts', {}, block)).length;
+  }
+
+  async allowedImages(block?: bigint): Promise<number> {
+    return (await this.rpc.view<unknown[]>(this.mpc, 'allowed_docker_image_hashes', {}, block)).length;
   }
 }
 

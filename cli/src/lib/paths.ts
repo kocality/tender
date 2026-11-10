@@ -19,12 +19,7 @@ export function fixturePath(rel: string): string {
   return join(repoRoot(), 'fixtures', rel);
 }
 
-/**
- * fixtures/clearing/demo-sale-1.json (WS1). Until WS1 commits it, the temporary copy in
- * packages/clearing/test-fixtures.
- */
+/** The demo sale's golden clearing vector, shared with the contract tests. */
 export function demoSaleFixturePath(): string {
-  const shared = fixturePath('clearing/demo-sale-1.json');
-  if (existsSync(shared)) return shared;
-  return join(repoRoot(), 'packages/clearing/test-fixtures/demo-sale-1.local.json');
+  return fixturePath('clearing/demo-sale-1.json');
 }
