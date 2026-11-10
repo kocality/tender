@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "mpc": "v1.signer",
+  "intents": "intents.near",
+  "domain_id": "2",
+  "app_pk_mode": "identity",
+  "mpc_public_key": "bls12381g2:MOCK",
+  "quote_tokens": [
+    "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+  ],
+  "sellers": [
+    "tenderseal.near"
+  ],
+  "init_block": "1000",
+  "init_ns": "1794000000000000000",
+  "sales": "2",
+  "key_log_len": "1"
+}

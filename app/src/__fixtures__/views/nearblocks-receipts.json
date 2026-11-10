@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "receipt_id": "MockReceiptId1111111111111111111111111111111",
+      "transaction_hash": "MockTxHash1111111111111111111111111111111111",
+      "predecessor_account_id": "v1.tenderseal.near",
+      "receiver_account_id": "v1.signer",
+      "block": {
+        "block_height": 1501,
+        "block_timestamp": "1794535861000000000"
+      },
+      "outcome": {
+        "status": true
+      }
+    }
+  ]
+}
