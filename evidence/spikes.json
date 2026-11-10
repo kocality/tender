@@ -129,5 +129,26 @@
       "evidence/spikes/s6-ckd.json",
       "evidence/rpc/EFtUJfnVANFgbv1Mkp9y3o7yxt3Xy82d6Z96DXfBNzNP.json"
     ]
+  },
+  {
+    "gate": "S3",
+    "date_utc": "2026-11-10T15:04:17.097Z",
+    "result": "PASS",
+    "chosen_path": "transfer-intent-notification",
+    "tx_hashes": [
+      "GY56NdTcE5ZSVXN1C5yjQMUqAnKtudL4MLYM1UUNfaYr",
+      "BUSHLFW9ARQKgkjP6bSswtLVRT1rarbADCRSLM5s5Ya9",
+      "f9iisYiDcLG5LL91Jk5vfJHcC49RUeMyrK5uUjJsX5y",
+      "BMC1qyWhjAocfZphrAPA8qjAByRKLVM5M5Mbs1zfwcKc"
+    ],
+    "blocks": {},
+    "notes": "S3a sandbox PASS + S3b mainnet",
+    "evidence_files": [
+      "evidence/spikes/s3b.json",
+      "evidence/rpc/GY56NdTcE5ZSVXN1C5yjQMUqAnKtudL4MLYM1UUNfaYr.json",
+      "evidence/rpc/BUSHLFW9ARQKgkjP6bSswtLVRT1rarbADCRSLM5s5Ya9.json",
+      "evidence/rpc/f9iisYiDcLG5LL91Jk5vfJHcC49RUeMyrK5uUjJsX5y.json",
+      "evidence/rpc/BMC1qyWhjAocfZphrAPA8qjAByRKLVM5M5Mbs1zfwcKc.json"
+    ]
   }
 ]

@@ -1,0 +1,76 @@
+{
+  "date_utc": "2026-11-10T15:04:06.939Z",
+  "network": "mainnet",
+  "signer": "tenderseal.near",
+  "spike": "spike.tenderseal.near",
+  "steps": [
+    {
+      "name": "notify",
+      "tx": "GY56NdTcE5ZSVXN1C5yjQMUqAnKtudL4MLYM1UUNfaYr",
+      "before": {
+        "team": "1100000",
+        "spike": "0"
+      },
+      "after": {
+        "team": "600000",
+        "spike": "500000"
+      },
+      "logs": [
+        "spike:mt_on_transfer predecessor=intents.near sender=tenderseal.near prev=tenderseal.near tokens=nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 amounts=500000 msg=probe"
+      ],
+      "pass": true,
+      "reason": "spike +500000, mt_on_transfer saw sender tenderseal.near"
+    },
+    {
+      "name": "late",
+      "tx": "BUSHLFW9ARQKgkjP6bSswtLVRT1rarbADCRSLM5s5Ya9",
+      "before": {
+        "team": "600000",
+        "spike": "500000"
+      },
+      "after": {
+        "team": "600000",
+        "spike": "500000"
+      },
+      "logs": [
+        "spike:mt_on_transfer predecessor=intents.near sender=tenderseal.near prev=tenderseal.near tokens=nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 amounts=500000 msg=late"
+      ],
+      "pass": true,
+      "reason": "notified with msg=late, refunded in full"
+    },
+    {
+      "name": "payback",
+      "tx": "f9iisYiDcLG5LL91Jk5vfJHcC49RUeMyrK5uUjJsX5y",
+      "before": {
+        "team": "600000",
+        "spike": "500000"
+      },
+      "after": {
+        "team": "1100000",
+        "spike": "0"
+      },
+      "logs": [
+        "spike:payback ok"
+      ],
+      "pass": true,
+      "reason": "spike -500000, signer +500000"
+    },
+    {
+      "name": "direct",
+      "tx": "BMC1qyWhjAocfZphrAPA8qjAByRKLVM5M5Mbs1zfwcKc",
+      "before": {
+        "team": "1100000",
+        "spike": "0"
+      },
+      "after": {
+        "team": "1000000",
+        "spike": "100000"
+      },
+      "logs": [
+        "spike:mt_on_transfer predecessor=intents.near sender=tenderseal.near prev=tenderseal.near tokens=nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 amounts=100000 msg=probe-direct"
+      ],
+      "pass": true,
+      "reason": "spike +100000, mt_on_transfer saw sender tenderseal.near"
+    }
+  ]
+}
