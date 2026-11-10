@@ -49,6 +49,8 @@ describe('confirming a stored bid (QA-08)', () => {
   test('pollBid with a failing last read is unknown even after good reads', async () => {
     let n = 0;
     const load = async () => (++n < 3 ? [] : Promise.reject(new Error('down')));
-    expect(await pollBid(() => undefined, '1', { timeoutMs: 8, intervalMs: 3, load })).toBe('unknown');
+    // every read from the third on fails; the deadline leaves room for at least three reads on a loaded machine
+    expect(await pollBid(() => undefined, '1', { timeoutMs: 200, intervalMs: 1, load })).toBe('unknown');
+    expect(n).toBeGreaterThanOrEqual(3);
   });
 });
