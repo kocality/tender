@@ -1,0 +1,17 @@
+{
+ "gate": "S2",
+ "network": "mainnet",
+ "caller": "0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620",
+ "path": "tender-spike/s2/0950355d57958129",
+ "app_id_hex": "4466355b3087226bc39add098516167986553b99de5b9582e8f424446c025c0a",
+ "mpk": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+ "msg_hex": "80ee36000000000080841e00000000003b1601b41d7578ec98806c792b515c7b",
+ "ct": {
+  "U_hex": "8114bc66fb607be723b57a7a6cab5ea1b73d20ed425615b848f5e12dc666e3cd440f59570db91156d13840bae093b6c70c1215e64d52f055e37ec737f0aacef5e837a8f228a97e94344dac59148c6070513dd7bc818f5e1a4e28bc7b288b91c3",
+  "V_hex": "946f980b7fbc76fa97461a5df9f6e43d7dfcb28ba67da4d98e510a5d61943d76",
+  "W_hex": "d773e7ad7c23fdde26419be649ff0f45458b7199904ab907e5f2116092a4b1ef"
+ },
+ "ct_b64": "gRS8Zvtge+cjtXp6bKteobc9IO1CVhW4SPXhLcZm481ED1lXDbkRVtE4QLrgk7bHDBIV5k1S8FXjfsc38KrO9eg3qPIoqX6UNE2sWRSMYHBRPde8gY9eGk4ovHsoi5HDlG+YC3+8dvqXRhpd+fbkPX38soumfaTZjlEKXWGUPXbXc+etfCP93iZBm+ZJ/w9FRYtxmZBKuQfl8hFgkqSx7w==",
+ "created_utc": "2026-11-10T13:37:33Z",
+ "mode": "identity"
+}
