@@ -8,7 +8,7 @@ license = "MIT"
 publish = false
 # NEP-330: cargo-near embeds this link in contract_source_metadata. Set the real public repo
 # URL before the reproducible build that gets deployed to v1.tenderseal.near.
-repository = "https://github.com/yigitcangokmen/tender"
+repository = "https://github.com/kocality/tender"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1781,7 +1781,7 @@ async fn repro_metadata() -> anyhow::Result<()> {
     let t = deploy_tender(&w).await?;
     let m = view_json(&w, &t, "contract_source_metadata", json!({})).await?;
     println!("{}", serde_json::to_string_pretty(&m)?);
-    let repo = "https://github.com/yigitcangokmen/tender";
+    let repo = "https://github.com/kocality/tender";
     assert_eq!(m["link"], format!("{repo}/tree/{commit}"));
     let b = &m["build_info"];
     assert_eq!(

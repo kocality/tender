@@ -17,7 +17,7 @@ Status of this page: DRAFT, before the mainnet deployment. Rows that need mainne
 
 ## Do X, see Y
 No corepack? Run `npx -y pnpm@12.18.0 install --filter "@tender/cli..."`, then use `npx -y pnpm@12.18.0` instead of `pnpm`. Prerequisite: Node 24.22.2 (check `node -v`). Node 18 does not work: `corepack enable && pnpm install` ends with `Cannot find module …/pnpm/12.18.0/bin/pnpm.cjs`, and with the `npx` fallback `pnpm demo:local` stops with `crypto.getRandomValues must be defined`.
-1. (needs network) `git clone https://github.com/yigitcangokmen/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` - see the install finish with only the CLI and its libraries, plus the TypeScript runner (tsx, typescript, vitest) and their dependencies; no wallet SDKs.
+1. (needs network) `git clone https://github.com/kocality/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` - see the install finish with only the CLI and its libraries, plus the TypeScript runner (tsx, typescript, vitest) and their dependencies; no wallet SDKs.
 2. (needs network) `pnpm verify --keys` - see every key `v1.tenderseal.near` ever requested, and sale 0 never requested. <!-- TODO(evidence: mainnet output, not available before the mainnet deployment) -->
 3. (needs network) `pnpm verify --sale 1` - see the last line `N/M checks passed (W warnings)`, no `FAIL`, clearing price `3.60`. <!-- TODO(evidence: N/M/W from the mainnet run) -->
 4. (needs network) `pnpm verify --sale 0` - see sale 0 `Cancelled` with `key_requests = 0`.
