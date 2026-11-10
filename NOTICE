@@ -9,8 +9,9 @@ This product includes or adapts third-party work:
 
 - defdone/annon (Apache-2.0, see LICENSES/Apache-2.0.txt)
   https://github.com/defdone/annon at 43b230ce48d3e7b71d8544563dda3c0e495b1ce3
-  contracts/mock-mpc/ adapted in contract/mock-mpc/; contracts/annon/check-imports.mjs adapted in contract/scripts/check-imports.mjs;
-  the low-level request_app_private_key call pattern of contracts/annon/src/mpc.rs adapted in contract/spike/.
+  contracts/annon/check-imports.mjs adapted in contract/scripts/check-imports.mjs;
+  the low-level request_app_private_key call pattern of contracts/annon/src/mpc.rs followed in contract/spike/.
+  contract/mock-mpc/ is our own code (same role as annon's mock-mpc, no annon source copied).
   Modified files carry a "Modified by Tender contributors" header.
   Upstream NOTICE:
     Annon

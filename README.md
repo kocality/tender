@@ -130,12 +130,12 @@ Tender is not a better CCA. It can run a sealed pre-round before a CCA or LBP li
 <!-- TODO(ws2-api: a 10-line TypeScript example using the exact exports of packages/seal/src/index.ts; the package is private and not on npm, so the example shows a workspace import; owner WS5-T06) -->
 
 ## Built during the hackathon (Q-001, Q-003)
-All of our code in this repository was written from 2026-11-08 to 2026-11-14, inside the window that opened with the announcement on 2026-10-19. There is no pre-hackathon code and no existing product on another chain (Q-002, Q-004). The IBE prototype in `prototype/` was written on 2026-11-08/09 and is kept unchanged for reference. First commit: `<hash>` (<date>). The submitted state is tagged `hackathon-submission`. Third-party files (the `intents.near` 0.4.5 wasm, adapted annon files, near/mpc test vectors) are listed under Libraries (Q-005). <!-- TODO(evidence: first commit hash and date, owner WS5-T06) -->
+All of our code in this repository was written from 2026-11-08 to 2026-11-14, inside the window that opened with the announcement on 2026-10-19. There is no pre-hackathon code and no existing product on another chain (Q-002, Q-004). The IBE prototype in `prototype/` was written on 2026-11-08/09 and is kept unchanged for reference. First commit: `<hash>` (<date>). The submitted state is tagged `hackathon-submission`. Third-party files (the `intents.near` 0.4.5 wasm, adapted annon file, near/mpc test vectors) are listed under Libraries (Q-005). <!-- TODO(evidence: first commit hash and date, owner WS5-T06) -->
 
 ## Libraries, prior work and AI code (Q-005)
 - `@noble/curves` 2.4.0 and `@noble/hashes` 2.4.0 (MIT), `bs58` 6.0.0: BLS12-381 pairing, hashing and encoding in `@tender/seal`.
 - `drand/tlock-js` (Apache-2.0 OR MIT, Copyright (c) 2022 drand team): the identity-based encryption in `src/crypto/ibe.ts` is adapted from it.
-- `defdone/annon` (Apache-2.0, Copyright 2026 defdone): `contracts/mock-mpc/` and `contracts/annon/check-imports.mjs` are adapted from it.
+- `defdone/annon` (Apache-2.0, Copyright 2026 defdone): `contracts/annon/check-imports.mjs` is adapted from it, and the call pattern of `contracts/annon/src/mpc.rs` is followed in the spike contract. Our `contract/mock-mpc/` is our own code with the same role as annon's mock.
 - `near/mpc` (MIT, Copyright (c) 2025 NEAR One Limited): CKD test vectors, `crates/threshold-signatures/tests/vectors/ckd_test_vectors.json`.
 - `near/intents` (MIT, Copyright (c) 2025 NEAR Foundation): the `intents.near` 0.4.5 wasm used in sandbox tests.
 - near-sdk 5.30.1, near-workspaces 0.24.0, cargo-near 0.23.0, viem 2.57.16, near-api-js 7.4.0, `@hot-labs/near-connect` 0.12.0, `@defuse-protocol/intents-sdk` 0.95.0, Vite, React.
