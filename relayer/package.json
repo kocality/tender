@@ -17,6 +17,8 @@
     "keys": "tsx scripts/keys.ts",
     "birth": "tsx scripts/birth.ts",
     "sale": "tsx scripts/sale.ts",
+    "bid": "tsx scripts/bid-nep413.ts",
+    "attack": "tsx scripts/attack-bids.ts",
     "evidence-check": "tsx scripts/evidence-check.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
