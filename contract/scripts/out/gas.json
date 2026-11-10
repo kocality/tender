@@ -1,6 +1,6 @@
 {
-  "wasm_sha256": "788d3aa8435f442c8ef165291a7365fae455522cb961f5630c9afcf0f458e820",
-  "wasm_bytes": 268187,
+  "wasm_sha256": "73f0a386f71008eed086a822212bc92ba14acafdc21f7da971ebf1607a5364f1",
+  "wasm_bytes": 268195,
   "bids": 64,
   "gas_tgas": {
     "create": 1.82,

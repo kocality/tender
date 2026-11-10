@@ -1,9 +1,9 @@
 {
- "built_utc": "2026-11-10T09:00:29.976Z",
+ "built_utc": "2026-11-10T09:32:38.713Z",
  "build": "non-reproducible-wasm",
- "bytes": 268187,
- "sha256": "788d3aa8435f442c8ef165291a7365fae455522cb961f5630c9afcf0f458e820",
- "code_hash_b58": "97apzgCgSMgpdeaaQ2yVPUiLEDX9DeN2iJ6U7sQK6Ve7",
+ "bytes": 268195,
+ "sha256": "73f0a386f71008eed086a822212bc92ba14acafdc21f7da971ebf1607a5364f1",
+ "code_hash_b58": "8oai2gojooPhoUS8ustxyjvvugc13yfvm4671epGfFGL",
  "imports": [
   "account_balance",
   "attached_deposit",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Wasm host-import check. Run before every deploy.
-// Adapted from defdone/annon contracts/annon/check-imports.mjs (Apache-2.0).
+// Adapted from defdone/annon contracts/annon/check-imports.mjs @43b230ce (Apache-2.0). Modified by Tender contributors.
 //
 // A new near-sdk can link host functions mainnet doesn't have yet (deploy fails with
 // "Link Error"), and some host functions would let the locked contract change its own code or
