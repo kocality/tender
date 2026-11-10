@@ -1,0 +1,74 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit X the reproducible RC was built from (contract_source_metadata link rev)'
+        required: false
+        type: string
+permissions: { contents: read }
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env: { PROPTEST_CASES: '512' }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust toolchain from contract/rust-toolchain.toml
+        working-directory: contract
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: cargo-near 0.23.0
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh | sh
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: contract }
+      - name: build all wasms the sandbox tests read (spike, mock-mpc, mock-ft, tender)
+        working-directory: contract
+        run: bash scripts/build-wasms.sh
+      - name: cargo test
+        working-directory: contract
+        run: cargo test
+  ts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r test
+      - run: pnpm vectors
+      - run: pnpm demo:local
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: gitleaks 8.30.1 (full history)
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact -v --config .gitleaks.toml --log-opts="--all" .
+  repro:
+    if: github.event_name == 'workflow_dispatch' && inputs.ref != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      # Build exactly commit X, never a later commit that only adds the built wasm. Full history, because cargo-near
+      # clones the repository with git2 and embeds the build commit in the wasm metadata.
+      - uses: actions/checkout@v7
+        with: { ref: '${{ inputs.ref }}', fetch-depth: 0 }
+      - name: cargo-near 0.23.0
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh | sh
+      - name: reproducible build
+        working-directory: contract
+        env: { REF: '${{ inputs.ref }}' }
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$REF^{commit}")"
+          cargo near build reproducible-wasm
+          sha256sum target/near/tender.wasm | tee ../repro-sha256.txt
+          echo "### tender.wasm sha256 (built from $REF)" >> "$GITHUB_STEP_SUMMARY"; cat ../repro-sha256.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with: { name: tender-wasm, path: 'contract/target/near/tender.wasm' }
