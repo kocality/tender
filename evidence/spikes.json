@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "gate": "S1-testnet",
+    "date_utc": "2026-11-10T07:55:33.481Z",
+    "result": "PASS",
+    "chosen_path": "none (info only; mode is decided by mainnet H-S1)",
+    "tx_hashes": [
+      "3z2dKCG7h3yRYHa9pLKpb9jw3rwveBbiDPPM6MSPfNd4",
+      "6UYSLa86dtWoNhEWqghG79BmZvCzfmt8Xj8byuNyzYAK",
+      "83SUfatuNt34BaWKhWzABwjQZyn7J6crnQiftkrYqozh"
+    ],
+    "blocks": {
+      "request": 276995419,
+      "response": 276995424
+    },
+    "notes": "testnet dry run (DEC G2), v1.signer-prod.testnet 3.18.0 accepted identity, generator and plain; checkKey true for all; latency 5/6/5 blocks; info only, not the mainnet S1 result",
+    "evidence_files": [
+      "evidence/spikes/s1-testnet-identity.json",
+      "evidence/spikes/s1-testnet-generator.json",
+      "evidence/spikes/s1-testnet-plain.json",
+      "evidence/rpc/3z2dKCG7h3yRYHa9pLKpb9jw3rwveBbiDPPM6MSPfNd4.json",
+      "evidence/rpc/6UYSLa86dtWoNhEWqghG79BmZvCzfmt8Xj8byuNyzYAK.json",
+      "evidence/rpc/83SUfatuNt34BaWKhWzABwjQZyn7J6crnQiftkrYqozh.json"
+    ]
+  }
+]
