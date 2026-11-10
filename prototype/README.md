@@ -30,6 +30,6 @@ four times, one line per official vector.
 | `t.mjs` | Earlier helper: decodes the mainnet domain-2 key and simulates a CKD + HKDF flow with a fake msk. |
 | `package.json`, `package-lock.json` | Dependencies: `@noble/curves` 2.4.0, `@noble/hashes` 2.4.0, `bs58` 6.0.0. The `license: ISC` field is the npm-init default; the repository is MIT (`../LICENSE`). |
 
-## Using it for gates S1 and S2 (KICKOFF §4)
+## Using it for gates S1 and S2
 - Generator mode: back up `live.json` as `live.logunov.json`, write your S1 response into `live.json` (`acct: "tenderseal.near"`, your `path`, `pk2` = G2 generator), run `node pv.mjs` → first line `true`.
 - Identity mode: `pv.mjs` throws `pairing is not available for ZERO point` (noble refuses pairings with the zero point). In a copy, change the `rhs` line to `const rhs = bls.pairing(Hp, pk);`. This is the same equation, since `e(Y, 0) = 1`.
