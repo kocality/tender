@@ -67,18 +67,24 @@ Source: `evidence/mainnet.json`. Raw RPC responses captured while still on non-a
 - A cancelled sale with `key_requests = 0`: its key was never requested, so `p` and `q` were never decrypted by anyone using this contract's key. The ciphertexts stay on chain; see Honest limits.
 
 ## How Tender compares
-Each cell will be a quote from the project's own documentation with link and read date. A dash means not yet verified. Uniswap's Continuous Clearing Auction is complementary rather than a competitor.
+Each competitor cell is a quote from that project's own documentation (links and read date below), or a dash where the source says nothing. Uniswap's Continuous Clearing Auction is complementary rather than a competitor.
 
-| | Bids hidden before close | What opens them | Who evaluates the condition | Where the price is computed | Bid from |
+| | Bids hidden before close | What opens them | Who evaluates the open condition | Where the price is computed | Bid from |
 |---|---|---|---|---|---|
-| Dark Vault | — | — | — | — | — |
-| Uniswap CCA | — | — | — | — | — |
-| Echo / Sonar | — | — | — | — | — |
-| Shutter | — | — | — | — | — |
-| MACI | — | — | — | — | — |
-| Tender | Ciphertext on NEAR mainnet | NEAR MPC network (11 of 16 on 2026-11-10) | `v1.tenderseal.near` `open()` on public escrow | On chain, integer-only, recomputed by `pnpm verify` | Base, Arbitrum, Solana, NEAR |
+| Dark Vault [1] | Yes: "nobody can open it early, this site included" | A time lock: "as trustworthy as drand" | — (a time, not a condition) | The site: "The site learns the funded bids after the close. It has to, to decide the auction." | Zcash; "a bid paid in SOL, delivered as shielded ZEC by NEAR Intents" |
+| Uniswap CCA [2] | No: bidders submit `(maxPrice, amount)` bids at prices that are multiples of `tickSpacing` above `floorPrice` | — (bids are public) | — | On chain (EVM) | EVM chains |
+| Echo / Sonar [3] | No: "The commitment data API is public" | — | — | "computed off-chain by Sonar"; "you implement the allocation logic yourself" | The sale contract's chain ("e.g., Ethereum, Base") |
+| Shutter API [4] | Yes (threshold encryption) | "a predetermined time or … a specific on-chain event" | "the Keyper network" | — (application-specific) | "deployed on Gnosis Chain" |
+| MACI [5] | Yes, except from the coordinator: "No one except a trusted coordinator should be able to decrypt a vote." | The coordinator | The coordinator | — (voting, not a sale) | "an Ethereum application" |
+| **Tender** | Yes: price and size (escrow caps are public) | `open()` on the sale contract → NEAR MPC CKD key | The contract that holds the escrow: total escrow ≥ `min_escrow` and distinct bidders ≥ `min_bidders` | On chain; anyone recomputes it with `pnpm verify` | Base, Arbitrum, Solana, NEAR, each with its own wallet |
 
-<!-- TODO(evidence: competitor cells with quote + link + read date, owner WS5-T02) -->
+Conditional decryption itself is not new: Shutter API offers "event-based decryption triggers". What we found nowhere else is the combination: the chain's existing MPC network as the key holder, a locked contract as the only account that can request the key, an on-chain record of every key it was given, and escrow plus settlement in the same contract. Inside this hackathon, Morrowseal [6] also releases a key from a NEAR contract on a condition; its key holder is an OutLayer TEE and the key stays private.
+
+Tender is not a better CCA. It can run a sealed pre-round before a CCA or LBP liquidity launch: the sealed round finds a price, liquidity is handed to a pool afterwards (roadmap, not demonstrated).
+
+[1] https://near.zecdarkvault.xyz, read 2026-11-10 · [2] https://blog.uniswap.org/continuous-clearing-auctions, https://github.com/Uniswap/continuous-clearing-auction/blob/main/docs/TechnicalDocumentation.md, read 2026-11-10 · [3] https://docs.echo.xyz/sonar/integration-guides/reading-commitment-data.md, https://docs.echo.xyz/sonar/planning/settlement-strategies.md, https://docs.echo.xyz/sonar/planning/sale-lifecycle.md, read 2026-11-10 · [4] https://docs.shutter.network/docs/protocol/api, read 2026-11-10 · [5] https://maci.pse.dev/docs/introduction, read 2026-11-10 · [6] https://github.com/zer0plugyut-afk/morrowseal, read 2026-11-10
+
+<!-- TODO(WS5-T02-B: re-read every source 2026-11-13 10:30Z-11-14 00:00Z, refresh the read dates, owner WS5-T02) -->
 
 ## Honest limits
 - Before the key is released, privacy needs fewer than 11 of 16 MPC nodes colluding (2026-11-10; `verify` prints the live value). It is not a mathematical guarantee.
@@ -126,14 +132,15 @@ Each cell will be a quote from the project's own documentation with link and rea
 ## Built during the hackathon (Q-001, Q-003)
 All of our code in this repository was written from 2026-11-08 to 2026-11-14, inside the window that opened with the announcement on 2026-10-19. There is no pre-hackathon code and no existing product on another chain (Q-002, Q-004). The IBE prototype in `prototype/` was written on 2026-11-08/09 and is kept unchanged for reference. First commit: `<hash>` (<date>). The submitted state is tagged `hackathon-submission`. Third-party files (the `intents.near` 0.4.5 wasm, adapted annon files, near/mpc test vectors) are listed under Libraries (Q-005). <!-- TODO(evidence: first commit hash and date, owner WS5-T06) -->
 
-## Libraries and prior work (Q-005)
+## Libraries, prior work and AI code (Q-005)
 - `@noble/curves` 2.4.0 and `@noble/hashes` 2.4.0 (MIT), `bs58` 6.0.0: BLS12-381 pairing, hashing and encoding in `@tender/seal`.
 - `drand/tlock-js` (Apache-2.0 OR MIT, Copyright (c) 2022 drand team): the identity-based encryption in `src/crypto/ibe.ts` is adapted from it.
 - `defdone/annon` (Apache-2.0, Copyright 2026 defdone): `contracts/mock-mpc/` and `contracts/annon/check-imports.mjs` are adapted from it.
 - `near/mpc` (MIT, Copyright (c) 2025 NEAR One Limited): CKD test vectors, `crates/threshold-signatures/tests/vectors/ckd_test_vectors.json`.
 - `near/intents` (MIT, Copyright (c) 2025 NEAR Foundation): the `intents.near` 0.4.5 wasm used in sandbox tests.
 - near-sdk 5.30.1, near-workspaces 0.24.0, cargo-near 0.23.0, viem 2.57.16, near-api-js 7.4.0, `@hot-labs/near-connect` 0.12.0, `@defuse-protocol/intents-sdk` 0.95.0, Vite, React.
-- Full list with file paths: `NOTICE` and `LICENSES/`. <!-- TODO(evidence: confirm against NOTICE once WS5-T05 lands, owner WS5-T05) -->
+- Parts of the code were written with AI coding assistants and reviewed by the team.
+- Full list with file paths: `NOTICE` and `LICENSES/`. <!-- TODO(evidence: confirm versions against pnpm ls -r --depth 0 and contract/Cargo.toml, and NOTICE paths once WS2-T03 and WS1-T04 land, owner WS5-T06) -->
 
 ## Other projects by team members (Q-015)
 Arrow: https://github.com/yigitcangokmen/arrow. A separate, independent submission: no shared code, packages, contracts, accounts or wallets. <!-- TODO(H-ARROW: confirm wording with the Arrow lead) -->
