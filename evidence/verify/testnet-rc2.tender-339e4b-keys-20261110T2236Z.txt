@@ -1,0 +1,5 @@
+Tender verify · keys · rc2.tender-339e4b.testnet · testnet · block 277129794 (2026-11-10T22:36:50Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · domain 2 key = repo constant
+key log (contract state): 0 requests
+NearBlocks: receipts rc2.tender-339e4b.testnet → v1.signer-prod.testnet.request_app_private_key = 0 (match)
