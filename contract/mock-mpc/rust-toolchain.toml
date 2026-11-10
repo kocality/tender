@@ -1,0 +1,5 @@
+# Same Rust as the reproducible-build image (sourcescan/cargo-near:0.23.0-rust-1.99.1).
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
