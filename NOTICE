@@ -1,18 +1,24 @@
 Tender
 Copyright (c) 2026 Tender contributors. Licensed under the MIT License (see LICENSE).
 
-This product includes or adapts third-party work. Fill in each entry when the code is
-actually ported; remove entries that end up unused.
+This product includes or adapts third-party work:
 
-- drand/tlock-js, src/crypto/ibe.ts (Apache-2.0 OR MIT)
-  https://github.com/drand/tlock-js
-  Adapted in packages/seal/src/ibe.ts: noble 2.x API, NEAR hash-to-curve DST, identity pk || app_id.
+- drand/tlock-js (Apache-2.0 OR MIT; used under MIT, see LICENSES/MIT-tlock-js.txt)
+  https://github.com/drand/tlock-js, src/crypto/ibe.ts at 17d817ee259e79381111dd75009b0f022c39ace3
+  Adapted in prototype/ibe.mjs and packages/seal/src/ibe.ts: noble 2.x API, NEAR hash-to-curve DST, identity pk || app_id.
 
-- defdone/annon, contracts/mock-mpc and check-imports.mjs (Apache-2.0)
-  https://github.com/defdone/annon
-  Adapted in contract/mock-mpc/ and contract/scripts/check-imports.mjs.
-  <Copy the upstream copyright line and the Apache-2.0 NOTICE text here when ported.>
+- defdone/annon (Apache-2.0, see LICENSES/Apache-2.0.txt)
+  https://github.com/defdone/annon at 43b230ce48d3e7b71d8544563dda3c0e495b1ce3
+  contracts/mock-mpc/ adapted in contract/mock-mpc/; contracts/annon/check-imports.mjs adapted in contract/scripts/check-imports.mjs;
+  the low-level request_app_private_key call pattern of contracts/annon/src/mpc.rs adapted in contract/spike/.
+  Modified files carry a "Modified by Tender contributors" header.
+  Upstream NOTICE:
+    Annon
+    Copyright 2026 defdone
+    This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
-- near/mpc 3.17.0, crates/threshold-signatures/tests/vectors/ckd_test_vectors.json (MIT)
-  https://github.com/near/mpc
-  Copyright (c) 2025 NEAR One Limited. Used as test fixtures (prototype/vec.json, fixtures/).
+- near/mpc 3.17.0 / 3.18.0, crates/threshold-signatures/tests/vectors/ckd_test_vectors.json (MIT, see LICENSES/MIT-near-mpc.txt)
+  Copyright (c) 2025 NEAR One Limited. Used unchanged as test fixtures (prototype/vec.json, fixtures/ckd_test_vectors.json).
+
+- near/intents 0.4.5 contract wasm (MIT, see LICENSES/MIT-near-intents.txt)
+  Copyright (c) 2025 NEAR Foundation. contract/tests/res/defuse-0.4.5.wasm, fetched from intents.near with view_code, used only in tests.
