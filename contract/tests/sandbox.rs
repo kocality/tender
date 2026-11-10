@@ -1697,3 +1697,30 @@ async fn gas_report() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// NEP-330 metadata of the reproducible release wasm, deployed in the sandbox and read through
+/// the `contract_source_metadata` view: the link and the source snapshot name commit
+/// `REPRO_COMMIT`, the build ran in the pinned image.
+/// `TENDER_WASM=res/tender.wasm REPRO_COMMIT=<sha> cargo test --test sandbox repro_metadata -- --ignored --nocapture`
+#[tokio::test]
+#[ignore]
+async fn repro_metadata() -> anyhow::Result<()> {
+    let commit = std::env::var("REPRO_COMMIT").expect("set REPRO_COMMIT to the build commit");
+    let w = world().await?;
+    let t = deploy_tender(&w).await?;
+    let m = view_json(&w, &t, "contract_source_metadata", json!({})).await?;
+    println!("{}", serde_json::to_string_pretty(&m)?);
+    let repo = "https://github.com/yigitcangokmen/tender";
+    assert_eq!(m["link"], format!("{repo}/tree/{commit}"));
+    let b = &m["build_info"];
+    assert_eq!(
+        b["source_code_snapshot"],
+        format!("git+{repo}?rev={commit}")
+    );
+    assert_eq!(
+        b["build_environment"],
+        "sourcescan/cargo-near:0.23.0-rust-1.99.1@sha256:8013f039e8005627f10ae66b5519d1a6eeeed7d7aef4b5067d5e9a86c4302fcc"
+    );
+    assert_eq!(b["contract_path"], "contract");
+    Ok(())
+}

@@ -4,6 +4,7 @@
 //   scripts/out/imports.json  node scripts/check-imports.mjs target/near/tender.wasm --json
 //   scripts/out/gas.json      cargo test --test sandbox gas_report -- --ignored --nocapture
 // Usage: node scripts/wasm-report.mjs > ../evidence/wasm.json
+// Release wasm: node scripts/wasm-report.mjs --reproducible <commit> > ../evidence/wasm.json
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,12 @@ const read = (p) => JSON.parse(readFileSync(resolve(contractDir, p), 'utf8'));
 
 const imports = read('scripts/out/imports.json');
 const gas = read('scripts/out/gas.json');
+const repro = process.argv.indexOf('--reproducible');
+const commit = repro === -1 ? undefined : process.argv[repro + 1];
+if (repro !== -1 && !/^[0-9a-f]{40}$/.test(commit ?? '')) {
+  console.error('--reproducible needs the 40-hex build commit');
+  process.exit(1);
+}
 const wasmPath = resolve(contractDir, imports.file);
 const bytes = readFileSync(wasmPath);
 const digest = createHash('sha256').update(bytes).digest();
@@ -48,7 +55,8 @@ console.log(
   JSON.stringify(
     {
       built_utc: statSync(wasmPath).mtime.toISOString(),
-      build: 'non-reproducible-wasm',
+      build: commit ? 'reproducible-wasm' : 'non-reproducible-wasm',
+      commit,
       bytes: bytes.length,
       sha256: imports.sha256,
       code_hash_b58: base58(digest),
