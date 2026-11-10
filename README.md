@@ -20,7 +20,7 @@ Prerequisites: Node 24.22.2 (`nvm install 24.22.2`), `corepack enable`. Rust 1.9
 6. (needs network) `pnpm verify --sale 3` - see the attack-room sale: a garbage ciphertext and a copied bid `Penalized`, their 10% paid to the revealed bidder and 0 to the seller.
 7. (offline) `pnpm demo:local` - see 6 bids sealed, opened and cleared offline in about 5 s, clearing price `3.60`.
 8. (offline) `pnpm vectors` - see `4/4` official near/mpc CKD test vectors pass.
-9. (needs network on a fresh machine: crates and the sandbox binary) `pnpm install && bash contract/scripts/build-wasms.sh && cd contract && cargo test` - see `<N>` sandbox scenarios and the property tests pass against the real `intents.near` 0.4.5 wasm and a mock MPC. CI: <link>. <!-- TODO(evidence: scenario count + CI run URL, owner WS1/WS4) -->
+9. (needs network on a fresh machine: crates and the sandbox binary) `pnpm install && bash contract/scripts/build-wasms.sh && cd contract && cargo test` - see 28 sandbox scenarios (plus 57 unit tests and 5 S3a tests) and the property tests pass against the real `intents.near` 0.4.5 wasm and a mock MPC. CI: https://github.com/yigitcangokmen/tender/actions/runs/42802450952 (success on `e8a6a78`, 2026-11-10; the repo is private until submission). <!-- TODO(evidence: re-count and CI run URL on the freeze commit, owner WS1/WS4) -->
 10. `<docker reproducible build command>` - see sha256 `<hash>` = the `code_hash` of `v1.tenderseal.near`; `pnpm verify --sale 1 --rebuild` does the same comparison. <!-- TODO(evidence: command + hash, owner WS1) -->
 11. Open `<HOSTED_URL>/#/try` and sign with MetaMask, Phantom or a NEAR wallet - see `signature valid · insufficient balance` from `intents.near.simulate_intents` (MetaMask, Phantom); a named NEAR account whose key is not registered shows `signature valid · this NEAR key is not registered in NEAR Intents yet` (expected; a view call, nothing is spent). <!-- TODO(evidence: HOSTED_URL and texts verbatim from app/src/copy.ts, owner WS3-T02 / WS5-T06) -->
 12. Open `<HOSTED_URL>/#/` - see sales 1 and 0 side by side; press **Decrypt** on sale 1 and see 6 bids decrypt in your browser and match their on-chain commitments. <!-- TODO(evidence: HOSTED_URL, owner WS4/WS5-T06) -->
@@ -41,6 +41,23 @@ If a public RPC rate-limits you: `pnpm verify --sale 1 --rpc <url> --archival-rp
 | Cross-chain in and out | 1Click and its bridges | A stuck swap follows 1Click's own refund flow, outside the contract |
 | Encryption in your browser | Our hosted JavaScript bundle | A malicious bundle could leak your price before sealing. Run the app locally or seal with `pnpm seal:bid` |
 | Relaying | Nobody: `execute_intents` is permissionless | If our relayer censors you, relay elsewhere |
+
+## Testnet rehearsal evidence (testnet, not mainnet)
+Everything in this section ran on NEAR **testnet** on 2026-11-10 against a copy of the contract (`v1.tender-09bdfe.testnet`, identity mode, no access keys) and the testnet MPC `v1.signer-prod.testnet` 3.18.0. It shows the flow works end to end; it is not mainnet evidence and no mainnet value moved.
+
+| What | Result | Source |
+|---|---|---|
+| Sale 0, 2 sealed bids, `open()` got a real CKD key | key requested at block 277053281, delivered at block 277053289 (8 blocks); key ledger 1 request, `Ok` | `evidence/verify/testnet-v1.tender-09bdfe-keys-20261110T1013Z.txt` |
+| `pnpm verify --sale 0` before reveal | 15/17 checks passed (2 warnings); #12 2/2 decrypt, #13 2/2 match | `evidence/verify/testnet-v1.tender-09bdfe-sale-0-20261110T1009Z-prereveal.txt` |
+| `pnpm verify --sale 0` after finalize | 21/22 checks passed (1 warning): the warning is #6 (no `--rebuild`); P* = 3.90 USDC/wnear, recomputed = `get_result`; payouts 3/3 | `evidence/verify/testnet-v1.tender-09bdfe-sale-0-20261110T1013Z.txt` |
+| `pnpm verify --keys` | `key log (contract state): 1 request`; NearBlocks receipts = 1 (match); threshold 11 of 16 (live) | `evidence/verify/testnet-v1.tender-09bdfe-keys-20261110T1013Z.txt` |
+| `pnpm seal:try --sale 0` | key released at block 277053289, `checkKey true`, test message decrypts | `evidence/verify/testnet-v1.tender-09bdfe-seal-try-sale-0-20261110T1013Z.txt` |
+| Transactions ([testnet.nearblocks.io](https://testnet.nearblocks.io)) | birth [26np72KT…](https://testnet.nearblocks.io/txns/26np72KTmzC9z8HX743hRAcXFGXx2ohxRWyzutwYF4sK) · create [CT7GSr6x…](https://testnet.nearblocks.io/txns/CT7GSr6xCYAzm37J3fGAu7m7ceUqGefseoyfoMwt8sFF) · bid [5fdPPfk5…](https://testnet.nearblocks.io/txns/5fdPPfk5cEUg3x2aidUCZnsaE6VacJ9cztCMEgg7REsF) · bid [Ermgeczd…](https://testnet.nearblocks.io/txns/ErmgeczD8gfuRsCwDbiup6rcPZ3U3fEcuH13Vnk1T7vS) · open [4e74FNST…](https://testnet.nearblocks.io/txns/4e74FNSTRsqeckYYq8PJZmcX85DSkJeMPkjaChW48rwD) · reveal [BX2Z39mT…](https://testnet.nearblocks.io/txns/BX2Z39mTbTwcP1sinA4c63SQsuuvwAYc4pNDTKuaavPg) · finalize [FnypREk9…](https://testnet.nearblocks.io/txns/FnypREk9epKaXRaGMB8dY94rNL5PrK3PULYUduEwULui) | team log of the rehearsal, 2026-11-10T10:12Z |
+| CI | push run on `e8a6a78`: jobs `ts`, `secrets`, `rust` success ([run 42802450952](https://github.com/yigitcangokmen/tender/actions/runs/42802450952)) | GitHub Actions, 2026-11-10 |
+| Reproducible build in CI | job `repro` on `e8a6a78` printed sha256 `59c0b7bf2b4df66899bcee9beaa84cdca343f553826b197ce89df5be3119c106` ([run 42802547382](https://github.com/yigitcangokmen/tender/actions/runs/42802547382)). CI result only: the local Docker rebuild and the comparison with the mainnet `code_hash` are not done yet | GitHub Actions, 2026-11-10 |
+| Tests | 57 unit + 28 sandbox + 5 S3a (cargo); clearing 10, intents 29, seal 34, relayer 208, app 120, cli 83 (pnpm); `pnpm vectors` 4/4 | team test log, 2026-11-10 |
+
+<!-- TODO(evidence: mainnet counterparts replace this section's role once G-S1 and the rehearsal on mainnet have run; keep it as "testnet rehearsal" or delete it, owner WS5-T06) -->
 
 ## Live mainnet evidence
 <!-- evidence:start -->
