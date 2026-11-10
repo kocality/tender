@@ -16,6 +16,14 @@ allowBuilds:
   secp256k1: false
   utf-8-validate: false
 
+# A Node older than engines.node in package.json fails the install with ERR_PNPM_UNSUPPORTED_ENGINE
+# (Node 18 otherwise gets as far as "crypto.getRandomValues must be defined").
+engineStrict: true
+
 # Never link agent skills shipped inside dependencies into this repo.
 skills:
   dirs: []
+
+# Every workspace vitest peer resolves the same patched vite (GHSA-p4f5-76q4-ffq7, fixed in 8.3.7).
+overrides:
+  vite: 8.3.7
