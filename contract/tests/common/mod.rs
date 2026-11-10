@@ -656,3 +656,82 @@ pub fn event(logs: &[&str], event: &str) -> Option<Value> {
         (v["event"] == event).then(|| v["data"][0].clone())
     })
 }
+
+/// `reveal_deadline_ns = now − 1 ns` (WD-07).
+pub async fn deadline_now(
+    w: &World,
+    tender: &near_workspaces::AccountId,
+    id: u64,
+) -> anyhow::Result<()> {
+    let now = now_ns(w).await?;
+    patch_sale(w, tender, id, |s| s.reveal_deadline_ns = Some(now - 1)).await
+}
+
+/// C9 commitment as 64 lowercase hex.
+pub fn commit_hex(sale: u64, bidder: &str, b: u128, p: u64, q: u64, salt: &[u8; 16]) -> String {
+    to_hex(&tender::seal::commitment(sale, bidder, b, p, q, salt))
+}
+
+/// `finalize(sale, max)` with the recommended 300 Tgas (C14).
+pub async fn finalize(
+    by: &Account,
+    tender: &near_workspaces::AccountId,
+    id: u64,
+    max: u8,
+) -> anyhow::Result<near_workspaces::result::ExecutionFinalResult> {
+    Ok(by
+        .call(tender, "finalize")
+        .args_json(serde_json::json!({ "sale": id.to_string(), "max": max }))
+        .gas(tgas(300))
+        .transact()
+        .await?)
+}
+
+pub async fn get_bids(
+    w: &World,
+    tender: &near_workspaces::AccountId,
+    id: u64,
+) -> anyhow::Result<Value> {
+    view_json(
+        w,
+        tender,
+        "get_bids",
+        serde_json::json!({ "id": id.to_string(), "from": 0, "limit": 64 }),
+    )
+    .await
+}
+
+pub async fn get_result(
+    w: &World,
+    tender: &near_workspaces::AccountId,
+    id: u64,
+) -> anyhow::Result<Value> {
+    view_json(
+        w,
+        tender,
+        "get_result",
+        serde_json::json!({ "id": id.to_string() }),
+    )
+    .await
+}
+
+/// `fixtures/clearing/<name>.json`.
+pub fn clearing_fixture(name: &str) -> Value {
+    let raw = std::fs::read_to_string(format!("{MANIFEST_DIR}/../fixtures/clearing/{name}.json"))
+        .unwrap_or_else(|_| panic!("fixtures/clearing/{name}.json"));
+    serde_json::from_str(&raw).unwrap()
+}
+
+/// `cancel(sale)` with 300 Tgas: like `finalize`, it sends up to 8 payouts in the same call.
+pub async fn cancel(
+    by: &Account,
+    tender: &near_workspaces::AccountId,
+    id: u64,
+) -> anyhow::Result<near_workspaces::result::ExecutionFinalResult> {
+    Ok(by
+        .call(tender, "cancel")
+        .args_json(serde_json::json!({ "sale": id.to_string() }))
+        .gas(tgas(300))
+        .transact()
+        .await?)
+}

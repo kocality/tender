@@ -265,6 +265,31 @@ mod tests {
         }
     }
 
+    /// A full winner with q = 1 at the highest possible P*: with 10^19 base units per lot it
+    /// pays 1 micro-USDC for 0 tokens; with 10^20 (the `create` minimum) it gets tokens.
+    #[test]
+    fn full_winner_gets_tokens_at_min_scale() {
+        let bids = [
+            ClearBid {
+                idx: 0,
+                escrow: 1_000_000,
+                revealed: Some((u64::MAX, 1)),
+            },
+            ClearBid {
+                idx: 1,
+                escrow: 1_000_000,
+                revealed: Some((u64::MAX - 1, 1)),
+            },
+        ];
+        let low = clear(1, 19, 0, 1, &bids);
+        assert_eq!(low.p_star, Some(u64::MAX - 1));
+        assert_eq!((low.spend[0], low.alloc[0]), (1, 0));
+        let min = clear(10, 20, 0, 1, &bids);
+        assert_eq!(min.p_star, Some(u64::MAX - 1));
+        assert_eq!(min.spend[0], 1);
+        assert!(min.alloc[0] >= 1, "{:?}", min.alloc);
+    }
+
     #[derive(Debug, Clone)]
     struct Case {
         supply: u128,

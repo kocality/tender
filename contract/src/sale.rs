@@ -14,6 +14,10 @@ pub const MAX_BIDS: u16 = 64;
 pub const MAX_DECIMALS: u8 = 24;
 /// `decimals + lot_exp ≤ 26` keeps `Q · 10^(d+lot_exp)` under 10^38 (fits u128).
 pub const MAX_SCALE_EXP: u8 = 26;
+/// `decimals + lot_exp ≥ 20`: one lot then holds ≥ 10^20 base units, more than any u64 price
+/// in micro-USDC, so a full winner always gets at least one base unit per micro-USDC paid
+/// (never q for 0 tokens) and loses less than 1 micro-USDC to rounding.
+pub const MIN_SCALE_EXP: u8 = 20;
 /// WD-01: supply in base units, 1 ≤ S ≤ 10^26.
 pub const MAX_SUPPLY: u128 = 100_000_000_000_000_000_000_000_000;
 /// C8: a bid escrows at least 1 USDC (micro-USDC units).
@@ -21,6 +25,10 @@ pub const MIN_ESCROW_PER_BID: u128 = 1_000_000;
 /// C8: total escrow of one sale ≤ 10^12 micro-USDC (1M USDC).
 pub const MAX_ESCROW_TOTAL: u128 = 1_000_000_000_000;
 pub const MAX_BID_MSG: usize = 512;
+/// WD-13: a direct `reveal` takes ≤ 16 items, a self-reveal ≤ 8 items in a msg ≤ 2048 bytes.
+pub const MAX_REVEAL_ITEMS: usize = 16;
+pub const MAX_SELF_REVEAL_ITEMS: usize = 8;
+pub const MAX_SELF_REVEAL_MSG: usize = 2048;
 pub const CT_LEN: usize = 160;
 pub const MAX_ORIGIN_LEN: usize = 8;
 
@@ -205,6 +213,24 @@ pub struct BidMsg {
     pub origin: Option<String>,
 }
 
+/// One opened bid (C16): `{"idx":0,"p":"3900000","q":"4000000","salt":"<32 lowercase hex>"}`.
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct RevealItem {
+    pub idx: u16,
+    pub p: U64,
+    pub q: U64,
+    pub salt: String,
+}
+
+/// `{"op":"reveal","sale":"N","items":[…]}` (C17). Unknown fields are ignored.
+#[derive(Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct RevealMsg {
+    pub sale: U64,
+    pub items: Vec<RevealItem>,
+}
+
 /// Inputs of `validate_create` that come from the transfer, not the msg.
 pub struct CreateCtx<'a> {
     pub sender: &'a AccountId,
@@ -252,7 +278,8 @@ pub fn validate_create(c: &CreateCtx, m: &CreateMsg) -> Result<(), &'static str>
     if m.decimals > MAX_DECIMALS {
         return Err("decimals");
     }
-    if m.decimals as u16 + m.lot_exp as u16 > MAX_SCALE_EXP as u16 {
+    let scale_exp = m.decimals as u16 + m.lot_exp as u16;
+    if scale_exp > MAX_SCALE_EXP as u16 || scale_exp < MIN_SCALE_EXP as u16 {
         return Err("decimals_plus_lot_exp");
     }
     if c.amount == 0 || c.amount > MAX_SUPPLY {
@@ -568,6 +595,39 @@ pub(crate) mod tests {
             },
             "decimals_plus_lot_exp",
         );
+    }
+
+    /// Below 10^20 base units per lot, a full winner with a small q could pay for 0 tokens.
+    #[test]
+    fn create_rejects_d_plus_lot_19() {
+        rejects(
+            |m| {
+                m["decimals"] = json!(18);
+                m["lot_exp"] = json!(1);
+            },
+            "decimals_plus_lot_exp",
+        );
+        rejects(
+            |m| {
+                m["decimals"] = json!(6);
+                m["lot_exp"] = json!(0);
+            },
+            "decimals_plus_lot_exp",
+        );
+    }
+
+    #[test]
+    fn create_accepts_d_plus_lot_20() {
+        let mut t = setup();
+        let got = create_with(
+            &mut t,
+            |m| {
+                m["decimals"] = json!(18);
+                m["lot_exp"] = json!(2);
+            },
+            SUPPLY,
+        );
+        assert_eq!(got, vec![0]);
     }
 
     #[test]

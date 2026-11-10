@@ -88,6 +88,34 @@ pub fn parse_ckd(raw: &[u8]) -> Option<(String, String)> {
     (is_g1(&r.big_y) && is_g1(&r.big_c)).then_some((r.big_y, r.big_c))
 }
 
+/// C9 commitment preimage: `"tender/v1" ‖ u64_le(sale) ‖ u8(len(bidder)) ‖ bidder ‖
+/// u128_le(B) ‖ u64_le(p) ‖ u64_le(q) ‖ salt16` (66 + len(bidder) bytes). Account ids are at
+/// most 64 bytes, so the length always fits in one byte.
+pub fn commitment_preimage(
+    sale: u64,
+    bidder: &str,
+    b: u128,
+    p: u64,
+    q: u64,
+    salt: &[u8; 16],
+) -> Vec<u8> {
+    let mut v = Vec::with_capacity(66 + bidder.len());
+    v.extend_from_slice(b"tender/v1");
+    v.extend_from_slice(&sale.to_le_bytes());
+    v.push(bidder.len() as u8);
+    v.extend_from_slice(bidder.as_bytes());
+    v.extend_from_slice(&b.to_le_bytes());
+    v.extend_from_slice(&p.to_le_bytes());
+    v.extend_from_slice(&q.to_le_bytes());
+    v.extend_from_slice(salt);
+    v
+}
+
+/// `sha256(commitment_preimage(..))` (C9).
+pub fn commitment(sale: u64, bidder: &str, b: u128, p: u64, q: u64, salt: &[u8; 16]) -> [u8; 32] {
+    env::sha256_array(commitment_preimage(sale, bidder, b, p, q, salt))
+}
+
 /// Lowercase hex of exactly `2·N` characters to bytes. Uppercase is rejected (WD-11).
 pub fn hex_decode_lower<const N: usize>(s: &str) -> Option<[u8; N]> {
     let b = s.as_bytes();
@@ -185,6 +213,49 @@ mod tests {
         );
         let raw = format!(r#"{{"big_y":"{S1_Y}","big_c":"{short}"}}"#);
         assert_eq!(parse_ckd(raw.as_bytes()), None);
+    }
+
+    /// Golden vectors shared with `@tender/seal` (`fixtures/seal/commitment.json`).
+    #[test]
+    fn commitment_matches_ws2_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fixtures/seal/commitment.json"
+        );
+        let raw = std::fs::read_to_string(path).expect("fixtures/seal/commitment.json");
+        let j: Value = serde_json::from_str(&raw).unwrap();
+        let cases = j["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 3);
+        for c in cases {
+            let s = |k: &str| c[k].as_str().unwrap().to_string();
+            let salt = hex_decode_lower::<16>(&s("salt_hex")).unwrap();
+            let args = (
+                s("sale").parse::<u64>().unwrap(),
+                s("bidder"),
+                s("B").parse::<u128>().unwrap(),
+                s("p").parse::<u64>().unwrap(),
+                s("q").parse::<u64>().unwrap(),
+            );
+            let pre = commitment_preimage(args.0, &args.1, args.2, args.3, args.4, &salt);
+            assert_eq!(hex_lower(&pre), s("preimage_hex"), "{}", s("name"));
+            let cm = commitment(args.0, &args.1, args.2, args.3, args.4, &salt);
+            assert_eq!(hex_lower(&cm), s("cm_hex"), "{}", s("name"));
+        }
+    }
+
+    #[test]
+    fn commitment_preimage_layout() {
+        let salt = [9u8; 16];
+        let pre = commitment_preimage(7, "alice.near", 5, 6, 8, &salt);
+        assert_eq!(pre.len(), 66 + "alice.near".len());
+        assert_eq!(&pre[..9], b"tender/v1");
+        assert_eq!(&pre[9..17], &7u64.to_le_bytes());
+        assert_eq!(pre[17], 10);
+        assert_eq!(&pre[18..28], b"alice.near");
+        assert_eq!(&pre[28..44], &5u128.to_le_bytes());
+        assert_eq!(&pre[44..52], &6u64.to_le_bytes());
+        assert_eq!(&pre[52..60], &8u64.to_le_bytes());
+        assert_eq!(&pre[60..], &salt);
     }
 
     #[test]

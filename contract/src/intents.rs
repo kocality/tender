@@ -1,11 +1,15 @@
-//! NEP-245 receiver for `intents.near`: sale creation and bids arrive as `mt_on_transfer`.
+//! NEP-245 receiver for `intents.near`: sale creation, bids and gasless self-reveals arrive as
+//! `mt_on_transfer`; payouts leave through `mt_batch_transfer` and come back to `on_paid`.
 //! It never panics: any failure returns the full amount (Intents refunds it) and emits a
 //! `refund` event with the reason (C21).
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U64, U128};
 use near_sdk::serde_json::{self, Value, json};
-use near_sdk::{AccountId, env, near};
+use near_sdk::{AccountId, Gas, GasWeight, NearToken, PromiseError, env, near};
 
-use crate::sale::{self, Bid, BidMsg, BidState, CreateCtx, CreateMsg, Payout, Sale, SaleState};
+use crate::sale::{
+    self, Bid, BidMsg, BidState, CreateCtx, CreateMsg, MAX_SELF_REVEAL_ITEMS, MAX_SELF_REVEAL_MSG,
+    Payout, RevealMsg, Sale, SaleState,
+};
 use crate::seal::hex_lower;
 use crate::{BID_STORAGE_BYTES, CREATE_STORAGE_BYTES, Tender, TenderExt, events, storage_ok};
 
@@ -208,25 +212,185 @@ impl Tender {
         vec![U128(0)]
     }
 
-    /// Pays the next `max` unpaid payout items of a Finalized or Cancelled sale (WD-03).
-    /// Not wired yet: payouts are recorded in state but not sent.
-    pub(crate) fn pay_next(&mut self, _sale: u64, _max: u8) {}
+    /// Sends the next `max` payout items of a Finalized or Cancelled sale that are neither paid
+    /// nor in flight (WD-03): items 0..bids are the bids, item `bids` is the seller. An item
+    /// with nothing to pay is marked paid at once. `pending` is set before the promise so a
+    /// second call in the same block cannot pay an item twice.
+    pub(crate) fn pay_next(&mut self, id: u64, max: u8) {
+        let Some(s) = self.sale(id) else {
+            return;
+        };
+        let (n, quote, token, seller) = (
+            s.bids,
+            s.quote_token.clone(),
+            s.token.clone(),
+            s.seller.clone(),
+        );
+        let mut sent = 0u8;
+        let mut zero = 0u16;
+        for idx in 0..=n {
+            if sent >= max {
+                break;
+            }
+            let receiver = if idx < n {
+                match self.bids.get(&(id, idx)) {
+                    Some(b) => b.bidder.clone(),
+                    None => continue,
+                }
+            } else {
+                seller.clone()
+            };
+            let Some(p) = self.payout_mut(id, idx) else {
+                continue;
+            };
+            if p.ok || p.pending {
+                continue;
+            }
+            let (usdc, tokens) = (p.usdc, p.tokens);
+            if usdc == 0 && tokens == 0 {
+                p.ok = true;
+                zero += 1;
+                emit_payout(id, idx, true, 0, 0);
+                continue;
+            }
+            p.pending = true;
+            let mut ids = Vec::new();
+            let mut amounts = Vec::new();
+            if usdc > 0 {
+                ids.push(quote.as_str());
+                amounts.push(U128(usdc));
+            }
+            if tokens > 0 {
+                ids.push(token.as_str());
+                amounts.push(U128(tokens));
+            }
+            send_payout(&self.intents, id, idx, &receiver, &ids, &amounts);
+            sent += 1;
+        }
+        let s = self.sale_mut(id).unwrap();
+        s.payouts_done += zero;
+        if s.payouts_done > n {
+            env::log_str("finalize: all payouts done");
+        }
+    }
 
-    /// Gasless self-reveal (C17): not wired yet; refunds the transfer.
+    /// Gasless self-reveal (C17, K4, WD-13): a 1 micro-USDC transfer whose msg carries opened
+    /// bids. Accepted from anyone; each item is tried on its own and an invalid one is logged,
+    /// never panicked. The transfer always goes back in full.
     fn do_self_reveal(
         &mut self,
         sender: &AccountId,
         token: &str,
         amount: u128,
-        _msg_len: usize,
-        _v: Value,
+        msg_len: usize,
+        v: Value,
     ) -> Vec<U128> {
-        refund(
-            "reveal_unavailable",
-            sender,
-            token,
-            &[U128(amount)],
-            "reveal",
-        )
+        let amounts = [U128(amount)];
+        if msg_len > MAX_SELF_REVEAL_MSG {
+            return refund("msg_too_long", sender, token, &amounts, "reveal");
+        }
+        let Ok(m) = serde_json::from_value::<RevealMsg>(v) else {
+            return refund("bad_msg", sender, token, &amounts, "reveal");
+        };
+        let id = m.sale.0;
+        let Some(s) = self.sale(id) else {
+            return refund("no_sale", sender, token, &amounts, "reveal");
+        };
+        if token != s.quote_token {
+            return refund("wrong_token", sender, token, &amounts, "reveal");
+        }
+        if m.items.is_empty() || m.items.len() > MAX_SELF_REVEAL_ITEMS {
+            return refund("reveal_items", sender, token, &amounts, "reveal");
+        }
+        for item in &m.items {
+            if let Err(e) = self.apply_reveal(id, item, sender) {
+                env::log_str(&format!("self-reveal: {}: {e}", item.idx));
+            }
+        }
+        amounts.to_vec()
     }
+}
+
+#[near]
+impl Tender {
+    /// Result of one payout transfer (K8): paid, or back to unpaid so the next `finalize`
+    /// retries it. Never panics.
+    #[private]
+    pub fn on_paid(&mut self, sale: U64, idx: u16) {
+        let id = sale.0;
+        // The transfer returns nothing; only a failed promise means it did not happen.
+        let ok = !matches!(
+            env::promise_result_checked(0, 64),
+            Err(PromiseError::Failed)
+        );
+        let Some(p) = self.payout_mut(id, idx) else {
+            env::log_str("on_paid: unknown payout item");
+            return;
+        };
+        if !p.pending {
+            env::log_str("on_paid: stale callback");
+            return;
+        }
+        p.pending = false;
+        p.ok = ok;
+        let (usdc, tokens) = (p.usdc, p.tokens);
+        if ok && let Some(s) = self.sale_mut(id) {
+            s.payouts_done += 1;
+        }
+        emit_payout(id, idx, ok, usdc, tokens);
+    }
+}
+
+/// C14: per-payout gas.
+const PAYOUT_GAS: Gas = Gas::from_tgas(20);
+const ON_PAID_GAS: Gas = Gas::from_tgas(5);
+
+/// `intents.mt_batch_transfer` (exactly 1 yocto from this contract's balance), then
+/// `on_paid(sale, idx)`.
+fn send_payout(
+    intents: &AccountId,
+    sale: u64,
+    idx: u16,
+    receiver: &AccountId,
+    token_ids: &[&str],
+    amounts: &[U128],
+) {
+    let args = json!({
+        "receiver_id": receiver,
+        "token_ids": token_ids,
+        "amounts": amounts,
+        "memo": format!("tender:{sale}:{idx}"),
+    });
+    let p = env::promise_batch_create(intents);
+    env::promise_batch_action_function_call_weight(
+        p,
+        "mt_batch_transfer",
+        args.to_string().as_bytes(),
+        NearToken::from_yoctonear(1),
+        PAYOUT_GAS,
+        GasWeight(0),
+    );
+    let then = env::promise_batch_then(p, &env::current_account_id());
+    let cb = json!({ "sale": sale.to_string(), "idx": idx });
+    env::promise_batch_action_function_call_weight(
+        then,
+        "on_paid",
+        cb.to_string().as_bytes(),
+        NearToken::from_yoctonear(0),
+        ON_PAID_GAS,
+        GasWeight(0),
+    );
+}
+
+fn emit_payout(sale: u64, idx: u16, ok: bool, usdc: u128, tokens: u128) {
+    events::emit(
+        "payout",
+        json!({
+            "sale": sale.to_string(),
+            "idx": idx,
+            "ok": ok,
+            "usdc": usdc.to_string(),
+            "tokens": tokens.to_string(),
+        }),
+    );
 }
