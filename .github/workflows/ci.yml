@@ -15,15 +15,24 @@ jobs:
     timeout-minutes: 60
     env: { PROPTEST_CASES: '512' }
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }   # the drift check below diffs against the commit the committed wasm was built from
       - name: Rust toolchain from contract/rust-toolchain.toml
         working-directory: contract
         run: rustup show active-toolchain || rustup toolchain install
-      - name: cargo-near 0.23.0
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh | sh
-      - uses: Swatinem/rust-cache@v2
+      - name: cargo-near 0.23.0 (installer sha256 pinned; the installer checks the binary's own sha256)
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf -o cargo-near-installer.sh https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh
+          echo '76ae71bc6a99864a09cc67c1c0bf82a2b7812d8ab4c93034b680235df6d22028  cargo-near-installer.sh' | sha256sum -c -
+          sh cargo-near-installer.sh
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with: { workspaces: contract }
+      - name: near-sandbox 2.14.0 (sha256 pinned; the crate would download and run it from S3 unchecked)
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL -o near-sandbox.tar.gz https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/2.14.0/near-sandbox.tar.gz
+          echo 'a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691  near-sandbox.tar.gz' | sha256sum -c -
+          mkdir "$RUNNER_TEMP/sandbox" && tar xzf near-sandbox.tar.gz --strip-components=1 -C "$RUNNER_TEMP/sandbox"
+          echo "NEAR_SANDBOX_BIN_PATH=$RUNNER_TEMP/sandbox/near-sandbox" >> "$GITHUB_ENV"
       - name: build all wasms the sandbox tests read (spike, mock-mpc, mock-ft, tender)
         working-directory: contract
         run: bash scripts/build-wasms.sh
@@ -32,7 +41,7 @@ jobs:
         run: cargo fmt --check
       - name: cargo test
         working-directory: contract
-        run: cargo test
+        run: cargo test --locked
       - name: committed wasm contract/res/tender.wasm (the deploy file) matches its hash and the import rules
         run: |
           (cd contract/res && sha256sum -c tender.wasm.sha256)
@@ -43,7 +52,7 @@ jobs:
       - name: sandbox tests against the committed wasm
         working-directory: contract
         env: { TENDER_WASM: res/tender.wasm }
-        run: cargo test --test sandbox
+        run: cargo test --locked --test sandbox
       - name: advisories for the crates compiled into the wasm (cargo-deny 0.20.2, sha256 pinned)
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf -o cargo-deny.tar.gz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
@@ -54,8 +63,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
@@ -63,18 +72,34 @@ jobs:
       - run: pnpm -r exec tsc --noEmit
       - run: pnpm --filter @tender/app build
       - run: node --test contract/scripts/check-imports.test.mjs
+      - run: node --test .github/workflows/ci-config.test.mjs
+      - run: bash docs/scripts/claims-lint.sh
+      - run: node --test docs/scripts/docs-checks.test.mjs
       - run: pnpm -r test
       - run: pnpm vectors
       - run: pnpm demo:local
+  oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: payload oracle (intents-sdk builds the same payloads; off in the default test run, which would execute ~1700 modules)
+        run: ORACLE=1 pnpm --filter @tender/app test
   secrets:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
-      - name: gitleaks 8.30.1 (full history)
+      - name: gitleaks 8.30.1 (full history; tarball sha256 pinned, equals the release checksums file)
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
+          curl --proto '=https' --tlsv1.2 -fsSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum -c -
+          tar xzf gitleaks.tar.gz gitleaks
           ./gitleaks git --redact -v --config .gitleaks.toml --log-opts="--all" .
       - name: the config flags a private key next to a signature (fake keys, built here, never committed)
         run: |
@@ -93,10 +118,13 @@ jobs:
     steps:
       # Build exactly commit X, never a later commit that only adds the built wasm. Full history, because cargo-near
       # clones the repository with git2 and embeds the build commit in the wasm metadata.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: '${{ inputs.ref }}', fetch-depth: 0 }
-      - name: cargo-near 0.23.0
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh | sh
+      - name: cargo-near 0.23.0 (installer sha256 pinned; the installer checks the binary's own sha256)
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf -o cargo-near-installer.sh https://github.com/near/cargo-near/releases/download/cargo-near-v0.23.0/cargo-near-installer.sh
+          echo '76ae71bc6a99864a09cc67c1c0bf82a2b7812d8ab4c93034b680235df6d22028  cargo-near-installer.sh' | sha256sum -c -
+          sh cargo-near-installer.sh
       - name: reproducible build
         working-directory: contract
         env: { REF: '${{ inputs.ref }}' }
@@ -105,5 +133,5 @@ jobs:
           cargo near build reproducible-wasm
           sha256sum target/near/tender.wasm | tee ../repro-sha256.txt
           echo "### tender.wasm sha256 (built from $REF)" >> "$GITHUB_STEP_SUMMARY"; cat ../repro-sha256.txt >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: tender-wasm, path: 'contract/target/near/tender.wasm' }
