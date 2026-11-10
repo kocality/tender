@@ -151,7 +151,7 @@ export function nearDepsFromEnv(env: NodeJS.ProcessEnv): { cfg: RelayConfig; dep
     allowedOrigins: (env.RELAY_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     maxSigned: 4,
     maxBodyBytes: 16384,
-    minAllowanceYocto: 50_000_000_000_000_000_000_000n, // 0.05 NEAR (D4-13)
+    minAllowanceYocto: 310_000_000_000_000_000_000_000n, // 0.31 NEAR: signing a 300 Tgas call needs allowance >= the pessimistic cost (0.3009 NEAR measured on testnet), not 0.03
   };
 
   // Transactions of one instance go through one queue (nonce); InvalidNonce is retried once.

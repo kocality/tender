@@ -35,7 +35,8 @@ export const sealCrypto: KeeperCrypto = { keyFromCkd, checkKey, decryptBids, app
 
 export const MAX_BATCH = 8; // reveal items per tx (100 Tgas) and payouts per finalize call (300 Tgas)
 const CANCEL_AFTER_NS = 86_400n * 1_000_000_000n;
-const MIN_ALLOWANCE_YOCTO = 50_000_000_000_000_000_000_000n; // below this the function-call key may not cover a 300 Tgas call
+// Signing needs allowance >= the pessimistic cost of the prepaid gas: 300 Tgas = 0.3009 NEAR, 100 Tgas = 0.1003 NEAR (measured on testnet); 1.05e21 yocto per Tgas keeps a margin.
+const YOCTO_PER_TGAS_NEEDED = 1_050_000_000_000_000_000_000n;
 const MAX_TURNS = 12;
 
 export const isoSec = (ns: bigint): string => new Date(Number(ns / 1_000_000n)).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -199,15 +200,16 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
       rows.push({ turn, action: `stop: ${stop.reason}` });
       return finish(stop, 1);
     }
+    const call = toCall(action, opts.sale) as KeeperCall;
     const allowance = await deps.allowance();
-    if (allowance !== null && allowance < MIN_ALLOWANCE_YOCTO) {
-      const stop: KeeperAction = { kind: "stop", reason: `function-call key allowance ${allowance} yocto is below 0.05 NEAR` };
+    const needed = BigInt(call.gasTgas) * YOCTO_PER_TGAS_NEEDED;
+    if (allowance !== null && allowance < needed) {
+      const stop: KeeperAction = { kind: "stop", reason: `function-call key allowance ${allowance} yocto is below ${needed} yocto, the cost of ${call.gasTgas} Tgas prepaid gas` };
       say(`stop: ${stop.reason}`);
       rows.push({ turn, action: `stop: ${stop.reason}` });
       return finish(stop, 1);
     }
 
-    const call = toCall(action, opts.sale) as KeeperCall;
     const sent = await deps.call(call);
     say(`${text} tx=${sent.hash} status=${sent.ok ? "SuccessValue" : "Failure"} url=${sent.url}${sent.error ? ` error=${sent.error}` : ""}`);
     rows.push({ turn, action: text, tx: sent.hash, url: sent.url, ok: sent.ok });

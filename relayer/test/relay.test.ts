@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createRelayHandler, validateBody, type RelayConfig, type RelayDeps } from "../src/relay.js";
+import { createRelayHandler, nearDepsFromEnv, validateBody, type RelayConfig, type RelayDeps } from "../src/relay.js";
 import { SlidingWindowLimiter } from "../src/rate-limit.js";
 
 const NOW = Date.parse("2026-11-10T08:00:00Z");
-const cfg: RelayConfig = { intentsId: "intents.near", allowedOrigins: ["http://localhost:5173"], maxSigned: 4, maxBodyBytes: 16384, minAllowanceYocto: 50_000_000_000_000_000_000_000n };
+const cfg: RelayConfig = { intentsId: "intents.near", allowedOrigins: ["http://localhost:5173"], maxSigned: 4, maxBodyBytes: 16384, minAllowanceYocto: 310_000_000_000_000_000_000_000n };
 
 const inner = (over: Record<string, unknown> = {}) => ({
   signer_id: "0xabc", verifying_contract: "intents.near", deadline: "2026-11-10T08:10:00.000Z", nonce: "AAAA",
@@ -136,13 +136,18 @@ describe("handler", () => {
     expect(no.status).toBe(204);
     expect(no.headers.get("access-control-allow-origin")).toBeNull();
   });
-  it("503 relayer_allowance_low at 0.04 NEAR; a full-access key (null) is fine", async () => {
-    allowance = "40000000000000000000000";
+  it("503 relayer_allowance_low at 0.30 NEAR (a 300 Tgas call needs 0.3009); 0.32 and a full-access key (null) are fine", async () => {
+    allowance = "300000000000000000000000";
     const r = await make()(post(body(raw())));
     expect(r.status).toBe(503);
     expect((await r.json()).error).toBe("relayer_allowance_low");
+    allowance = "320000000000000000000000";
+    expect((await make()(post(body(raw())))).status).toBe(200);
     allowance = null;
     expect((await make()(post(body(raw())))).status).toBe(200);
+  });
+  it("the shipped default threshold is 0.31 NEAR (testnet: a 300 Tgas call with a 0.2 NEAR key is refused, cost 0.3009)", () => {
+    expect(nearDepsFromEnv({ NEAR_NETWORK: "mainnet" }).cfg.minAllowanceYocto).toBe(310_000_000_000_000_000_000_000n);
   });
   it("GET returns health with the allowance in NEAR", async () => {
     const r = await make()(new Request("http://localhost/relay"));

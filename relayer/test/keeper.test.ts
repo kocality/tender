@@ -208,11 +208,21 @@ describe("runKeeper", () => {
     expect(st.lines[0]).toContain("error=boom");
   });
   it("a low allowance stops before sending", async () => {
-    const { st, deps } = chain({ sale: open(), bids: [], now: CLOSE_NS + 10n, allowance: 49_999_999_999_999_999_999_999n });
+    const { st, deps } = chain({ sale: open(), bids: [], now: CLOSE_NS + 10n, allowance: 104_999_999_999_999_999_999_999n }); // open = 100 Tgas needs 0.105 NEAR
     const r = await runKeeper(OPTS, deps);
     expect(st.calls).toEqual([]);
     expect(r.exitCode).toBe(1);
     expect(st.lines[0]).toMatch(/^stop: function-call key allowance/);
+  });
+  it("the allowance needed follows the prepaid gas: 0.2 NEAR covers open (100 Tgas) but not a 300 Tgas finalize", async () => {
+    const a = chain({ sale: open(), bids: [], now: CLOSE_NS + 10n, allowance: 200_000_000_000_000_000_000_000n });
+    await runKeeper({ ...OPTS, once: true }, a.deps);
+    expect(a.st.calls).toEqual(["open"]);
+    const b = chain({ sale: keyed({ revealed: 3 }), bids: sealed(3), now: CLOSE_NS + 10n, allowance: 200_000_000_000_000_000_000_000n });
+    const r = await runKeeper(OPTS, b.deps);
+    expect(b.st.calls).toEqual([]);
+    expect(r.exitCode).toBe(1);
+    expect(b.st.lines[0]).toMatch(/^stop: function-call key allowance .* 300 Tgas prepaid gas/);
   });
   it("a missing sale or contract is exit 0 with 'no such sale'", async () => {
     const a = chain({ sale: open(), bids: [], now: CLOSE_NS });
