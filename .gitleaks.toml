@@ -13,15 +13,18 @@ paths = [
 [[rules]]
 id = "near-ed25519-private-key"
 description = "NEAR ed25519 private key (base58, 64 bytes; public keys are 43-44 characters and do not match)"
-regex = '''ed25519:[1-9A-HJ-NP-Za-km-z]{85,90}'''
+regex = '''(?:"(\w+)"\s*:\s*")?(ed25519:[1-9A-HJ-NP-Za-km-z]{85,90})'''
+secretGroup = 2
 keywords = ["ed25519:"]
 
 # A transaction signature is 64 bytes like a secret key, so the shape is identical. Only a JSON
-# `"signature": "ed25519:..."` line (every evidence/rpc snapshot has one) is allowed.
+# `"signature": "ed25519:..."` value (every evidence/rpc snapshot has one) is allowed. The rule
+# captures the JSON key in front of the value, and the allowlist reads that key from the match, not
+# from the whole line, so a key on the same line as a signature (minified JSON) is still found.
 [[rules.allowlists]]
 description = "NEAR transaction signatures in JSON"
-regexTarget = "line"
-regexes = ['''"signature"\s*:\s*"ed25519:''']
+regexTarget = "match"
+regexes = ['''^"signature"\s*:''']
 
 [[allowlists]]
 description = "Native USDC token contract id on NEAR (public account id): the base64 `args` of the intents.near ft_transfer in the F4 delivery snapshot decode to {token: <that id>, ...}"

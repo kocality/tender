@@ -16,6 +16,7 @@ jobs:
     env: { PROPTEST_CASES: '512' }
     steps:
       - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }   # the drift check below diffs against the commit the committed wasm was built from
       - name: Rust toolchain from contract/rust-toolchain.toml
         working-directory: contract
         run: rustup show active-toolchain || rustup toolchain install
@@ -26,9 +27,29 @@ jobs:
       - name: build all wasms the sandbox tests read (spike, mock-mpc, mock-ft, tender)
         working-directory: contract
         run: bash scripts/build-wasms.sh
+      - name: cargo fmt --check
+        working-directory: contract
+        run: cargo fmt --check
       - name: cargo test
         working-directory: contract
         run: cargo test
+      - name: committed wasm contract/res/tender.wasm (the deploy file) matches its hash and the import rules
+        run: |
+          (cd contract/res && sha256sum -c tender.wasm.sha256)
+          test "$(jq -r .sha256 evidence/wasm.json)" = "$(cut -d' ' -f1 contract/res/tender.wasm.sha256)"
+          node contract/scripts/check-imports.mjs contract/res/tender.wasm
+      - name: contract source has not drifted from the commit the committed wasm was built from (rebuild the RC and update evidence/wasm.json after any change)
+        run: git diff --exit-code "$(jq -r .commit evidence/wasm.json)" HEAD -- contract/src contract/Cargo.toml contract/Cargo.lock contract/rust-toolchain.toml
+      - name: sandbox tests against the committed wasm
+        working-directory: contract
+        env: { TENDER_WASM: res/tender.wasm }
+        run: cargo test --test sandbox
+      - name: advisories for the crates compiled into the wasm (cargo-deny 0.20.2, sha256 pinned)
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf -o cargo-deny.tar.gz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+          echo '9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  cargo-deny.tar.gz' | sha256sum -c -
+          tar xzf cargo-deny.tar.gz --strip-components=1 --wildcards '*/cargo-deny'
+          ./cargo-deny --manifest-path contract/Cargo.toml --config deny.toml check advisories
   ts:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -38,6 +59,10 @@ jobs:
         with: { node-version-file: .nvmrc }
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level high
+      - run: pnpm -r exec tsc --noEmit
+      - run: pnpm --filter @tender/app build
+      - run: node --test contract/scripts/check-imports.test.mjs
       - run: pnpm -r test
       - run: pnpm vectors
       - run: pnpm demo:local
@@ -51,6 +76,16 @@ jobs:
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
           ./gitleaks git --redact -v --config .gitleaks.toml --log-opts="--all" .
+      - name: the config flags a private key next to a signature (fake keys, built here, never committed)
+        run: |
+          d=$(mktemp -d)
+          k=ed25519:$(printf '%088d' 0 | tr 0 A)
+          printf '{"signature":"%s","private_key":"%s"}\n' "$k" "$k" > "$d/one-line.json"
+          printf '{\n  "signature": "%s",\n  "private_key": "%s"\n}\n' "$k" "$k" > "$d/pretty.json"
+          printf '{"hash":"x","signature":"%s"}\n' "$k" > "$d/sig-one-line.json"
+          printf '{\n  "signature": "%s"\n}\n' "$k" > "$d/sig-pretty.json"
+          ./gitleaks dir --no-banner --config .gitleaks.toml --report-format json --report-path "$d/report.json" "$d" || true
+          test "$(jq -r '.[].File | sub(".*/"; "")' "$d/report.json" | sort | paste -sd, -)" = "one-line.json,pretty.json"
   repro:
     if: github.event_name == 'workflow_dispatch' && inputs.ref != ''
     runs-on: ubuntu-24.04
