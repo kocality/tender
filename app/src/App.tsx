@@ -1,4 +1,5 @@
 import { Layout } from './components/Layout';
+import { Bid } from './pages/Bid';
 import { Keys } from './pages/Keys';
 import { Sale } from './pages/Sale';
 import { Try } from './pages/Try';
@@ -25,7 +26,7 @@ export function App() {
       page = <Sale id={route.params.id ?? ''} />;
       break;
     case '/bid/:id':
-      page = <ComingSoon title={`Bid on sale #${route.params.id ?? ''}`} />;
+      page = <Bid id={route.params.id ?? ''} fundOnly={route.query.get('mode') === 'fund'} />;
       break;
     case '/try':
       page = <Try />;

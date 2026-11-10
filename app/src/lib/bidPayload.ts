@@ -52,6 +52,44 @@ export async function buildTryBid(input: TryBidInput): Promise<DefusePayload> {
   });
 }
 
+export interface BidPayloadInput {
+  signerId: string;
+  /** The Tender contract that receives the transfer. */
+  receiverId: string;
+  quoteToken: string;
+  /** Escrow B in micro-USDC. */
+  amount: bigint;
+  sale: string;
+  ct: string;
+  cm: string;
+  origin?: BidOrigin;
+  saltHex?: string;
+  nowMs?: number;
+}
+
+/**
+ * The one Intents Transfer that places a sealed bid: B of the quote token to the contract with `msg = {op: bid, ...}`.
+ * The salt is read live right before signing (a stale one fails with `invalid salt`) and the deadline is 10 minutes.
+ */
+export async function buildBidPayload(input: BidPayloadInput): Promise<DefusePayload> {
+  const saltHex = input.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
+  const { deadlineMs, deadlineIso } = makeDeadline(input.nowMs);
+  return buildPayload({
+    signerId: input.signerId,
+    verifyingContract: config.intentsContractId,
+    deadlineIso,
+    nonce: buildVersionedNonce({ saltHex, deadlineMs }),
+    intents: [
+      transferIntent({
+        receiverId: input.receiverId,
+        tokenId: input.quoteToken,
+        amount: input.amount,
+        msg: bidMsg({ sale: input.sale, ct: input.ct, cm: input.cm, origin: input.origin }),
+      }),
+    ],
+  });
+}
+
 /** The sale's quote token read live from get_config(); the mainnet USDC id when the contract is not deployed yet. */
 export async function liveQuoteToken(): Promise<string> {
   try {

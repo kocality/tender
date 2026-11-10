@@ -7,6 +7,7 @@ import { WalletError, type IntentSigner } from './types';
 // which must not happen at import time (tests, server rendering) or on pages that never use NEAR.
 let connector: NearConnector | null = null;
 let connected: NearWalletBase | null = null;
+let connectedSigner: IntentSigner | null = null;
 
 export function getNearConnector(): NearConnector {
   connector ??= new NearConnector({ network: config.network, features: { signMessage: true } });
@@ -27,7 +28,7 @@ export async function connectNear(): Promise<IntentSigner> {
   const [account] = await wallet.getAccounts();
   if (!account) throw new WalletError('The wallet returned no account.');
   connected = wallet;
-  return {
+  connectedSigner = {
     kind: 'near',
     signerId: account.accountId,
     origin: 'near',
@@ -43,6 +44,12 @@ export async function connectNear(): Promise<IntentSigner> {
       return nep413FromWallet({ payload: p, nonce32, publicKey, signature: signed.signature });
     },
   };
+  return connectedSigner;
+}
+
+/** The already connected NEAR wallet, or a new connection. Open, Cancel and Reveal all use this so the wallet is asked once. */
+export async function ensureNear(): Promise<IntentSigner> {
+  return connectedSigner ?? connectNear();
 }
 
 /** FunctionCall through the connected NEAR wallet (Open, Reveal all, Cancel; used from WS3-T05). */
