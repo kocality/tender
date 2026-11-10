@@ -18,10 +18,14 @@ export class RpcAnswer extends Error {
   }
 }
 
-/** Errors a node reports about the request (HANDLER_ERROR, REQUEST_VALIDATION_ERROR); INTERNAL_ERROR and timeouts are node problems. */
+/** Handler errors that depend on the node's own chain state (a lagging or pruned node), not on the request. */
+const NODE_STATE_CAUSES = ['UNKNOWN_BLOCK', 'NOT_SYNCED_YET', 'NO_SYNCED_BLOCKS', 'GARBAGE_COLLECTED_BLOCK'];
+
+/** Errors a node reports about the request (HANDLER_ERROR, REQUEST_VALIDATION_ERROR); INTERNAL_ERROR, timeouts and node-state causes are node problems. */
 function isAnswer(error: unknown): boolean {
-  const name = (error as { name?: unknown } | null)?.name;
-  return name === 'HANDLER_ERROR' || name === 'REQUEST_VALIDATION_ERROR';
+  const e = error as { name?: unknown; cause?: { name?: unknown } } | null;
+  if (NODE_STATE_CAUSES.includes(String(e?.cause?.name))) return false;
+  return e?.name === 'HANDLER_ERROR' || e?.name === 'REQUEST_VALIDATION_ERROR';
 }
 
 export interface RpcOptions {

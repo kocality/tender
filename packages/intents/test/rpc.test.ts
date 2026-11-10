@@ -38,6 +38,19 @@ describe('rpcCall', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3); // 2 attempts on the first URL, then the second answers
   });
 
+  test('a node that lacks the block (UNKNOWN_BLOCK on a pinned read, not synced) is a node problem: the next URL is tried', async () => {
+    for (const cause of ['UNKNOWN_BLOCK', 'NOT_SYNCED_YET']) {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url === 'http://one.invalid') return new Response('busy', { status: 503 });
+        if (url === 'http://two.invalid') return Response.json({ jsonrpc: '2.0', id: 'tender', error: { name: 'HANDLER_ERROR', cause: { name: cause, info: {} }, code: -32000, message: 'Server error' } });
+        return Response.json({ jsonrpc: '2.0', id: 'tender', result: { result: Array.from(new TextEncoder().encode('42')) } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      expect(await viewCall(['http://one.invalid', 'http://two.invalid', 'http://three.invalid'], 'c.near', 'm', {}, { blockId: 123, backoffMs: [0] })).toBe(42);
+      expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['http://one.invalid', 'http://two.invalid', 'http://three.invalid']);
+    }
+  });
+
   test('an INTERNAL_ERROR is a node problem, not an answer: the next URL is tried', async () => {
     const fetchMock = vi.fn(async (url: string) =>
       url === 'http://one.invalid'
