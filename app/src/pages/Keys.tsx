@@ -1,3 +1,4 @@
+import { Loading, ReadError } from '../components/Feedback';
 import { TxLink } from '../components/TxLink';
 import { config } from '../config';
 import { cancelledLabel } from '../copy';
@@ -49,7 +50,7 @@ export function KeysView({ data }: { data: KeysData }) {
             {data.rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="muted">
-                  No key request recorded.
+                  No key request recorded yet: the contract has not asked NEAR&apos;s MPC network for any sale key.
                 </td>
               </tr>
             ) : (
@@ -96,8 +97,8 @@ export function Keys() {
   const { data, error, loading } = usePolling(loadKeys, 0, []) // one NearBlocks request per page load, never polled (V3);
   return (
     <>
-      {error ? <p className="note">Could not read {config.tenderContractId}: {error}</p> : null}
-      {loading && !data ? <p className="muted">Loading key ledger…</p> : null}
+      <ReadError error={error} stale={data !== null} retrying={false} />
+      {loading && !data ? <Loading what="key ledger" /> : null}
       {data ? <KeysView data={data} /> : null}
     </>
   );

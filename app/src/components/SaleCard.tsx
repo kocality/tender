@@ -31,6 +31,9 @@ export function SaleCard({
     return (
       <section className="card" aria-label={`Sale ${id}`}>
         <h2 style={{ marginTop: 0 }}>{`Sale #${id} · not created yet`}</h2>
+        <p className="small muted" style={{ margin: 0 }}>
+          Nothing is on chain for this sale id yet. The page checks again every few seconds.
+        </p>
       </section>
     );
   }

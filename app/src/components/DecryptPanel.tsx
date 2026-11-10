@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { config } from '../config';
 import { decryptSale, type DecryptResult } from '../lib/decrypt';
+import { humanError } from '../lib/errors';
 import { formatUsdc, shortId } from '../lib/format';
 import type { Bid, Config, Sale } from '../lib/views';
 
@@ -33,7 +34,7 @@ export function DecryptPanel({
         await decryptSale({ config: cfg, sale, bids, contractId: config.tenderContractId, onProgress: (done, total) => setProgress({ done, total }) }),
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(humanError(e));
     } finally {
       setProgress(null);
     }

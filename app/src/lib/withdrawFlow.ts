@@ -101,7 +101,7 @@ export function withdrawEvidence(o: { depositAddress: string; status: StatusResp
 const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
- * Polls 1Click every 5 s until a terminal status. The deposit address is unknown to 1Click for the first seconds, so a
+ * Polls 1Click every 5 s until a terminal status. The deposit address is unknown to 1Click for a few seconds, so a
  * 404 is retried; the third 404 in a row is an error. Other network errors are retried until the timeout.
  */
 export async function followWithdraw(o: {

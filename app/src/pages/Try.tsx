@@ -158,7 +158,7 @@ function WalletCard({
         </p>
       ) : null}
       {state.signed && state.signedString ? (
-        <details>
+        <details className="debug-only">
           <summary>Show signed payload</summary>
           <p className="small muted">Signed MultiPayload</p>
           <pre className="payload">{JSON.stringify(state.signed, null, 2)}</pre>

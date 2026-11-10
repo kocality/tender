@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { config } from '../config';
 import type { DecryptResult } from '../lib/decrypt';
 import { revealBatch } from '../lib/near-tx';
-import { RelayError, pollBid, relay } from '../lib/relay';
+import { pollBid, relay } from '../lib/relay';
 import { batches, revealWindowOpen, revealable, toRevealItems, unrevealable } from '../lib/revealFilter';
 import { buildSelfReveal } from '../lib/selfReveal';
 import { recoveryFor } from '../lib/bidFlow';
@@ -80,7 +80,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
       const stored = await pollBid((bs) => (bs.filter((b) => want.has(b.idx) && b.state === 'Revealed').length === want.size ? bs[0] : undefined), sale.id);
       setLog([stored ? 'Revealed on chain.' : 'Not revealed yet: the contract may have refunded the transfer (see tx logs).']);
     } catch (e) {
-      setError(e instanceof RelayError ? e.message : walletErrorMessage(e));
+      setError(walletErrorMessage(e));
     } finally {
       setBusy(null);
     }

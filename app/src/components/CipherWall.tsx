@@ -14,7 +14,7 @@ function ctPreview(ctB64: string): string {
 
 /** Every bid as the chain stores it: a 48 hex character prefix of the 160-byte ciphertext, never a price. */
 export function CipherWall({ bids }: { bids: Bid[] }) {
-  if (bids.length === 0) return <p className="muted small">No bids yet.</p>;
+  if (bids.length === 0) return <p className="muted small">No bids yet. Sealed bids appear here as soon as they are stored on chain.</p>;
   return (
     <div className="wall">
       {bids.map((b) => (

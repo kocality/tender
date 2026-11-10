@@ -1,3 +1,4 @@
+import { Loading, ReadError } from '../components/Feedback';
 import { CipherWall } from '../components/CipherWall';
 import { Countdown } from '../components/Countdown';
 import { OpenPanel } from '../components/OpenPanel';
@@ -61,8 +62,8 @@ export function Twin() {
   const { data, error, loading } = usePolling(() => Promise.all([loadSaleBundle(a), loadSaleBundle(b)]), 5000, [a, b]);
   return (
     <>
-      {error ? <p className="note">Could not read {config.tenderContractId}: {error}</p> : null}
-      {loading && !data ? <p className="muted">Loading sales…</p> : null}
+      <ReadError error={error} stale={data !== null} />
+      {loading && !data ? <Loading what="sales" /> : null}
       {data ? <TwinView bundles={data} nowNs={nowNs} /> : null}
     </>
   );

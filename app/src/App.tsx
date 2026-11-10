@@ -1,3 +1,4 @@
+import { NotFound } from './components/Feedback';
 import { Layout } from './components/Layout';
 import { Bid } from './pages/Bid';
 import { Keys } from './pages/Keys';
@@ -7,6 +8,11 @@ import { Twin } from './pages/Twin';
 import { Withdraw } from './pages/Withdraw';
 import { useHashRoute } from './router';
 
+/** Sale ids are counters; anything else would only make the contract view panic. */
+function isSaleId(id: string | undefined): id is string {
+  return id !== undefined && /^\d{1,18}$/.test(id);
+}
+
 export function App() {
   const route = useHashRoute();
   let page;
@@ -15,10 +21,10 @@ export function App() {
       page = <Twin />;
       break;
     case '/sale/:id':
-      page = <Sale id={route.params.id ?? ''} />;
+      page = isSaleId(route.params.id) ? <Sale id={route.params.id} /> : <NotFound what="sale" />;
       break;
     case '/bid/:id':
-      page = <Bid id={route.params.id ?? ''} fundOnly={route.query.get('mode') === 'fund'} />;
+      page = isSaleId(route.params.id) ? <Bid id={route.params.id} fundOnly={route.query.get('mode') === 'fund'} /> : <NotFound what="sale" />;
       break;
     case '/try':
       page = <Try />;
@@ -30,14 +36,7 @@ export function App() {
       page = <Withdraw />;
       break;
     default:
-      page = (
-        <div>
-          <h1>Not found</h1>
-          <p>
-            <a href="#/">Back to the twin sales</a>
-          </p>
-        </div>
-      );
+      page = <NotFound />;
   }
   return <Layout current={route.path}>{page}</Layout>;
 }

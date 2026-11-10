@@ -1,5 +1,6 @@
 import type { IntentsErrorKind, simulateIntents } from '@tender/intents';
 import { TRY_RESULT } from '../copy';
+import { humanError } from './errors';
 
 export type SimulationResult = Awaited<ReturnType<typeof simulateIntents>>;
 
@@ -25,6 +26,6 @@ export function interpretSimulation(sim: SimulationResult): TryOutcome {
     case 'invalid_salt':
       return { kind: sim.kind, tone: 'bad', text: `The Intents salt changed while signing (${sim.message}). Sign again.`, signAgain: true };
     default:
-      return { kind: sim.kind, tone: 'bad', text: sim.message, signAgain: false };
+      return { kind: sim.kind, tone: 'bad', text: humanError(sim.kind, sim.message), signAgain: false };
   }
 }

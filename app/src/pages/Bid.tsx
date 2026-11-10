@@ -3,6 +3,7 @@ import { fromBase64, mtBalanceOf, simulateIntents, toHex, type MultiPayload } fr
 import { BidForm, type BidFormValues } from '../components/BidForm';
 import { CopyButton } from '../components/CopyButton';
 import { DepositBox } from '../components/DepositBox';
+import { Loading, ReadError } from '../components/Feedback';
 import { HonestNote } from '../components/HonestNote';
 import { PasteSealedBid } from '../components/PasteSealedBid';
 import { SaleCard } from '../components/SaleCard';
@@ -14,6 +15,7 @@ import { HOSTED_BUNDLE } from '../copy';
 import { buildBidPayload } from '../lib/bidPayload';
 import { bidsOf, fundDecision, recoveryFor, type Recovery, type Step } from '../lib/bidFlow';
 import { useChainClock } from '../lib/chainClock';
+import { humanError } from '../lib/errors';
 import { formatUsdc } from '../lib/format';
 import { loadSaleBundle } from '../lib/loaders';
 import { addIntentsKey } from '../lib/near-tx';
@@ -23,7 +25,7 @@ import { RelayError, confirmBid, relay } from '../lib/relay';
 import { sealForSale } from '../lib/sealBid';
 import { usePolling } from '../lib/usePolling';
 import { getConfig, type Bid, type Sale } from '../lib/views';
-import { walletErrorMessage, type IntentSigner } from '../wallets/types';
+import type { IntentSigner } from '../wallets/types';
 
 interface Plan {
   /** Escrow B in micro-USDC; the amount of the one transfer. */
@@ -49,8 +51,8 @@ export function Bid({ id, fundOnly }: { id: string; fundOnly: boolean }) {
   return (
     <div>
       <h1>Bid on sale #{id}</h1>
-      {error ? <p className="note">Could not read {config.tenderContractId}: {error}</p> : null}
-      {loading && !data ? <p className="muted">Loading sale…</p> : null}
+      <ReadError error={error} stale={data !== null} />
+      {loading && !data ? <Loading what="sale" /> : null}
       {data && !sale ? <p className="note">Sale #{id} does not exist yet.</p> : null}
       {sale ? (
         <>
@@ -89,7 +91,7 @@ function Wizard({ id, sale, bids, nowNs, fundOnly }: { id: string; sale: Sale; b
     return b;
   }, [rpc, quoteToken]);
 
-  const fail = (e: unknown) => setProblem(e instanceof Error ? e.message : walletErrorMessage(e));
+  const fail = (e: unknown) => setProblem(humanError(e));
 
   /** Origin wallet address that gets any refund from 1Click. EVM signer ids are the address; Phantom keeps the base58 key. */
   const refundAddress = (s: IntentSigner): string => (s.kind === 'phantom' ? (s.publicKey ?? s.signerId) : s.signerId);
@@ -426,7 +428,7 @@ function Wizard({ id, sale, bids, nowNs, fundOnly }: { id: string; sale: Sale; b
       ) : null}
 
       {signed ? (
-        <details style={{ marginTop: 16 }}>
+        <details className="debug-only" style={{ marginTop: 16 }}>
           <summary>Signed payload</summary>
           <pre className="payload">{JSON.stringify(signed, null, 2)}</pre>
           <CopyButton text={JSON.stringify(signed, null, 2)} label="Copy signed payload" />

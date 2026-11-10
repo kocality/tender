@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Loading, ReadError } from '../components/Feedback';
 import { CancelledCard } from '../components/CancelledCard';
 import { CipherWall } from '../components/CipherWall';
 import { Countdown } from '../components/Countdown';
@@ -8,7 +9,6 @@ import { ResultTable } from '../components/ResultTable';
 import { RevealPanel } from '../components/RevealPanel';
 import { SaleCard } from '../components/SaleCard';
 import { SupplyDemandChart } from '../components/SupplyDemandChart';
-import { config } from '../config';
 import { OPEN_RULE } from '../copy';
 import { useChainClock } from '../lib/chainClock';
 import type { DecryptResult } from '../lib/decrypt';
@@ -64,8 +64,8 @@ export function Sale({ id }: { id: string }) {
   const { data: cfg } = usePolling(getConfig, 0, []);
   return (
     <>
-      {error ? <p className="note">Could not read {config.tenderContractId}: {error}</p> : null}
-      {loading && !data ? <p className="muted">Loading sale…</p> : null}
+      <ReadError error={error} stale={data !== null} />
+      {loading && !data ? <Loading what="sale" /> : null}
       {data ? <SaleView key={id} bundle={data} nowNs={nowNs} cfg={cfg} /> : null}
     </>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ORIGIN_CHAIN_NAME, ORIGIN_TOKEN_ADDRESS, isTerminal, type DepositOrigin, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
+import { humanStatus } from '../lib/errors';
 import { formatUsdc } from '../lib/format';
 import { CopyButton } from './CopyButton';
 import { QrCode } from './QrCode';
@@ -88,11 +89,12 @@ export function DepositBox({
       </label>
       <p className="small" role="status">
         1Click status: <strong>{status?.status ?? 'waiting for your deposit'}</strong>
+        {status ? <span className="muted"> · {humanStatus(status.status)}</span> : null}
       </p>
       {failed ? (
         <p className="result bad" role="alert">
-          {status.status}
-          {status.swapDetails?.refundReason ? `: ${status.swapDetails.refundReason}` : ''}. Any deposited amount is refunded to your {chain} wallet.{' '}
+          {humanStatus(status.status)}
+          {status.swapDetails?.refundReason ? ` (${status.swapDetails.refundReason})` : ''} Any deposit is refunded to your {chain} wallet.{' '}
           <button type="button" onClick={onNewQuote}>
             Get a new quote
           </button>

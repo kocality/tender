@@ -1,4 +1,5 @@
 import type { DefusePayload, MultiPayload } from '@tender/intents';
+import { humanError } from '../lib/errors';
 
 export type Origin = 'base' | 'arb' | 'sol' | 'near';
 
@@ -19,12 +20,7 @@ export class WalletError extends Error {
   }
 }
 
-/** Wallet libraries throw strings, `{code, message}` objects or Errors; keep the readable part. */
+/** Wallet libraries throw strings, `{code, message}` objects or Errors; one sentence for the user (a rejected prompt is not an error). */
 export function walletErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'string') return e;
-  if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
-    return (e as { message: string }).message;
-  }
-  return 'wallet request failed';
+  return humanError(e);
 }

@@ -15,6 +15,7 @@ import {
 } from '@tender/intents';
 import { buildTryBid } from '../lib/bidPayload';
 import { config } from '../config';
+import { humanError } from '../lib/errors';
 import { interpretSimulation } from '../lib/tryResult';
 
 const USDC = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
@@ -65,7 +66,8 @@ describe('interpretSimulation', () => {
     expect(interpretSimulation({ ok: true, report: {} })).toMatchObject({ tone: 'ok', kind: 'ok' });
     expect(interpretSimulation({ ok: false, kind: 'invalid_salt', message: 'invalid salt' })).toMatchObject({ tone: 'bad', signAgain: true });
     const bad = interpretSimulation({ ok: false, kind: 'invalid_signature', message: 'invalid signature' });
-    expect(bad).toMatchObject({ tone: 'bad', text: 'invalid signature', signAgain: false });
+    expect(bad).toMatchObject({ tone: 'bad', text: humanError('invalid_signature'), signAgain: false });
+    expect(bad.text).toContain('Sign again');
   });
 });
 

@@ -1,5 +1,6 @@
 import type { IntentsErrorKind } from '@tender/intents';
 import { parseUnits, priceToP } from './amounts';
+import { humanError } from './errors';
 import { depositAmountFor } from './oneclick';
 import type { Sale } from './views';
 
@@ -88,18 +89,19 @@ export type Recovery =
   | { to: 'retry'; message: string }
   | { to: 'fail'; message: string };
 
-/** Where a failed pre-flight simulation or a refused relay sends the user. */
-export function recoveryFor(kind: IntentsErrorKind | 'busy' | 'unconfigured' | 'unavailable', message: string): Recovery {
+/** Where a failed pre-flight simulation or a refused relay sends the user. The message is the one-sentence `humanError` text. */
+export function recoveryFor(kind: IntentsErrorKind | 'busy' | 'unconfigured' | 'unavailable', detail: string): Recovery {
+  const message = humanError(kind, detail);
   switch (kind) {
     case 'insufficient_balance':
-      return { to: 'fund', message: 'The Intents account does not hold enough USDC for this escrow. Add funds, then sign again.' };
+      return { to: 'fund', message };
     case 'public_key_not_registered':
-      return { to: 'register_key', message: 'Register this key with NEAR Intents (one-time, 1 yoctoNEAR), then continue.' };
+      return { to: 'register_key', message };
     case 'invalid_salt':
     case 'deadline_expired':
     case 'deadline_gt_nonce':
     case 'nonce_expired':
-      return { to: 'sign_again', message: `The signature window passed (${message}). Sign again.` };
+      return { to: 'sign_again', message };
     case 'busy':
       return { to: 'retry', message };
     default:

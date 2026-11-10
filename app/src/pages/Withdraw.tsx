@@ -7,6 +7,7 @@ import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
 import { recoveryFor, type Recovery } from '../lib/bidFlow';
 import { liveQuoteToken } from '../lib/bidPayload';
+import { humanError, humanStatus } from '../lib/errors';
 import { formatUnits } from '../lib/format';
 import { addIntentsKey } from '../lib/near-tx';
 import { quoteWithdraw, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
@@ -20,7 +21,7 @@ import {
   type WithdrawSource,
   type WithdrawTarget,
 } from '../lib/withdrawRoutes';
-import { walletErrorMessage, type IntentSigner } from '../wallets/types';
+import type { IntentSigner } from '../wallets/types';
 
 export function Withdraw() {
   const [signer, setSigner] = useState<IntentSigner | null>(null);
@@ -44,7 +45,7 @@ export function Withdraw() {
   const depositAddress = quote?.quote.depositAddress ?? null;
   const locked = busy !== null || signed !== null;
 
-  const fail = (e: unknown) => setProblem(e instanceof Error ? e.message : walletErrorMessage(e));
+  const fail = (e: unknown) => setProblem(humanError(e));
 
   const forgetQuote = () => {
     setQuote(null);
@@ -351,6 +352,7 @@ export function Withdraw() {
           <p className="small" role="status">
             1Click status: <strong>{status?.status ?? (relayTx ? 'waiting for 1Click' : 'not relayed yet')}</strong>
             {busy === 'follow' ? ' · checking every 5 s' : ''}
+            {status ? <span className="muted"> · {humanStatus(status.status)}</span> : null}
           </p>
           {relayTx ? (
             <p className="small">
@@ -377,13 +379,17 @@ export function Withdraw() {
                   </li>
                 ))}
               </ul>
-              {evidence ? <CopyButton text={evidence} label="Copy evidence JSON" /> : null}
+              {evidence ? (
+                <span className="debug-only">
+                  <CopyButton text={evidence} label="Copy evidence JSON" />
+                </span>
+              ) : null}
             </>
           ) : null}
           {status && (status.status === 'REFUNDED' || status.status === 'FAILED' || status.status === 'INCOMPLETE_DEPOSIT') ? (
             <p className="result bad" role="alert">
-              {status.status}
-              {status.swapDetails?.refundReason ? `: ${status.swapDetails.refundReason}` : ''}. The amount returns to your NEAR Intents account.
+              {humanStatus(status.status)}
+              {status.swapDetails?.refundReason ? ` (${status.swapDetails.refundReason})` : ''} The amount returns to your NEAR Intents account.
             </p>
           ) : null}
           {busy === null ? (
@@ -397,7 +403,7 @@ export function Withdraw() {
       ) : null}
 
       {signed ? (
-        <details style={{ marginTop: 16 }}>
+        <details className="debug-only" style={{ marginTop: 16 }}>
           <summary>Signed payload</summary>
           <pre className="payload">{JSON.stringify(signed, null, 2)}</pre>
           <CopyButton text={JSON.stringify(signed, null, 2)} label="Copy signed payload" />

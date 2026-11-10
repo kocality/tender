@@ -82,6 +82,7 @@ code,
 .mono {
   font-family: var(--mono);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
 }
 
 h1 {
@@ -207,6 +208,7 @@ button:disabled {
 
 button:focus-visible,
 a:focus-visible,
+summary:focus-visible,
 select:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--accent);
@@ -215,6 +217,8 @@ input:focus-visible {
 
 select,
 input {
+  max-width: 100%;
+  min-width: 0;
   font: inherit;
   padding: 6px 8px;
   border-radius: 8px;
@@ -543,4 +547,98 @@ tr.row-pstar td {
 .chart .pstar {
   stroke: var(--ok);
   stroke-width: 4;
+}
+
+/* Loading placeholder */
+.skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.skeleton-line {
+  display: block;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton-line.short {
+  width: 60%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Record mode (#/?rec=1): light theme (set in recMode.ts), 18 px root font, no debug panels.
+   At 1440x900 the twin header, countdown and both sale cards are packed to sit in the upper half of the screen. */
+:root[data-rec='1'],
+:root[data-rec='1'] body {
+  font-size: 18px;
+}
+
+:root[data-rec='1'] .debug-only {
+  display: none !important;
+}
+
+:root[data-rec='1'] .countdown {
+  font-size: 2rem;
+}
+
+@media (min-width: 1200px) {
+  :root[data-rec='1'] .shell {
+    max-width: 1320px;
+  }
+
+  :root[data-rec='1'] .topbar {
+    padding: 8px 0;
+  }
+
+  :root[data-rec='1'] .trust {
+    margin-top: 8px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  :root[data-rec='1'] h1 {
+    font-size: 1.3rem;
+    line-height: 1.2;
+    margin: 8px 0 4px;
+  }
+
+  :root[data-rec='1'] .card {
+    padding: 10px 16px;
+  }
+
+  :root[data-rec='1'] .card p,
+  :root[data-rec='1'] .cond {
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+
+  :root[data-rec='1'] .countdown {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  :root[data-rec='1'] .grid-2 {
+    gap: 12px;
+  }
 }
