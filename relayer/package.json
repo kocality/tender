@@ -4,12 +4,20 @@
   "private": true,
   "description": "Permissionless relayer (POST /relay: simulate_intents then execute_intents), keeper and ops scripts",
   "license": "MIT",
+  "engines": {
+    "node": "24.x"
+  },
   "type": "module",
   "scripts": {
     "relay:local": "tsx src/local-server.ts",
     "keeper": "tsx src/keeper.ts",
     "record": "tsx scripts/record.ts",
     "snapshot": "tsx scripts/snapshot.ts",
+    "balances": "tsx scripts/balances.ts",
+    "keys": "tsx scripts/keys.ts",
+    "birth": "tsx scripts/birth.ts",
+    "sale": "tsx scripts/sale.ts",
+    "evidence-check": "tsx scripts/evidence-check.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
