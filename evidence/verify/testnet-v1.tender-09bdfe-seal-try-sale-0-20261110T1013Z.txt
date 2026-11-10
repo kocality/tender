@@ -1,0 +1,4 @@
+sale 0 · v1.tender-09bdfe.testnet · state Finalized · closes 2026-11-10T10:09:16Z
+identity: app_id = sha3_256("near-mpc v0.1.0 app_id derivation:v1.tender-09bdfe.testnet,tender/0/f774cf89643a17d7a89e520b5510ccd8") = 56d75558b5d9cc037eea9c912a9b3f0a8327e8c5b97a562f473b76cfa45e76fa
+sealed a test message to this identity: ct hVtfJTnaZNp9buzF… (160 B)
+key released at block 277053289 (2026-11-10T10:09:56Z) · checkKey true · test message decrypts: OK
