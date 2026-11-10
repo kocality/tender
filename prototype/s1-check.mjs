@@ -1,4 +1,4 @@
-// Gate S1: check a live CKD response from the NEAR MPC network (tasks/WS2.md WS2-T01).
+// Gate S1: check a live CKD response from the NEAR MPC network.
 //   node s1-check.mjs <file.json>          file: {pk, path, acct, pk2?, big_y, big_c, mode?}
 //   node s1-check.mjs --tx <hash> --sender <account> --mode identity|generator|plain|pv --path <derivation_path>
 //                     [--network mainnet|testnet] [--rpc <url>] [--out <file>]
@@ -21,7 +21,7 @@ const NET = {
     archival: ['https://archival-rpc.testnet.fastnear.com', 'https://archival-rpc.testnet.near.org'],
     mpk: 'bls12381g2:xeYho48G2Sr9oJz4gw9sLGZGspeeKpHZvMDAwWvoNTRnVMFJH96GxX98TT2MRhTtsot1wcGR1Ti2Xh8PCsbYJ2enbLNdJXDvTYSK8aTE3nJ5NZXU7Kt1F6mFtReWs5pR4kj' },
 };
-// app_public_key JSON the request must carry for each mode (tasks/WS2.md §1.1)
+// app_public_key JSON the request must carry for each mode
 const GEN1 = 'bls12381g1:6aGxBiDyBZxEL9RKJz8W2h7VQUUKv9BPqHbC2DNWKExVRM7GWtLk6mTQBYXbpgRHwp';
 const APP_PK = {
   identity: { AppPublicKeyPV: { pk1: 'bls12381g1:83VnBdpeT9ioHuUTBD2zcitXg7JqNiebUs5yxDaYaLgZYDLLk2gayHrJKNyRt4vBQB',

@@ -1,4 +1,4 @@
-// Gate S2, step 1: seal a message to an identity whose key does not exist yet (tasks/WS2.md WS2-T02).
+// Gate S2, step 1: seal a message to an identity whose key does not exist yet.
 //   node s2-encrypt.mjs [--caller tenderseal.near] [--mode identity|generator|plain] [--sim] [--out <file>]
 // Real: mainnet domain-2 key, path tender-spike/s2/<16 hex>, default --out ../evidence/spikes/s2-ct.json,
 //       mode from --mode or the S1 evidence (identity PASS > generator PASS > plain PASS). Prints the H-S2 command last.

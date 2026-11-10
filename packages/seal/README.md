@@ -4,7 +4,7 @@ Encrypt to a NEAR contract's future MPC CKD key now; decrypt after the contract 
 
 Status: placeholder. Port from `../../prototype/ibe.mjs`.
 
-API to build (KICKOFF §2, spec §5.3):
+API:
 - `appId(account, path)` = sha3_256(`near-mpc v0.1.0 app_id derivation:{account},{path}`)
 - `encrypt(mpk, appId, msg ≤ 32 B)` → 160-byte ciphertext (U 96 + V 32 + W 32)
 - `keyFromCkd(big_y, big_c, mode)`: identity → `C`, generator → `C − Y`

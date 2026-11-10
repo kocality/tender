@@ -1,4 +1,4 @@
-// Gate S2, step 2: decrypt the S2 ciphertext with the live CKD key for its path (tasks/WS2.md WS2-T02).
+// Gate S2, step 2: decrypt the S2 ciphertext with the live CKD key for its path.
 //   node s2-decrypt.mjs [--ct <file>] (--tx <hash> --sender <account> | --ckd <file> | --sim) [--rpc <url>] [--out <file>]
 // --ct defaults to ../evidence/spikes/s2-ct.json. --ckd: {big_y,big_c} or an s1-shaped file with a response field.
 // --sim: CKD simulated from vector 0's msk (S = msk·H(pk‖app_id), Y = y·G1; identity C = S, generator/plain C = S + Y).

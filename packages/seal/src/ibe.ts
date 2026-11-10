@@ -1,3 +1,4 @@
+// Adapted from drand/tlock-js src/crypto/ibe.ts @17d817ee (MIT, Copyright (c) 2022 drand team). Modified by Tender contributors.
 // Boneh-Franklin IBE with the tlock-style Fujisaki-Okamoto transform, ported line by line from prototype/ibe.mjs.
 // Master key: the MPC domain-2 G2 key. Identity: H(pk || app_id) in G1 with NEAR's DST. Key: S = msk · H(...).
 import { bls12_381 as bls } from '@noble/curves/bls12-381.js';

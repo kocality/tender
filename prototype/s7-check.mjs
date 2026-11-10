@@ -1,4 +1,4 @@
-// Gate S7: does NearBlocks v3 (independent indexer) show the CKD request receipt? (tasks/WS2.md WS2-T01)
+// Gate S7: does NearBlocks v3 (independent indexer) show the CKD request receipt?
 //   node s7-check.mjs --account <caller> --tx <hash> [--network mainnet|testnet] [--max-wait-s 600] [--interval-s 120] [--out <file>]
 // At most max-wait/interval + 1 requests (keyless rate limit). Exit code: 0 found, 1 not found / error.
 import fs from 'node:fs';
