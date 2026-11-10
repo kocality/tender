@@ -11,8 +11,10 @@ const FINALIZE_GRACE_MS = 60 * 60_000;
 export interface Snapshot {
   relay: { status: number; health?: { allowance?: string | null; balance?: string | null; unknown?: boolean } } | { error: string } | null; // null = RELAY_URL not set
   app: { status: number } | { error: string } | null; // null = APP_URL not set
-  sale: SaleView | null; // null = no such sale (yet)
+  sale: SaleView | null | { error: string }; // null = no such sale or contract (yet); error = get_sale could not be read
 }
+
+const NO_CONTRACT = /UNKNOWN_ACCOUNT|CodeDoesNotExist|does not exist/;
 
 const near = (y: bigint) => (Number(y / 10n ** 20n) / 10_000).toString();
 
@@ -33,7 +35,8 @@ export function evaluate(s: Snapshot, nowMs: number): string[] {
   else if (s.app.status !== 200) out.push(`app answered ${s.app.status}`);
 
   const sale = s.sale;
-  if (sale) {
+  if (sale && "error" in sale) out.push(`get_sale of sale ${sale.error}`);
+  else if (sale) {
     const close = Number(BigInt(sale.close_ns) / 1_000_000n);
     if (sale.state === "Open" && nowMs > close + OPEN_GRACE_MS) out.push(`sale ${sale.id} is still Open ${Math.round((nowMs - close) / 60_000)} minutes after its close`);
     if (sale.state === "Keyed" && sale.reveal_deadline_ns !== null && nowMs > Number(BigInt(sale.reveal_deadline_ns) / 1_000_000n) + FINALIZE_GRACE_MS) {
@@ -64,7 +67,11 @@ async function get(url: string | undefined): Promise<{ status: number; body: unk
 export async function main(env: NodeJS.ProcessEnv = process.env, nowMs = Date.now()): Promise<number> {
   const relay = await get(env.RELAY_URL);
   const app = await get(env.APP_URL);
-  const sale = await getSale("mainnet", env.TENDER_CONTRACT_ID || "v1.tenderseal.near", env.WATCH_SALE || "2").catch(() => null);
+  const id = env.WATCH_SALE || "2";
+  // Only a contract that does not exist yet reads as "not created yet"; an outage or a 429 must not look green.
+  const sale = await getSale("mainnet", env.TENDER_CONTRACT_ID || "v1.tenderseal.near", id).catch((e: Error) =>
+    NO_CONTRACT.test(e.message) ? null : { error: `${id} failed: ${e.message.split("\n")[0]}` },
+  );
   const snap: Snapshot = {
     relay: relay === null || "error" in relay ? relay : { status: relay.status, health: relay.body as never },
     app: app === null || "error" in app ? app : { status: app.status },
@@ -72,7 +79,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, nowMs = Date.no
   };
   const problems = evaluate(snap, nowMs);
   if (problems.length === 0) {
-    console.log(`watch ok · sale ${sale ? `${sale.id} ${sale.state}` : "not created yet"}`);
+    console.log(`watch ok · sale ${sale && !("error" in sale) ? `${sale.id} ${sale.state}` : "not created yet"}`);
     return 0;
   }
   for (const p of problems) console.log(`PROBLEM ${p}`);

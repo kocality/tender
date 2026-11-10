@@ -99,7 +99,17 @@ export interface ResultView {
   cancelled: boolean;
 }
 
+export interface KeyLogView {
+  i: string;
+  sale: string;
+  block: string;
+  ns: string;
+  outcome: "Pending" | "Ok" | "Err";
+  resolved_block: string | null;
+}
+
 export const BIDS_PAGE = 64;
+const KEY_LOG_PAGE = 100;
 
 export function getConfig(network: Network, contract: string, rpc?: string): Promise<ConfigView> {
   return view<ConfigView>(network, contract, "get_config", {}, { rpc });
@@ -123,4 +133,16 @@ export async function getBids(network: Network, contract: string, id: string, rp
     out.push(...page);
     if (page.length < BIDS_PAGE) return out;
   }
+}
+
+/** Chain time (ns) of the sale's pending key request, read from the key ledger newest page first; `null` when none is pending. */
+export async function pendingRequestNs(network: Network, contract: string, sale: string, rpc?: string): Promise<bigint | null> {
+  const len = Number((await getConfig(network, contract, rpc)).key_log_len);
+  for (let end = len; end > 0; end -= KEY_LOG_PAGE) {
+    const from = Math.max(0, end - KEY_LOG_PAGE);
+    const page = (await view<KeyLogView[]>(network, contract, "get_key_log", { from: String(from), limit: end - from }, { rpc })) ?? [];
+    const hit = page.filter((k) => k.sale === sale && k.outcome === "Pending").at(-1);
+    if (hit) return BigInt(hit.ns);
+  }
+  return null;
 }

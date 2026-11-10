@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { evaluate, type Snapshot } from "../scripts/watch.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { rpcHooks } from "../scripts/lib/rpc.js";
+import { evaluate, main, type Snapshot } from "../scripts/watch.js";
 import { saleView } from "./helpers/views.js";
 
 const CLOSE = Date.parse("2026-11-17T12:00:00Z");
@@ -42,5 +43,35 @@ describe("watch evaluate (OPS-07)", () => {
     expect(evaluate(ok({ sale: saleView({ state: "Finalized", payouts_done: 3, payouts_total: 4 }) }), CLOSE + 3 * 86_400_000)).toEqual([expect.stringContaining("3/4 payouts")]);
     expect(evaluate(ok({ sale: saleView({ state: "Cancelled", payouts_done: 0, payouts_total: 3 }) }), CLOSE + 3 * 86_400_000)).toEqual([expect.stringContaining("Cancelled with 0/3")]);
     expect(evaluate(ok({ sale: null }), CLOSE)).toEqual([]);
+  });
+});
+
+describe("watch main: a get_sale that cannot be read is red, a contract that does not exist yet is not", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  const env = { RELAY_URL: "http://relay.invalid", APP_URL: "http://app.invalid" };
+  const run = async (rpc: () => Response) => {
+    vi.spyOn(rpcHooks, "sleep").mockResolvedValue(undefined);
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((l: string) => void lines.push(l));
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url === env.RELAY_URL) return new Response(JSON.stringify({ allowance: "499000000000000000000000", balance: "499000000000000000000000" }));
+      if (url === env.APP_URL) return new Response("<html>");
+      return rpc();
+    });
+    return { code: await main(env, CLOSE - 3600_000), lines };
+  };
+  it("every RPC failing (outage, 429) is a problem, not 'not created yet'", async () => {
+    const { code, lines } = await run(() => new Response("busy", { status: 503 }));
+    expect(code).toBe(1);
+    expect(lines).toEqual([expect.stringMatching(/^PROBLEM get_sale of sale 2 failed: .*503/)]);
+  });
+  it("UNKNOWN_ACCOUNT (v1 not deployed yet) is still fine", async () => {
+    const unknown = { jsonrpc: "2.0", id: "x", error: { name: "HANDLER_ERROR", cause: { name: "UNKNOWN_ACCOUNT", info: {} }, message: "Server error", data: "account v1.tenderseal.near does not exist while viewing" } };
+    const { code, lines } = await run(() => new Response(JSON.stringify(unknown)));
+    expect(code).toBe(0);
+    expect(lines).toEqual(["watch ok · sale not created yet"]);
   });
 });

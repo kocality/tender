@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { KeyPair } from "near-api-js";
 import { MAX_BATCH, decide, describeAction, isoSec, keeperKeyProblem, main, runKeeper, summaryMarkdown, toCall, type KeeperCrypto, type KeeperDeps, type KeeperOpts } from "../src/keeper.js";
-import type { BidView, SaleView } from "../scripts/lib/views.js";
+import { pendingRequestNs, type BidView, type SaleView } from "../scripts/lib/views.js";
 import { bidView, configView, saleView } from "./helpers/views.js";
 
 const CLOSE_NS = 1_794_916_800_000_000_000n; // 2026-11-17T12:00:00Z
 const DAY_NS = 86_400_000_000_000n;
+const HOUR_NS = 3_600_000_000_000n;
 const CTX = { contractId: "v1.tenderseal.near", mpkG2: "bls12381g2:x", mode: "identity" };
 const KEY = { big_y: "y", big_c: "c", block: "9", ns: "9" };
 
@@ -58,6 +59,13 @@ describe("decide: Open", () => {
   it("a request in flight waits, even after close + 24 h", () => {
     expect(decide(open({ in_flight: true, key_requests: 1 }), [], CLOSE_NS + 2n * DAY_NS, noCrypto, CTX)[0]).toMatchObject({ kind: "wait" });
     expect(decide(open({ state: "Opening", in_flight: true }), [], CLOSE_NS, noCrypto, CTX)[0]).toMatchObject({ kind: "wait" });
+  });
+  it("a request in flight for an hour or more is dead (C-02): open takes over, or cancel b when the conditions fail", () => {
+    const sent = CLOSE_NS + 10n;
+    const s = open({ state: "Opening", in_flight: true, key_requests: 1 });
+    expect(decide(s, [], sent + HOUR_NS - 1n, noCrypto, CTX, sent)[0]).toMatchObject({ kind: "wait" });
+    expect(decide(s, [], sent + HOUR_NS, noCrypto, CTX, sent)).toEqual([{ kind: "open" }]);
+    expect(decide({ ...s, escrow_total: "1000000" }, [], CLOSE_NS + 2n * DAY_NS, noCrypto, CTX, sent)).toEqual([{ kind: "cancel", rule: "b" }]);
   });
 });
 
@@ -186,6 +194,35 @@ describe("runKeeper", () => {
     expect(st.lines.at(-1)).toBe("done: Finalized · paid 4/4 ok");
     expect(r.exitCode).toBe(0);
     expect(r.rows.filter((x) => x.tx).map((x) => x.action)).toEqual(["open(2)", "reveal(2, bids 0,1,2)", "finalize(2, 8)"]);
+  });
+  it("a key request with no answer for an hour is replaced by a new open (C-02)", async () => {
+    const sent = CLOSE_NS + 10n;
+    const { st, deps } = chain({ sale: open({ state: "Opening", in_flight: true, key_requests: 1 }), bids: [], now: sent + HOUR_NS });
+    const asked: string[] = [];
+    deps.requestNs = async (id) => (asked.push(id), sent);
+    await runKeeper({ ...OPTS, once: true }, deps);
+    expect(asked).toEqual(["2"]);
+    expect(st.calls).toEqual(["open"]);
+  });
+  it("the pending request time comes from the key ledger, newest page first", async () => {
+    const entry = (i: number, sale: string, outcome: string) => ({ i: String(i), sale, block: "1", ns: String(1000 + i), outcome, resolved_block: null });
+    const seen: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      const { params } = JSON.parse(init.body) as { params: { method_name: string; args_base64: string } };
+      const args = JSON.parse(Buffer.from(params.args_base64, "base64").toString()) as { from?: string; limit?: number };
+      seen.push(params.method_name === "get_config" ? "config" : [args.from, args.limit]);
+      const out = params.method_name === "get_config" ? configView({ key_log_len: "150" })
+        : args.from === "50" ? [entry(60, "2", "Err"), entry(149, "3", "Pending")] : [entry(7, "2", "Pending")];
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: "x", result: { result: [...Buffer.from(JSON.stringify(out))] } }));
+    });
+    try {
+      expect(await pendingRequestNs("mainnet", "v1.tenderseal.near", "2")).toBe(1007n);
+      expect(seen).toEqual(["config", ["50", 100], ["0", 50]]);
+      expect(await pendingRequestNs("mainnet", "v1.tenderseal.near", "3")).toBe(1149n);
+      expect(await pendingRequestNs("mainnet", "v1.tenderseal.near", "9")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it("--once makes one call", async () => {
     const { st, deps } = chain({ sale: open(), bids: sealed(3), now: CLOSE_NS + 10n });

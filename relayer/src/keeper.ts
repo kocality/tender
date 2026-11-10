@@ -6,7 +6,7 @@ import { parseCommon } from "../scripts/lib/cli.js";
 import { resolveKey } from "../scripts/lib/keys.js";
 import { rpcCall, type Network } from "../scripts/lib/rpc.js";
 import { explorer, sendStep } from "../scripts/lib/send.js";
-import { getBids, getConfig, getSale, type BidView, type ConfigView, type SaleView } from "../scripts/lib/views.js";
+import { getBids, getConfig, getSale, pendingRequestNs, type BidView, type ConfigView, type SaleView } from "../scripts/lib/views.js";
 import { RPCS, accessKeyInfo, makeAccount, type AccessKeyInfo } from "./near.js";
 
 // Keeper for a sale: open at close, reveal every bid that decrypts and matches its commitment, finalize, retry failed payouts.
@@ -35,6 +35,7 @@ export const sealCrypto: KeeperCrypto = { keyFromCkd, checkKey, decryptBids, app
 
 export const MAX_BATCH = 8; // reveal items per tx (100 Tgas) and payouts per finalize call (300 Tgas)
 const CANCEL_AFTER_NS = 86_400n * 1_000_000_000n;
+const IN_FLIGHT_TIMEOUT_NS = 3_600n * 1_000_000_000n; // contract IN_FLIGHT_TIMEOUT_SECS: open and cancel end a request with no on_key after this
 // Signing needs allowance >= the pessimistic cost of the prepaid gas: 300 Tgas = 0.3009 NEAR, 100 Tgas = 0.1003 NEAR (measured on testnet); 1.05e21 yocto per Tgas keeps a margin.
 const YOCTO_PER_TGAS_NEEDED = 1_050_000_000_000_000_000_000n;
 const MAX_TURNS = 12;
@@ -43,8 +44,11 @@ export const isoSec = (ns: bigint): string => new Date(Number(ns / 1_000_000n)).
 
 export interface DecideCtx { contractId: string; mpkG2: string; mode: string }
 
-/** Pure: what to do next. Several `reveal` actions mean several batches; the runner sends the first and decides again. */
-export function decide(sale: SaleView, bids: BidView[], nowNs: bigint, crypto: KeeperCrypto, ctx: DecideCtx): KeeperAction[] {
+/**
+ * Pure: what to do next. Several `reveal` actions mean several batches; the runner sends the first and decides again.
+ * `requestNs` = chain time of the in-flight key request (its key ledger entry); unknown = wait for it.
+ */
+export function decide(sale: SaleView, bids: BidView[], nowNs: bigint, crypto: KeeperCrypto, ctx: DecideCtx, requestNs?: bigint | null): KeeperAction[] {
   if (sale.state === "Finalized" || sale.state === "Cancelled") {
     if (sale.payouts_done < sale.payouts_total) return [{ kind: "finalize", max: MAX_BATCH }]; // also pays out a cancelled sale; retries failed transfers
     return [{ kind: "done", state: `${sale.state} · paid ${sale.payouts_done}/${sale.payouts_total} ok` }];
@@ -52,7 +56,8 @@ export function decide(sale: SaleView, bids: BidView[], nowNs: bigint, crypto: K
 
   const close = BigInt(sale.close_ns);
   if (sale.state === "Open" || sale.state === "Opening") {
-    if (sale.in_flight || sale.state === "Opening") return [{ kind: "wait", reason: "the key request is in flight" }];
+    const dead = requestNs != null && nowNs >= requestNs + IN_FLIGHT_TIMEOUT_NS; // C-02: its on_key never ran, open or cancel ends it
+    if ((sale.in_flight || sale.state === "Opening") && !dead) return [{ kind: "wait", reason: "the key request is in flight" }];
     if (nowNs < close) return [{ kind: "wait", reason: `would call open(${sale.id}) after ${isoSec(close)}`, until: isoSec(close) }];
     const conditions = BigInt(sale.escrow_total) >= BigInt(sale.min_escrow) && sale.bidders >= sale.min_bidders;
     if (!conditions && sale.key_requests === 0) return [{ kind: "cancel", rule: "a" }];
@@ -110,6 +115,7 @@ export interface KeeperDeps {
   bids(id: string): Promise<BidView[]>;
   nowNs(): Promise<bigint>;
   allowance(): Promise<bigint | null>; // null = no cap
+  requestNs?(id: string): Promise<bigint | null>; // chain time of the sale's pending key request, null = none
   call(c: KeeperCall): Promise<KeeperSent>;
   crypto: KeeperCrypto;
   log(line: string): void;
@@ -171,7 +177,8 @@ export async function runKeeper(opts: KeeperOpts, deps: KeeperDeps): Promise<Kee
     const bids = sale.state === "Keyed" ? await deps.bids(opts.sale) : [];
     const sig = [sale.state, sale.revealed, sale.payouts_done].join("|"); // what an action must change
     const nowNs = await deps.nowNs();
-    let action = decide(sale, bids, nowNs, deps.crypto, ctx)[0] as KeeperAction;
+    const requestNs = sale.in_flight && deps.requestNs ? await deps.requestNs(opts.sale) : null;
+    let action = decide(sale, bids, nowNs, deps.crypto, ctx, requestNs)[0] as KeeperAction;
     if (action.kind === "open" && before?.kind === "open" && before.sig === sig && nowNs >= BigInt(sale.close_ns) + CANCEL_AFTER_NS) {
       action = { kind: "cancel", rule: "b" }; // the open of this run left the sale Open past close + 24 h: refund instead of stopping
     }
@@ -333,6 +340,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env,
       config: () => getConfig(opts.network, opts.contract, common.rpc),
       sale: (id) => getSale(opts.network, opts.contract, id, common.rpc),
       bids: (id) => getBids(opts.network, opts.contract, id, common.rpc),
+      requestNs: (id) => pendingRequestNs(opts.network, opts.contract, id, common.rpc),
       nowNs: async () => {
         const { result } = await rpcCall<{ header: { timestamp_nanosec: string } }>(opts.network, "block", { finality: "final" }, { rpc: common.rpc });
         return BigInt(result.header.timestamp_nanosec);
