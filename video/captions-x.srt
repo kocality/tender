@@ -21,12 +21,13 @@ promise: every key that network
 5
 00:00:13,989 --> 00:00:17,650
 hands this contract is an on-chain
-receipt. Reading it anyway would
+receipt. Reading it anyway would take
+eleven of
 
 6
 00:00:17,650 --> 00:00:20,000
-take eleven of sixteen MPC nodes
-colluding.
+the parties that hold or ever held a key
+share colluding.
 
 7
 00:00:20,000 --> 00:00:24,537
@@ -41,12 +42,12 @@ price and
 9
 00:00:28,897 --> 00:00:33,701
 size are encrypted in my browser to a key
-that doesn't
+nobody has
 
 10
 00:00:33,701 --> 00:00:38,238
-exist yet. I sign one Intents transfer,
-and the bid
+requested yet. I sign one Intents
+transfer, and the bid
 
 11
 00:00:38,238 --> 00:00:42,509
@@ -113,11 +114,11 @@ can check that.
 
 24
 00:01:30,000 --> 00:01:34,557
-Don't trust our UI. One free command
+Don't trust our UI. Two free commands
 
 25
 00:01:34,557 --> 00:01:38,734
-re-reads mainnet, checks the key,
+re-read mainnet, checks the key,
 
 26
 00:01:38,734 --> 00:01:43,038
@@ -133,25 +134,27 @@ ever requested.
 
 29
 00:01:50,000 --> 00:01:54,960
-Privacy rests on eleven of sixteen NEAR
-MPC nodes, the network
+Privacy rests on NEAR's MPC network, the
+one behind Chain Signatures: eleven of
+sixteen nodes today, and resharing
 
 30
 00:01:54,960 --> 00:01:59,840
-behind Chain Signatures, and those nodes
-also run in attested
+never revokes old shares, so former
+operators count too. Those nodes also run
+in attested
 
 31
 00:01:59,840 --> 00:02:05,040
 TEEs. We add no TEE and no committee of
-our own. A bid that never
+our own. A bid that is never revealed
+after
 
 32
 00:02:05,040 --> 00:02:10,720
-opens costs a ten percent bond, and escrow
-sizes are public. Everything
+the key is out loses a ten percent bond,
+and escrow sizes are public. Everything
 
 33
 00:02:10,720 --> 00:02:14,000
 else is in the README. Check it yourself.
-
