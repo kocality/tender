@@ -72,6 +72,11 @@ export function forwardQuoteBody(o: { evm: string; amount: bigint; dry: boolean;
   };
 }
 
+/** F4: USDC on Base -> NEAR-native USDC at a NEAR account (DESTINATION_CHAIN, storage_deposit first) or in its Intents balance (INTENTS). */
+export function nearQuoteBody(o: { evm: string; to: string; toType: "DESTINATION_CHAIN" | "INTENTS"; amount: bigint; dry: boolean; nowMs?: number }) {
+  return { ...forwardQuoteBody(o), recipient: o.to, recipientType: o.toType };
+}
+
 /** S5 return leg: the EVM address's Intents USDC -> Base USDC at the same address. refundTo is the Intents account. */
 export function returnQuoteBody(o: { evm: string; amount: bigint; dry: boolean; nowMs?: number }) {
   assertEvm(o.evm);

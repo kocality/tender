@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { TOKEN, forwardQuoteBody, hashesOf, pollStatus, returnQuoteBody } from "../scripts/lib/oneclick.js";
+import { TOKEN, forwardQuoteBody, hashesOf, nearQuoteBody, pollStatus, returnQuoteBody } from "../scripts/lib/oneclick.js";
 import { main, type S5Env } from "../scripts/s5-return.js";
 
 const EVM = "0xAbCdEf0123456789aBcDeF0123456789AbCdEf01";
@@ -41,6 +41,11 @@ describe("1Click quote bodies", () => {
       recipientType: "DESTINATION_CHAIN",
       deadline: DEADLINE,
     });
+  });
+  it("near (F4): same as forward, recipient is the NEAR account with the chosen type, refund to the EVM address", () => {
+    const b = nearQuoteBody({ evm: EVM, to: "tenderseal.near", toType: "DESTINATION_CHAIN", amount: 9_000_000n, dry: true, nowMs: NOW });
+    expect(b).toEqual({ ...forwardQuoteBody({ evm: EVM, amount: 9_000_000n, dry: true, nowMs: NOW }), recipient: "tenderseal.near", recipientType: "DESTINATION_CHAIN" });
+    expect(b).toMatchObject({ refundTo: EVM, refundType: "ORIGIN_CHAIN", destinationAsset: TOKEN.usdcNear });
   });
   it("rejects an address that is not 0x + 40 hex", () => {
     expect(() => forwardQuoteBody({ evm: "0x123", amount: 1n, dry: true })).toThrow(/--evm/);
@@ -126,6 +131,23 @@ describe("s5-return quote", () => {
     expect(r.out).toContain(`signed by ${EVM.toLowerCase()}`);
   });
 
+  it("near: DESTINATION_CHAIN dry quote, then a real quote that prints the deposit address and skips the Intents balance", async () => {
+    const fx = fakeS5();
+    const d = await run(["--leg", "near", "--evm", EVM, "--to", "tenderseal.near", "--amount", "9", "--dry-quote"], fx);
+    expect(d.code).toBe(0);
+    expect(fx.requests[0]?.body).toMatchObject({ dry: true, recipient: "tenderseal.near", recipientType: "DESTINATION_CHAIN", amount: "9000000" });
+    const r = await run(["--leg", "near", "--evm", EVM, "--to", "tenderseal.near", "--amount", "9"], fx);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("depositAddress: DEPOSIT-ADDR");
+    expect(r.out).toContain("--leg near --origin-tx");
+    expect(JSON.parse(readFileSync(join(r.stateDir, "s5-near-DEPOSIT-ADDR.json"), "utf8"))).toMatchObject({ leg: "near", to: "tenderseal.near", toType: "DESTINATION_CHAIN", before: "0" });
+  });
+
+  it("near: needs --to and a valid --to-type", async () => {
+    expect((await run(["--leg", "near", "--evm", EVM, "--amount", "9"], fakeS5())).code).toBe(2);
+    expect((await run(["--leg", "near", "--evm", EVM, "--to", "x.near", "--to-type", "WRONG", "--amount", "9"], fakeS5())).code).toBe(2);
+  });
+
   it("is refused on testnet and without a leg", async () => {
     expect((await run(["--leg", "forward", "--evm", EVM, "--amount", "3", "--network", "testnet"], fakeS5())).code).toBe(2);
     expect((await run(["--evm", EVM, "--amount", "3"], fakeS5())).code).toBe(2);
@@ -155,6 +177,22 @@ describe("s5-return --watch", () => {
       { step: "deposit", txHash: "NEARTX1", signer: "1click-relayer.near", oneclick: "DEPOSIT-ADDR", originTx: "0xbase", destTx: "NEARTX1", note: "S5 forward" },
     ]);
     expect(r.out).toContain("delta 2.999394");
+  });
+
+  it("near: records ops/fund with the delivery tx and prints the ft_balance_of check", async () => {
+    const done = { status: "SUCCESS", swapDetails: { nearTxHashes: ["SOLVERTX"], originChainTxHashes: [{ hash: "0xbase" }], destinationChainTxHashes: [{ hash: "DELIVERYTX" }] } };
+    const fx = fakeS5({ statuses: [done] });
+    const dirs = { evidenceDir: mkdtempSync(join(tmpdir(), "s5e-")), stateDir: mkdtempSync(join(tmpdir(), "s5s-")) };
+    await run(["--leg", "near", "--evm", EVM, "--to", "tenderseal.near", "--amount", "9"], fakeS5(), dirs);
+    const saved = JSON.parse(readFileSync(join(dirs.stateDir, "s5-near-DEPOSIT-ADDR.json"), "utf8"));
+    fx.env.readJson = (file) => (file.endsWith("s5-near-DEPOSIT-ADDR.json") ? saved : null);
+    const r = await run(["--watch", "DEPOSIT-ADDR", "--leg", "near", "--origin-tx", "0xbase"], fx, dirs);
+    expect(r.code).toBe(0);
+    expect(fx.files.get(join(dirs.evidenceDir, "spikes", "s5-near-DEPOSIT-ADDR.json"))).toEqual(done);
+    expect(fx.recorded).toEqual([
+      { sale: "ops", step: "fund", txHash: "DELIVERYTX", signer: "1click-relayer.near", oneclick: "DEPOSIT-ADDR", originTx: "0xbase", destTx: "DELIVERYTX", note: "S5 near" },
+    ]);
+    expect(r.out).toContain(`ft_balance_of json-args '{"account_id":"tenderseal.near"}'`);
   });
 
   it("return: the NEAR tx is the origin, the Base tx the destination, --signer skips the lookup", async () => {

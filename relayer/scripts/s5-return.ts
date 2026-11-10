@@ -6,7 +6,7 @@ import { bidsDir, consoleIo, writeBidFile, type Io } from "./lib/bidfiles.js";
 import { parseCommon, type Common } from "./lib/cli.js";
 import { EVIDENCE_DIR } from "./lib/evidence.js";
 import {
-  TOKEN, approx, assertEvm, forwardQuoteBody, hashesOf, pollStatus, postQuote, returnQuoteBody, submitDeposit,
+  TOKEN, approx, assertEvm, forwardQuoteBody, hashesOf, nearQuoteBody, pollStatus, postQuote, returnQuoteBody, submitDeposit,
   type Fetch, type Quote, type StatusBody,
 } from "./lib/oneclick.js";
 import { RPC } from "./lib/rpc.js";
@@ -18,7 +18,8 @@ import { fromUnits, toUnits } from "./lib/units.js";
 const usage = `usage:
   tsx scripts/s5-return.ts --leg forward --evm <0x address of Tender 1> --amount 3 [--dry-quote]
   tsx scripts/s5-return.ts --leg return  --evm <0x address of Tender 1> --amount 1 [--dry-quote]
-  tsx scripts/s5-return.ts --watch <depositAddress> --leg forward|return [--origin-tx <0x hash>] [--near-tx <hash> --signer <account>] [--timeout-min 40]
+  tsx scripts/s5-return.ts --leg near --evm <0x address of Tender 1> --to <NEAR account> [--to-type DESTINATION_CHAIN|INTENTS] --amount 9 [--dry-quote]
+  tsx scripts/s5-return.ts --watch <depositAddress> --leg forward|return|near [--origin-tx <0x hash>] [--near-tx <hash> --signer <account>] [--timeout-min 40]
   A quote without --dry-quote is a real quote (dry:false): it returns a deposit address valid for 30 minutes and moves no money by itself.`;
 
 export interface S5Env {
@@ -29,7 +30,7 @@ export interface S5Env {
   sleep(ms: number): Promise<void>;
   /** Signer of a NEAR transaction from the public indexer, `null` when unknown. */
   signerOf(txHash: string): Promise<string | null>;
-  record(row: { step: "deposit" | "withdraw"; txHash: string; signer: string; oneclick: string; originTx?: string; destTx?: string; note: string }): Promise<void>;
+  record(row: { sale?: "ops" | "spike"; step: "deposit" | "withdraw" | "fund"; txHash: string; signer: string; oneclick: string; originTx?: string; destTx?: string; note: string }): Promise<void>;
   writeJson(file: string, data: unknown): void;
   readJson(file: string): unknown | null;
 }
@@ -57,7 +58,7 @@ export function liveS5Env(c: Common): S5Env {
     async record(row) {
       const { recordTx } = await import("./record.js");
       await recordTx({
-        network: c.network, sale: "spike", step: row.step, txHash: row.txHash, signer: row.signer, chain: "base",
+        network: c.network, sale: row.sale ?? "spike", step: row.step, txHash: row.txHash, signer: row.signer, chain: "base",
         oneclick: row.oneclick, originTx: row.originTx, destTx: row.destTx, note: row.note,
       });
     },
@@ -75,15 +76,20 @@ export interface S5Deps { env?: (c: Common) => S5Env; io?: Io; evidenceDir?: str
 
 const stateFileName = (leg: string, depositAddress: string) => `s5-${leg}-${depositAddress}.json`;
 
-async function runQuote(leg: "forward" | "return", evm: string, amountText: string, dry: boolean, env: S5Env, io: Io, stateDir: string): Promise<number> {
+type Dest = { to: string; toType: "DESTINATION_CHAIN" | "INTENTS" };
+
+async function runQuote(leg: "forward" | "return" | "near", evm: string, amountText: string, dry: boolean, env: S5Env, io: Io, stateDir: string, dest?: Dest): Promise<number> {
   assertEvm(evm);
   const amount = toUnits(amountText, 6);
   if (amount < 1n) throw new Error("--amount must be positive");
-  const account = evm.toLowerCase();
+  const account = leg === "near" ? (dest as Dest).to : evm.toLowerCase();
   const nowMs = await env.nowMs();
-  const body = leg === "forward" ? forwardQuoteBody({ evm, amount, dry, nowMs }) : returnQuoteBody({ evm, amount, dry, nowMs });
-  const before = await env.balance(account);
-  io.out(`${leg} leg · ${fromUnits(amount, 6)} USDC · Intents USDC of ${account} now: ${fromUnits(before, 6)}`);
+  const body =
+    leg === "near" ? nearQuoteBody({ evm, ...(dest as Dest), amount, dry, nowMs })
+    : leg === "forward" ? forwardQuoteBody({ evm, amount, dry, nowMs })
+    : returnQuoteBody({ evm, amount, dry, nowMs });
+  const before = leg === "near" && dest?.toType === "DESTINATION_CHAIN" ? 0n : await env.balance(account);
+  io.out(`${leg} leg · ${fromUnits(amount, 6)} USDC · ${leg === "near" && dest?.toType === "DESTINATION_CHAIN" ? `delivered to the NEAR account ${account}` : `Intents USDC of ${account} now: ${fromUnits(before, 6)}`}`);
   if (leg === "return" && before < amount) io.out(`WARN the Intents balance (${fromUnits(before, 6)}) is below the amount: run the forward leg first`);
   io.out(`quote request: ${JSON.stringify(body)}`);
   const q: Quote = await postQuote(body, env.fetch);
@@ -95,13 +101,13 @@ async function runQuote(leg: "forward" | "return", evm: string, amountText: stri
   }
   const addr = r.depositAddress;
   if (!addr) throw new Error("1Click returned no depositAddress for a non-dry quote");
-  const file = writeBidFile(stateDir, stateFileName(leg, addr), { leg, evm: account, before: before.toString(), at: new Date(nowMs).toISOString(), quote: q });
+  const file = writeBidFile(stateDir, stateFileName(leg, addr), { leg, evm: account, ...(dest ?? {}), before: before.toString(), at: new Date(nowMs).toISOString(), quote: q });
   io.out(`depositAddress: ${addr}`);
   io.out(`deadline: ${r.deadline ?? "(none)"} (30 minutes from the quote)`);
   io.out(`saved: ${file} (local only)`);
-  if (leg === "forward") {
+  if (leg === "forward" || leg === "near") {
     io.out(`NEXT: in MetaMask on Base send EXACTLY ${fromUnits(BigInt(r.amountIn), 6)} USDC to ${addr} before the deadline, then run:`);
-    io.out(`  pnpm --filter @tender/relayer exec tsx scripts/s5-return.ts --watch ${addr} --leg forward --origin-tx <MetaMask tx hash>`);
+    io.out(`  pnpm --filter @tender/relayer exec tsx scripts/s5-return.ts --watch ${addr} --leg ${leg} --origin-tx <MetaMask tx hash>`);
   } else {
     const { payload } = await buildTransferPayload({
       signer: account, intents: process.env.INTENTS_CONTRACT_ID ?? "intents.near", receiver: addr, tokenId: TOKEN.usdcNear, amount: BigInt(r.amountIn),
@@ -116,10 +122,10 @@ async function runQuote(leg: "forward" | "return", evm: string, amountText: stri
 }
 
 async function runWatch(
-  addr: string, leg: "forward" | "return", o: { originTx?: string; nearTx?: string; signer?: string; timeoutMin: number; noRecord: boolean; network: string },
+  addr: string, leg: "forward" | "return" | "near", o: { originTx?: string; nearTx?: string; signer?: string; timeoutMin: number; noRecord: boolean; network: string },
   env: S5Env, io: Io, evidenceDir: string, stateDir: string,
 ): Promise<number> {
-  if (o.originTx && leg === "forward") {
+  if (o.originTx && leg !== "return") {
     try {
       await submitDeposit(o.originTx, addr, env.fetch);
       io.out(`deposit/submit: told 1Click about ${o.originTx}`);
@@ -135,17 +141,25 @@ async function runWatch(
     io.err("fallback: forward -> PoA deposit address path (G8); return -> ft_withdraw to NEAR, then 1Click ORIGIN_CHAIN");
     return 1;
   }
-  const file = join(evidenceDir, "spikes", `s5-${leg}.json`);
+  const file = join(evidenceDir, "spikes", leg === "near" ? `s5-near-${addr}.json` : `s5-${leg}.json`);
   env.writeJson(file, status);
   io.out(`SUCCESS · status JSON saved to ${file}`);
 
   const sd = status.swapDetails ?? {};
   const nearTxs = hashesOf(sd.nearTxHashes);
-  const nearTx = o.nearTx ?? nearTxs[0];
+  const nearTx = o.nearTx ?? (leg === "near" ? hashesOf(sd.destinationChainTxHashes)[0] : undefined) ?? nearTxs[0];
   const originTx = o.originTx ?? hashesOf(sd.originChainTxHashes)[0] ?? (leg === "return" ? nearTx : undefined);
   const destTx = hashesOf(sd.destinationChainTxHashes)[0] ?? (leg === "forward" ? nearTx : undefined);
   io.out(`near tx hashes: ${nearTxs.join(", ") || "(none)"} · origin tx: ${originTx ?? "(none)"} · destination tx: ${destTx ?? "(none)"}`);
 
+  if (leg === "near") {
+    const saved = env.readJson(join(stateDir, stateFileName(leg, addr))) as { evm?: string; before?: string; to?: string; toType?: string } | null;
+    if (saved?.toType === "INTENTS" && saved.to && saved.before !== undefined) {
+      const after = await env.balance(saved.to);
+      io.out(`Intents USDC of ${saved.to}: ${fromUnits(BigInt(saved.before), 6)} -> ${fromUnits(after, 6)} (delta ${fromUnits(after - BigInt(saved.before), 6)})`);
+    } else if (saved?.to) io.out(`check: near contract call-function as-read-only 17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 ft_balance_of json-args '{"account_id":"${saved.to}"}' network-config mainnet now`);
+    else io.out(`no saved quote for ${addr} (balance delta not computed); read the balance by hand`);
+  }
   if (leg === "forward") {
     const saved = env.readJson(join(stateDir, stateFileName(leg, addr))) as { evm?: string; before?: string } | null;
     if (saved?.evm && saved.before !== undefined) {
@@ -155,18 +169,19 @@ async function runWatch(
   }
 
   if (o.network !== "mainnet" || o.noRecord) return 0;
-  const step = leg === "forward" ? "deposit" : "withdraw";
+  const step = leg === "near" ? "fund" : leg === "forward" ? "deposit" : "withdraw";
+  const sale = leg === "near" ? "ops" : "spike";
   if (!nearTx) {
-    io.err(`WARN no NEAR transaction hash in the status; record by hand within 2 h: record.ts --sale spike --step ${step} --tx <near hash> --signer <signer> --chain base --oneclick ${addr}`);
+    io.err(`WARN no NEAR transaction hash in the status; record by hand within 2 h: record.ts --sale ${sale} --step ${step} --tx <near hash> --signer <signer> --chain base --oneclick ${addr}`);
     return 0;
   }
   const signer = o.signer ?? (await env.signerOf(nearTx));
   if (!signer) {
-    io.err(`WARN could not find the signer of ${nearTx}; record by hand within 2 h: record.ts --sale spike --step ${step} --tx ${nearTx} --signer <signer> --chain base --oneclick ${addr}${originTx ? ` --origin-tx ${originTx}` : ""}${destTx ? ` --dest-tx ${destTx}` : ""}`);
+    io.err(`WARN could not find the signer of ${nearTx}; record by hand within 2 h: record.ts --sale ${sale} --step ${step} --tx ${nearTx} --signer <signer> --chain base --oneclick ${addr}${originTx ? ` --origin-tx ${originTx}` : ""}${destTx ? ` --dest-tx ${destTx}` : ""}`);
     return 0;
   }
   try {
-    await env.record({ step, txHash: nearTx, signer, oneclick: addr, originTx, destTx, note: `S5 ${leg}` });
+    await env.record({ ...(leg === "near" ? { sale } as const : {}), step, txHash: nearTx, signer, oneclick: addr, originTx, destTx, note: `S5 ${leg}` });
   } catch (e) {
     io.err(`WARN recording failed (run scripts/record.ts by hand within 2 h, D4-01): ${(e as Error).message}`);
   }
@@ -179,7 +194,7 @@ export async function main(argv: string[], deps: S5Deps = {}): Promise<number> {
   try {
     parsed = parseCommon(argv, {
       leg: { type: "string" }, evm: { type: "string" }, amount: { type: "string" }, watch: { type: "string" }, "dry-quote": { type: "boolean" },
-      "origin-tx": { type: "string" }, "near-tx": { type: "string" }, signer: { type: "string" }, "timeout-min": { type: "string" },
+      to: { type: "string" }, "to-type": { type: "string" }, "origin-tx": { type: "string" }, "near-tx": { type: "string" }, signer: { type: "string" }, "timeout-min": { type: "string" },
     });
   } catch (e) {
     io.err(`error: ${(e as Error).message}\n${usage}`);
@@ -188,8 +203,8 @@ export async function main(argv: string[], deps: S5Deps = {}): Promise<number> {
   const { common, values } = parsed;
   const str = (k: string) => values[k] as string | undefined;
   const leg = str("leg");
-  if (leg !== "forward" && leg !== "return") {
-    io.err(`error: --leg forward|return is required\n${usage}`);
+  if (leg !== "forward" && leg !== "return" && leg !== "near") {
+    io.err(`error: --leg forward|return|near is required\n${usage}`);
     return 2;
   }
   if (common.network !== "mainnet") {
@@ -210,7 +225,16 @@ export async function main(argv: string[], deps: S5Deps = {}): Promise<number> {
       io.err(`error: --evm and --amount are required for a quote\n${usage}`);
       return 2;
     }
-    return await runQuote(leg, str("evm") as string, str("amount") as string, values["dry-quote"] === true, env, io, stateDir);
+    let dest: Dest | undefined;
+    if (leg === "near") {
+      const toType = str("to-type") ?? "DESTINATION_CHAIN";
+      if (!str("to") || (toType !== "DESTINATION_CHAIN" && toType !== "INTENTS")) {
+        io.err(`error: --leg near needs --to <NEAR account> and --to-type DESTINATION_CHAIN|INTENTS\n${usage}`);
+        return 2;
+      }
+      dest = { to: str("to") as string, toType };
+    }
+    return await runQuote(leg, str("evm") as string, str("amount") as string, values["dry-quote"] === true, env, io, stateDir, dest);
   } catch (e) {
     io.err(`error: ${(e as Error).message}`);
     return 1;
