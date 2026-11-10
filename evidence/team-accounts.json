@@ -1,0 +1,21 @@
+{
+  "updated_utc": null,
+  "near": {
+    "team": "tenderseal.near",
+    "contract": "v1.tenderseal.near",
+    "rehearsal": "rehearsal.tenderseal.near",
+    "spike": "spike.tenderseal.near",
+    "relayer": "relayer.tenderseal.near",
+    "bidder": "bidder.tenderseal.near"
+  },
+  "evm": {
+    "EVM-1": { "address": null, "chain": "base" },
+    "EVM-2": { "address": null, "chain": "arb" },
+    "EVM-3": { "address": null, "chain": "base" }
+  },
+  "sol": {
+    "SOL-1": { "address": null, "intents_account": null },
+    "SOL-2": { "address": null, "intents_account": null }
+  },
+  "note": "Public addresses only. Team-funded demo bidders. Not used by any other project."
+}

@@ -8,7 +8,10 @@
   "scripts": {
     "relay:local": "tsx src/local-server.ts",
     "keeper": "tsx src/keeper.ts",
-    "test": "vitest run --passWithNoTests"
+    "record": "tsx scripts/record.ts",
+    "snapshot": "tsx scripts/snapshot.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tender/clearing": "workspace:*",
