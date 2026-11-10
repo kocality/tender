@@ -12,7 +12,7 @@ import { StepList } from '../components/StepList';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
-import { HOSTED_BUNDLE } from '../copy';
+import { HOSTED_BUNDLE, NOT_STORED_CAUSES, UNRECOVERABLE_TRANSFER } from '../copy';
 import { buildBidPayload } from '../lib/bidPayload';
 import {
   SELF_REVEAL_RESERVE,
@@ -26,6 +26,7 @@ import {
   problemSection,
   recoveryFor,
   stepAfterRelayFailure,
+  storedCopy,
   type Recovery,
   type Step,
 } from '../lib/bidFlow';
@@ -263,6 +264,11 @@ export function Wizard({
       setProblem(why);
       return;
     }
+    const dup = storedCopy(bids, signer.signerId, bid.cm);
+    if (dup) {
+      setProblem(`This sealed bid is already stored as #${dup.idx}. Pasting it again would escrow it twice.`);
+      return;
+    }
     const p: Plan = { B: bid.escrow, secret: null, pasted: bid };
     setPlan(p);
     setSealed({ ct: bid.ct, cm: bid.cm, origin: bid.origin ?? signer.origin });
@@ -387,8 +393,22 @@ export function Wizard({
       setStep('done');
     } catch (e) {
       if (g !== flow.current) return;
-      if (e instanceof RelayError) route(recoveryFor(e.kind, e.message, mp.standard));
-      else {
+      if (e instanceof RelayError) {
+        // The relay's answer can be lost after the transaction ran (timeout, dropped connection): look for the bid before offering anything.
+        if ((e.kind === 'unavailable' || e.kind === 'other') && signer && sealed) {
+          setBusy('confirm');
+          const found = await confirmBid({ sale: id, bidder: signer.signerId, cm: sealed.cm, timeoutMs: 15_000 });
+          if (g !== flow.current) return;
+          if (found && found !== 'unknown') {
+            if (e.txHash) setTxHash(e.txHash);
+            clearQuote(qKey);
+            setStored(found);
+            setStep('done');
+            return;
+          }
+        }
+        route(recoveryFor(e.kind, e.message, mp.standard));
+      } else {
         fail(e);
         setStep('sign');
       }
@@ -402,6 +422,11 @@ export function Wizard({
     if (!signer || !plan || !sealed) return;
     if (block) {
       setProblem(block);
+      return;
+    }
+    const dup = storedCopy(bids, signer.signerId, sealed.cm);
+    if (dup) {
+      setProblem(`This sealed bid is already stored as #${dup.idx}; signing it again would escrow it twice.`);
       return;
     }
     const g = flow.current;
@@ -418,6 +443,7 @@ export function Wizard({
         ct: sealed.ct,
         cm: sealed.cm,
         origin: sealed.origin,
+        closeNs: sale.closeNs,
       });
       const mp = await signer.sign(payload);
       if (g !== flow.current) return;
@@ -488,6 +514,7 @@ export function Wizard({
         {announcementFor(step, busy, stored)}
       </div>
       <HonestNote>{HOSTED_BUNDLE}</HonestNote>
+      <p className="small muted">{UNRECOVERABLE_TRANSFER}</p>
       <StepList current={step} failed={step === 'done' && stored !== undefined && !(stored && stored !== 'unknown')} doneLabel={stored === 'unknown' ? 'Not confirmed' : undefined} />
       <div className="tabs" role="group" aria-label="How to seal">
         <button type="button" aria-pressed={tab === 'wizard'} onClick={() => setTab('wizard')}>
@@ -612,7 +639,7 @@ export function Wizard({
           </p>
           <p className="small muted">
             One Intents <code>Transfer</code> of {formatUsdc(plan.B)} USDC to <span className="mono">{config.tenderContractId}</span> carrying your sealed
-            bid. It expires in 10 minutes; sign and send right away.
+            bid. It expires in 10 minutes, or a minute before the sale closes if that is sooner; sign and send right away.
           </p>
           {step === 'sign' ? (
             <button type="button" className="primary" onClick={doSign} disabled={busy !== null || !live}>
@@ -669,7 +696,7 @@ export function Wizard({
             </>
           ) : (
             <p className="result bad" role="alert">
-              Not stored: the bid did not appear on chain within 90 seconds, so the contract most likely refunded the transfer (see tx logs){txHash ? <> · <TxLink hash={txHash} /></> : null}
+              Not stored: the bid did not appear on chain within 90 seconds, so the contract most likely refunded the transfer (see tx logs){txHash ? <> · <TxLink hash={txHash} /></> : null}. {NOT_STORED_CAUSES}
             </p>
           )}
           <p className="small muted">Anyone can relay a signed payload from their own account; the relayer cannot change it.</p>

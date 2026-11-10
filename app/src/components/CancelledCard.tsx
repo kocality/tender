@@ -12,7 +12,8 @@ export function CancelledCard({ sale, bids }: { sale: Sale; bids: Bid[] }) {
     <section className="card" style={{ marginTop: 16 }} aria-label="Cancelled">
       <h2 style={{ marginTop: 0 }}>Cancelled</h2>
       <p>
-        Every bid is refunded in full: {formatUsdc(total)} USDC across {bids.length} bids (refunds sent {sale.payoutsDone} / {sale.payoutsTotal}).
+        Every bid is refunded in full: {formatUsdc(total)} USDC across {bids.length} bids (refunds sent {sale.payoutsDone} / {sale.payoutsTotal}), to each
+        bidder&apos;s NEAR Intents account. <a href="#/withdraw">Withdraw</a> moves it to another chain; 1Click fees are not refunded.
       </p>
       <p className="small">
         key requests: <strong>{sale.keyRequests}</strong> · <a href="#/keys">Key ledger</a>

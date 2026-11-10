@@ -4,7 +4,8 @@ import type { Bid, Config, Sale } from './views';
 
 // Everything here runs in the browser. Decrypted prices are shown on screen and never sent anywhere.
 
-export type DecryptStatus = 'ok' | 'invalid_ct' | 'cm_mismatch';
+/** `out_of_range`: the commitment matches but q is 0 or above the escrow B, so the contract refuses to reveal the bid (it is penalized). */
+export type DecryptStatus = 'ok' | 'invalid_ct' | 'cm_mismatch' | 'out_of_range';
 
 export interface DecryptRow {
   idx: number;
@@ -21,6 +22,14 @@ export interface DecryptResult {
   keyOk: boolean;
   keyError?: string;
   rows: DecryptRow[];
+}
+
+/**
+ * A Revealed bid whose ciphertext does not open to the revealed (p, q): it was revealed from its opening alone, so its
+ * owner could choose to reveal after the key made every other bid public (a last look, CRYPTO-02).
+ */
+export function revealedWithoutCiphertext(b: Pick<Bid, 'state' | 'p' | 'q'>, row: DecryptRow | undefined): boolean {
+  return b.state === 'Revealed' && row !== undefined && (row.status !== 'ok' || row.p !== b.p || row.q !== b.q);
 }
 
 const CHUNK = 4;
@@ -67,6 +76,7 @@ export async function decryptSale(o: {
     for (const r of out) {
       if (!r.ok) rows.push({ idx: r.idx, status: 'invalid_ct', reason: r.reason });
       else if (!r.cmOk) rows.push({ idx: r.idx, status: 'cm_mismatch', reason: 'copy of another bid or wrong signer', p: r.p, q: r.q, salt: r.salt_hex });
+      else if (!r.revealable) rows.push({ idx: r.idx, status: 'out_of_range', reason: 'size is 0 or above the escrow', p: r.p, q: r.q, salt: r.salt_hex });
       else rows.push({ idx: r.idx, status: 'ok', p: r.p, q: r.q, salt: r.salt_hex });
     }
     o.onProgress?.(Math.min(i + CHUNK, bids.length), bids.length);

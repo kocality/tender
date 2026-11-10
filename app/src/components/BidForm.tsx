@@ -79,8 +79,8 @@ export function BidForm({
         <input {...fieldProps('escrow')} inputMode="decimal" value={escrow} onChange={(e) => setEscrow(e.target.value)} placeholder="5" disabled={disabled} />
       </label>
       <p className="small muted">
-        Whatever you do not spend at the clearing price is refunded. If you never reveal, 10% of the escrow is forfeited to the bidders who did
-        (never to the seller).
+        Whatever you do not spend at the clearing price is refunded. If no one reveals your bid before the deadline (the keeper normally does; you can too,
+        gasless), 10% of the escrow stays in the contract and is paid to nobody: not to other bidders and not to the seller.
       </p>
       {errors.map((e) => {
         const f = fieldOfError(e);

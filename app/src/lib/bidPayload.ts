@@ -12,6 +12,7 @@ import {
   type DefusePayload,
 } from '@tender/intents';
 import { config } from '../config';
+import { CLOSE_MARGIN_NS } from './bidFlow';
 import { chainNowMs } from './chainClock';
 import { NEAR_USDC_TOKEN_ID } from './constants';
 
@@ -67,17 +68,23 @@ export interface BidPayloadInput {
   ct: string;
   cm: string;
   origin?: BidOrigin;
+  /** The sale's close time: the payload stops being valid CLOSE_MARGIN_NS before it, so a refused late bid never leaves a signed copy behind (X12P-02). */
+  closeNs?: bigint;
   saltHex?: string;
   nowMs?: number;
 }
 
 /**
  * The one Intents Transfer that places a sealed bid: B of the quote token to the contract with `msg = {op: bid, ...}`.
- * The salt is read live right before signing (a stale one fails with `invalid salt`) and the deadline is 10 minutes.
+ * The salt is read live right before signing (a stale one fails with `invalid salt`) and the deadline is
+ * min(now + 10 minutes, close - 60 s).
  */
 export async function buildBidPayload(input: BidPayloadInput): Promise<DefusePayload> {
   const saltHex = input.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
-  const { deadlineMs, deadlineIso } = makeDeadline(input.nowMs ?? chainNowMs());
+  const nowMs = input.nowMs ?? chainNowMs();
+  const notAfterMs = input.closeNs === undefined ? Infinity : Number((input.closeNs - CLOSE_MARGIN_NS) / 1_000_000n);
+  const { deadlineMs, deadlineIso } = makeDeadline(nowMs, 600_000, notAfterMs);
+  if (deadlineMs <= nowMs) throw new Error('This sale closes in under 60 seconds; a bid signed now would arrive after close and be refunded.');
   return buildPayload({
     signerId: input.signerId,
     verifyingContract: config.intentsContractId,

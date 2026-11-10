@@ -18,15 +18,18 @@ export interface LedgerRow {
 const MATCH_WINDOW = 3n;
 
 /**
- * One NearBlocks request for the contract's `request_app_private_key` receipts. Any failure (rate limit, network,
- * unexpected shape) returns `null`: the page then shows the contract's own ledger with an "unavailable" warning.
+ * One NearBlocks request for the contract's `request_app_private_key` receipts. Only calls the contract itself made to
+ * the MPC contract count: anyone can call the method on either account, and those receipts are not ledger entries.
+ * Any failure (rate limit, network, unexpected shape) returns `null`: the page then shows the contract's own ledger with
+ * an "unavailable" warning.
  */
-export async function fetchNearblocksReceipts(contractId: string): Promise<Receipt[] | null> {
+export async function fetchNearblocksReceipts(contractId: string, mpcId: string = config.mpcContractId): Promise<Receipt[] | null> {
   try {
     const url = `${config.nearblocksApiUrl}/accounts/${contractId}/receipts?method=request_app_private_key&limit=100`;
     const res = await fetch(url);
     if (!res.ok) return null;
-    return parseReceipts(await res.json());
+    const receipts = parseReceipts(await res.json());
+    return receipts?.filter((r) => r.predecessor === contractId && r.receiver === mpcId) ?? null;
   } catch {
     return null;
   }

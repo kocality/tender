@@ -5,7 +5,7 @@ import { humanError } from '../lib/errors';
 import { formatUsdc, shortId } from '../lib/format';
 import type { Bid, Config, Sale } from '../lib/views';
 
-const STATUS_TEXT = { ok: 'decrypted · commitment matches', invalid_ct: 'cannot be decrypted', cm_mismatch: 'commitment mismatch' } as const;
+const STATUS_TEXT = { ok: 'decrypted · commitment matches', invalid_ct: 'cannot be decrypted', cm_mismatch: 'commitment mismatch', out_of_range: 'size outside 1..escrow' } as const;
 
 /** Decrypts every bid with the released sale key, in this browser, and checks each commitment. */
 export function DecryptPanel({
@@ -96,6 +96,7 @@ export function DecryptPanel({
                   <td>
                     <span className={r.status === 'ok' ? 'pill ok' : 'pill bad'}>{STATUS_TEXT[r.status]}</span>
                     {r.status === 'cm_mismatch' ? <span className="small muted"> (copy of another bid or wrong signer)</span> : null}
+                    {r.status === 'out_of_range' ? <span className="small muted"> (the contract refuses to reveal it)</span> : null}
                   </td>
                 </tr>
               ))}

@@ -22,6 +22,21 @@ describe('parsePastedBid', () => {
     const r = parsePastedBid(JSON.stringify({ ...valid, ct: toBase64(new Uint8Array(159)) }), '1', target);
     expect(r.ok).toBe(false);
   });
+  test('a ciphertext that atob accepts but the contract would refuse is rejected (X12-04 unicode)', () => {
+    const lenient = [
+      ct.replace(/=+$/, ''), // padding dropped
+      `${ct.slice(0, 100)}\n${ct.slice(100)}`, // a line break
+      ` ${ct}`, // leading space
+      ct.replace(/\+/g, '-').replace(/\//g, '_') + (ct.includes('+') || ct.includes('/') ? '' : 'x'), // URL-safe alphabet (or a stray char)
+    ];
+    for (const bad of lenient) {
+      const r = parsePastedBid(JSON.stringify({ ...valid, ct: bad }), '1', target);
+      expect(r.ok, JSON.stringify(bad)).toBe(false);
+    }
+    const nonCanonicalTail = ct.slice(0, -3) + 'B==';
+    expect(atob(nonCanonicalTail).length).toBe(160); // the lenient decoder is fine with spare bits in the last character
+    expect(parsePastedBid(JSON.stringify({ ...valid, ct: nonCanonicalTail }), '1', target).ok).toBe(false);
+  });
   test('an upper case commitment is rejected', () => {
     expect(parsePastedBid(JSON.stringify({ ...valid, cm: cm.toUpperCase() }), '1', target).ok).toBe(false);
   });

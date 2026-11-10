@@ -1,4 +1,4 @@
-import { fromBase64 } from '@tender/intents';
+import { fromBase64, toBase64 } from '@tender/intents';
 import { MIN_ESCROW } from './bidFlow';
 
 // A bid sealed offline with `pnpm seal:bid`, pasted as its stdout JSON. Only {sale, ct, cm, escrow, origin} are used.
@@ -57,13 +57,15 @@ export function parsePastedBid(text: string, saleId: string, target: PasteTarget
   }
   if (typeof o.signer !== 'string' || o.signer === '') return { ok: false, error: 'Missing signer. Paste only the output of `pnpm seal:bid --signer <your account>` that you produced yourself.' };
   if (typeof o.ct !== 'string') return { ok: false, error: 'Missing ct.' };
+  // The contract decodes with strict base64 (STANDARD, padded): text that decodes here but does not re-encode to itself would be refunded as bad_ct.
   let ctLen = -1;
   try {
-    ctLen = fromBase64(o.ct).length;
+    const raw = fromBase64(o.ct);
+    if (toBase64(raw) === o.ct) ctLen = raw.length;
   } catch {
     // reported below
   }
-  if (ctLen !== 160) return { ok: false, error: `ct must be base64 of 160 bytes, got ${ctLen < 0 ? 'invalid base64' : `${ctLen} bytes`}.` };
+  if (ctLen !== 160) return { ok: false, error: `ct must be canonical base64 (standard alphabet, padded) of 160 bytes, got ${ctLen < 0 ? 'invalid base64' : `${ctLen} bytes`}.` };
   if (typeof o.cm !== 'string' || !/^[0-9a-f]{64}$/.test(o.cm)) return { ok: false, error: 'cm must be 64 lowercase hex characters.' };
   let escrow: bigint;
   try {

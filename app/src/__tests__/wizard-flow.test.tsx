@@ -18,13 +18,14 @@ const m = vi.hoisted(() => ({
   relay: vi.fn(),
   quote: vi.fn(),
   balance: vi.fn(),
+  confirm: vi.fn(),
 }));
 vi.mock('@tender/intents', async (orig) => ({
   ...(await orig<typeof import('@tender/intents')>()),
   simulateIntents: m.simulate,
   mtBalanceOf: m.balance,
 }));
-vi.mock('../lib/relay', async (orig) => ({ ...(await orig<typeof import('../lib/relay')>()), relay: m.relay, confirmBid: vi.fn(async () => null) }));
+vi.mock('../lib/relay', async (orig) => ({ ...(await orig<typeof import('../lib/relay')>()), relay: m.relay, confirmBid: m.confirm }));
 vi.mock('../lib/oneclick', async (orig) => ({ ...(await orig<typeof import('../lib/oneclick')>()), quoteDeposit: m.quote, getStatus: vi.fn() }));
 vi.mock('../lib/bidPayload', () => ({ buildBidPayload: vi.fn(async () => ({ signer_id: 'x' })) }));
 vi.mock('../lib/views', async (orig) => ({
@@ -93,6 +94,7 @@ beforeEach(() => {
   m.balance.mockReset().mockResolvedValue(10_000_000n); // already funded: the wizard goes to Seal
   m.relay.mockReset().mockRejectedValue(new RelayError('The relayer is not reachable.', 'unavailable'));
   m.quote.mockReset();
+  m.confirm.mockReset().mockResolvedValue(null);
   vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {} });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -128,6 +130,63 @@ describe('a used nonce means this signed bid already ran: no second signature fo
     expect(has('Sign with wallet')).toBe(false);
     expect(has('Place another bid')).toBe(true);
     expect(m.relay).not.toHaveBeenCalled();
+  });
+});
+
+describe('a bid that never appears says why it may have been refunded (SC-06, handoff refund reasons)', () => {
+  test('Not stored names the usual causes, including seller_bid and msg_too_long, and where the refund lands', async () => {
+    m.relay.mockResolvedValue({ txHash: 'H1' });
+    await reachRelayFailure(signer('0xaaa'));
+    const text = alertText();
+    expect(text).toMatch(/^Not stored/);
+    expect(text).toContain('seller_bid');
+    expect(text).toContain('msg_too_long');
+    expect(text).toContain('NEAR Intents balance');
+  });
+});
+
+describe('an unknown relay outcome is checked against the chain before anything else (X12-03 tabs)', () => {
+  test.each([
+    ['unavailable', 'The relayer is not reachable.'],
+    ['other', 'execute_failed: RPC timeout'],
+  ] as const)('relay %s: the bid is on chain, so the wizard goes to the result and offers no second signature', async (kind, message) => {
+    m.relay.mockRejectedValue(new RelayError(message, kind, 'H9'));
+    m.confirm.mockResolvedValue({ idx: 4, cm: 'ab' });
+    await reachRelayFailure(signer('0xaaa'));
+    expect(m.confirm).toHaveBeenCalledTimes(1);
+    expect(has('Sign with wallet')).toBe(false);
+    expect(has('Try the relayer again')).toBe(false);
+    expect(has('Place another bid')).toBe(true);
+    expect(textOf(render())).toContain('Bid #4 stored');
+  });
+  test('the bid is not on chain: the usual recovery is offered after the check', async () => {
+    m.relay.mockRejectedValue(new RelayError('The relayer is not reachable.', 'unavailable'));
+    await reachRelayFailure(signer('0xaaa'));
+    expect(m.confirm).toHaveBeenCalledTimes(1);
+    expect(has('Try the relayer again')).toBe(true);
+  });
+  test('a relayer that says busy (429) never took the bid: no check, retry offered', async () => {
+    m.relay.mockRejectedValue(new RelayError('Relayer busy, retry in 30 s', 'busy'));
+    await reachRelayFailure(signer('0xaaa'));
+    expect(m.confirm).not.toHaveBeenCalled();
+    expect(has('Try the relayer again')).toBe(true);
+  });
+});
+
+describe('a sealed bid that is already stored is not signed twice (X12-03 tabs)', () => {
+  test('a pasted bid whose commitment this account already has stored is refused before any deposit', async () => {
+    const mine = { ...bids[0]!, bidder: '0xaaa', cm: 'ab'.repeat(32) };
+    props = { ...props, bids: [mine] };
+    await connect(signer('0xaaa'));
+    await click('Paste a sealed bid');
+    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: mine.cm, escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa' });
+    await settle();
+    expect(alertText()).toContain(`already stored as #${mine.idx}`);
+    expect(m.balance).not.toHaveBeenCalled();
+    // the same commitment under another account is not this account's bid
+    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: 'cd'.repeat(32), escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa' });
+    await settle();
+    expect(m.balance).toHaveBeenCalled();
   });
 });
 

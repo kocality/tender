@@ -44,6 +44,19 @@ describe.each(['identity', 'generator', 'plain'] as const)('decryptSale in %s mo
   });
 });
 
+describe('decryptSale out of range sizes (CRYPTO-03, S-02)', () => {
+  test('a bid whose q is 0 or above its escrow matches its commitment but is out_of_range', async () => {
+    const { cfg, sale } = saleFor('identity');
+    const mk = (idx: number, B: bigint, q: bigint) => {
+      const s = sealBid({ mpk, contract: contractId, path, sale: 1n, bidder: bidders[idx]!, B, p: 3_000_000n, q });
+      return { idx, bidder: bidders[idx]!, escrow: B, ct: s.ct_b64, cm: s.cm_hex };
+    };
+    const out = await decryptSale({ config: cfg, sale, bids: [mk(0, 5_000_000n, 5_000_000n), mk(1, 5_000_000n, 0n), mk(2, 5_000_000n, 5_000_001n)], contractId, expectedMpk: mpk });
+    expect(out.rows.map((r) => r.status)).toEqual(['ok', 'out_of_range', 'out_of_range']);
+    expect(out.rows[2]).toMatchObject({ q: 5_000_001n });
+  });
+});
+
 describe('decryptSale key checks', () => {
   test('a key made with another master secret fails the key check and decrypts nothing', async () => {
     const { cfg, sale } = saleFor('identity', vectors[1]!.msk);

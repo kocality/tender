@@ -1,4 +1,5 @@
 import { priceUnitLabel } from '../lib/amounts';
+import { revealedWithoutCiphertext, type DecryptResult } from '../lib/decrypt';
 import { formatUnits, formatUsdc, shortId, tokenLabel } from '../lib/format';
 import { refundOf, type Recomputed } from '../lib/results';
 import type { Bid, Sale, SaleResult } from '../lib/views';
@@ -8,8 +9,23 @@ function isMarginal(b: Bid, pStar: bigint | null): boolean {
 }
 
 /** The finalized sale: one clearing price, what every bidder got and paid, and whether this browser recomputed the same. */
-export function ResultTable({ sale, bids, result, recomputed }: { sale: Sale; bids: Bid[]; result: SaleResult; recomputed: Recomputed | null }) {
+export function ResultTable({
+  sale,
+  bids,
+  result,
+  recomputed,
+  decrypted = null,
+}: {
+  sale: Sale;
+  bids: Bid[];
+  result: SaleResult;
+  recomputed: Recomputed | null;
+  /** The browser's decryption of the ciphertexts, when the visitor has run it: used to mark revealed bids whose ciphertext does not open to what was revealed. */
+  decrypted?: DecryptResult | null;
+}) {
   const name = tokenLabel(sale.token);
+  const rows = new Map(decrypted?.keyOk ? decrypted.rows.map((r) => [r.idx, r]) : []);
+  const lastLook = bids.filter((b) => revealedWithoutCiphertext(b, rows.get(b.idx)));
   const tok = (v: bigint) => formatUnits(v, sale.decimals);
   return (
     <section className="card" style={{ marginTop: 16 }} aria-label="Result">
@@ -64,7 +80,7 @@ export function ResultTable({ sale, bids, result, recomputed }: { sale: Sale; bi
               <th>tokens</th>
               <th>spent</th>
               <th>refund</th>
-              <th>penalty share</th>
+              <th>penalty</th>
               <th>payout</th>
             </tr>
           </thead>
@@ -75,7 +91,10 @@ export function ResultTable({ sale, bids, result, recomputed }: { sale: Sale; bi
                   {b.idx}
                   {b.alloc > 0n && b.p === result.pStar ? <span className="sr-only"> (bid at the clearing price P*)</span> : null}
                 </td>
-                <td className="mono">{shortId(b.bidder, 8, 6)}</td>
+                <td className="mono">
+                  {shortId(b.bidder, 8, 6)}
+                  {lastLook.includes(b) ? <span className="pill warn"> ciphertext does not open to the revealed bid</span> : null}
+                </td>
                 <td>{b.p !== null ? formatUsdc(b.p) : <span className="muted">{b.state === 'Revealed' ? '–' : 'not revealed'}</span>}</td>
                 <td>{b.q !== null ? formatUsdc(b.q) : '–'}</td>
                 <td>
@@ -91,8 +110,14 @@ export function ResultTable({ sale, bids, result, recomputed }: { sale: Sale; bi
           </tbody>
         </table>
       </div>
+      {lastLook.length > 0 ? (
+        <p className="note" role="note">
+          Bid{lastLook.length === 1 ? '' : 's'} {lastLook.map((b) => `#${b.idx}`).join(', ')} {lastLook.length === 1 ? 'was' : 'were'} revealed from the opening alone: the ciphertext on chain does not open to the revealed price and size. Its owner could wait for the key
+          to make every other bid public and then choose whether to reveal (a last look); an unrevealed bid costs 10% of its escrow.
+        </p>
+      ) : null}
       <p className="small muted">
-        payouts {sale.payoutsDone} / {sale.payoutsTotal} · penalty pool {formatUsdc(result.penaltyPool)} USDC (to revealed bidders, never to the seller)
+        payouts {sale.payoutsDone} / {sale.payoutsTotal} · penalty pool {formatUsdc(result.penaltyPool)} USDC (stays in the contract, paid to nobody)
       </p>
     </section>
   );

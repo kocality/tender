@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
 import { config } from '../config';
+import { PENALTY_RULE } from '../copy';
+import { itemsFromBidFiles } from '../lib/bidFile';
 import type { DecryptResult } from '../lib/decrypt';
 import { formatCountdown, formatNsUtc } from '../lib/format';
 import { addIntentsKey, revealBatch } from '../lib/near-tx';
 import { pollBid, relay } from '../lib/relay';
-import { batches, revealWindowOpen, revealable, toRevealItems, unrevealable } from '../lib/revealFilter';
+import { batches, revealWindowOpen, revealable, sendRevealBatches, toRevealItems, unrevealable } from '../lib/revealFilter';
 import { buildSelfReveal } from '../lib/selfReveal';
 import { canRegisterKey, recoveryFor } from '../lib/bidFlow';
-import { simulateIntents, type MultiPayload } from '@tender/intents';
-import type { Bid, Sale } from '../lib/views';
+import { simulateIntents, type MultiPayload, type RevealItem } from '@tender/intents';
+import { getAllBids, type Bid, type Sale } from '../lib/views';
 import { ensureNear } from '../wallets/near';
 import { walletErrorMessage, type IntentSigner } from '../wallets/types';
 import { FinalizeButton } from './FinalizeButton';
@@ -22,30 +24,46 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
   const [log, setLog] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  /** A signed self-reveal that waits for its NEAR key to be registered with Intents. */
-  const [needsKey, setNeedsKey] = useState<MultiPayload | null>(null);
+  /** A signed self-reveal (and the bids it reveals) that waits for its NEAR key to be registered with Intents. */
+  const [needsKey, setNeedsKey] = useState<{ signed: MultiPayload; group: RevealItem[] } | null>(null);
+  /** Saved `pnpm seal:bid` files: picked from disk or pasted. */
+  const [fileTexts, setFileTexts] = useState<string[]>([]);
+  const [pasted, setPasted] = useState('');
 
   const open = revealWindowOpen(sale, nowNs);
   const items = useMemo(() => revealable(decrypted, bids), [decrypted, bids]);
   const blocked = useMemo(() => unrevealable(decrypted, bids), [decrypted, bids]);
   const mine = signer ? items.filter((i) => i.bidder === signer.signerId) : [];
+  // A bid file needs no decryption: its commitment is rechecked against the bid the contract holds.
+  const fromFiles = useMemo(
+    () => itemsFromBidFiles([...fileTexts, pasted].filter((t) => t.trim() !== ''), bids, { saleId: sale.id, contract: config.tenderContractId, network: config.network }),
+    [fileTexts, pasted, bids, sale.id],
+  );
+  const fileMine = signer ? fromFiles.items.filter((i) => i.bidder === signer.signerId) : [];
   const enabled = open && decrypted?.keyOk === true;
   const allRevealed = sale.bids > 0 && sale.revealed >= sale.bids;
 
-  const revealAll = async () => {
+  const pickFiles = async (files: FileList | null) => setFileTexts(await Promise.all([...(files ?? [])].map((f) => f.text())));
+
+  const revealAll = async (list: RevealItem[]) => {
     setBusy('all');
     setError(null);
     setLog([]);
     setHashes([]);
     try {
       await ensureNear();
-      const groups = batches(toRevealItems(items));
-      for (const [i, g] of groups.entries()) {
-        setLog((l) => [...l, `Batch ${i + 1} of ${groups.length}: waiting for the wallet…`]);
-        const hash = await revealBatch(sale.id, g);
-        if (hash) setHashes((h) => [...h, hash]);
-        setLog((l) => [...l.slice(0, -1), `Batch ${i + 1} of ${groups.length} sent (${g.length} bids).`]);
-      }
+      await sendRevealBatches({
+        saleId: sale.id,
+        groups: batches(toRevealItems(list)),
+        load: getAllBids,
+        send: revealBatch,
+        onWaiting: (i, n) => setLog((l) => [...l, `Batch ${i + 1} of ${n}: waiting for the wallet…`]),
+        onSent: (i, n, count, hash) => {
+          if (hash) setHashes((h) => [...h, hash]);
+          setLog((l) => [...l.slice(0, -1), `Batch ${i + 1} of ${n} sent (${count} bids).`]);
+        },
+        onSkipped: (i, n) => setLog((l) => [...l, `Batch ${i + 1} of ${n}: already revealed by someone else, skipped.`]),
+      });
     } catch (e) {
       setError(walletErrorMessage(e));
     } finally {
@@ -54,34 +72,37 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
   };
 
   /** Simulate, relay and follow one signed self-reveal. A key that is not registered stops here with a Register button. */
-  const submitSigned = async (signed: MultiPayload) => {
+  const submitSigned = async (signed: MultiPayload, group: RevealItem[]): Promise<boolean> => {
     const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [signed]);
     if (!sim.ok) {
       const r = recoveryFor(sim.kind, sim.message, signed.standard);
-      if (r.to === 'register_key' && canRegisterKey(signed, signer?.signerId)) setNeedsKey(signed);
+      if (r.to === 'register_key' && canRegisterKey(signed, signer?.signerId)) setNeedsKey({ signed, group });
       setError(
         r.to === 'fund'
           ? 'This account holds no USDC in NEAR Intents. The gasless reveal needs 0.000001 USDC there; it is returned right away.'
           : r.message,
       );
-      return;
+      return false;
     }
     setNeedsKey(null);
     const { txHash } = await relay([signed]);
-    setHashes([txHash]);
-    setLog(['Reveal relayed, waiting for the contract…']);
-    const want = new Set(mine.map((m) => m.idx));
+    setHashes((h) => [...h, txHash]);
+    setLog((l) => [...l, 'Reveal relayed, waiting for the contract…']);
+    const want = new Set(group.map((m) => m.idx));
     const stored = await pollBid((bs) => (bs.filter((b) => want.has(b.idx) && b.state === 'Revealed').length === want.size ? bs[0] : undefined), sale.id);
-    setLog([
+    setLog((l) => [
+      ...l.slice(0, -1),
       stored === 'unknown'
         ? 'Could not confirm: the RPC did not answer. The reveal may still have gone through; check again in a minute.'
         : stored
           ? 'Revealed on chain.'
           : 'Not revealed yet: the contract may have refunded the transfer (see tx logs).',
     ]);
+    return stored !== null && stored !== 'unknown';
   };
 
-  const revealMine = async () => {
+  /** One signed transfer per 8 bids: the contract refunds a self-reveal with more items (MAX_SELF_REVEAL_ITEMS), and the relayer takes one intent per signature. */
+  const revealMine = async (list: (RevealItem & { bidder: string })[]) => {
     if (!signer) return;
     setBusy('mine');
     setError(null);
@@ -89,14 +110,16 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
     setLog([]);
     setHashes([]);
     try {
-      const payload = await buildSelfReveal({
-        signerId: signer.signerId,
-        contract: config.tenderContractId,
-        quoteToken: sale.quoteToken,
-        sale: sale.id,
-        items: toRevealItems(mine),
-      });
-      await submitSigned(await signer.sign(payload));
+      for (const group of batches(toRevealItems(list))) {
+        const payload = await buildSelfReveal({
+          signerId: signer.signerId,
+          contract: config.tenderContractId,
+          quoteToken: sale.quoteToken,
+          sale: sale.id,
+          items: group,
+        });
+        if (!(await submitSigned(await signer.sign(payload), group))) break;
+      }
     } catch (e) {
       setError(walletErrorMessage(e));
     } finally {
@@ -105,12 +128,12 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
   };
 
   const registerKey = async () => {
-    if (!needsKey || needsKey.standard !== 'nep413') return;
+    if (!needsKey || needsKey.signed.standard !== 'nep413') return;
     setBusy('mine');
     setError(null);
     try {
-      await addIntentsKey(needsKey.public_key);
-      await submitSigned(needsKey);
+      await addIntentsKey(needsKey.signed.public_key);
+      await submitSigned(needsKey.signed, needsKey.group);
     } catch (e) {
       setError(walletErrorMessage(e));
     } finally {
@@ -123,8 +146,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
     <section className="card" style={{ marginTop: 16 }} aria-label="Reveal">
       <h2 style={{ marginTop: 0 }}>Reveal</h2>
       <p className="small muted">
-        Revealing publishes a bid&apos;s price, size and salt so the contract can check them against the commitment. Unrevealed bids get 90% of their
-        escrow back; the other 10% goes to the revealed bidders pro rata, never to the seller.
+        Revealing publishes a bid&apos;s price, size and salt so the contract can check them against the commitment. {PENALTY_RULE}
       </p>
       {sale.revealDeadlineNs !== null ? (
         <p className="small">
@@ -145,22 +167,48 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
         </p>
       ) : null}
       <div className="row">
-        <button type="button" className="primary" onClick={revealAll} disabled={!enabled || items.length === 0 || busy !== null}>
+        <button type="button" className="primary" onClick={() => revealAll(items)} disabled={!enabled || items.length === 0 || busy !== null}>
           {busy === 'all' ? 'Revealing…' : `Reveal all (NEAR wallet, gas)${items.length ? ` · ${items.length}` : ''}`}
         </button>
       </div>
       <h3 style={{ marginTop: 16 }}>Reveal my bid (gasless)</h3>
       <WalletPicker signer={signer} onConnect={setSigner} showOrigin={false} />
       <div style={{ marginTop: 8 }}>
-        <button type="button" onClick={revealMine} disabled={!enabled || !signer || mine.length === 0 || busy !== null}>
+        <button type="button" onClick={() => revealMine(mine)} disabled={!enabled || !signer || mine.length === 0 || busy !== null}>
           {busy === 'mine' ? 'Waiting for wallet…' : `Reveal my bid${mine.length === 1 ? '' : 's'} (gasless)${mine.length ? ` · ${mine.length}` : ''}`}
         </button>
         {signer && decrypted?.keyOk && mine.length === 0 ? <p className="small muted">No sealed bid of {signer.signerId} can be revealed.</p> : null}
       </div>
+      <h3 style={{ marginTop: 16 }}>Reveal from my bid file</h3>
+      <p className="small muted">
+        For a bid that cannot be decrypted here. Pick the files <code>pnpm seal:bid</code> saved in <code>~/.tender/bids</code>, or paste one. They are read in this
+        browser and never uploaded, and each is checked against the bid on chain before anything is sent.
+      </p>
+      <label className="field">
+        <span>Bid files</span>
+        <input type="file" multiple accept="application/json,.json" onChange={(e) => pickFiles(e.target.files)} disabled={busy !== null} />
+      </label>
+      <label className="field">
+        <span>Or paste one bid file</span>
+        <textarea rows={3} value={pasted} onChange={(e) => setPasted(e.target.value)} spellCheck={false} disabled={busy !== null} />
+      </label>
+      {fromFiles.notes.map((n) => (
+        <p key={n} className="small" role="note">
+          {n}
+        </p>
+      ))}
+      <div className="row">
+        <button type="button" className="primary" onClick={() => revealAll(fromFiles.items)} disabled={!open || fromFiles.items.length === 0 || busy !== null}>
+          {busy === 'all' ? 'Revealing…' : `Reveal file bids (NEAR wallet, gas)${fromFiles.items.length ? ` · ${fromFiles.items.length}` : ''}`}
+        </button>
+        <button type="button" onClick={() => revealMine(fileMine)} disabled={!open || !signer || fileMine.length === 0 || busy !== null}>
+          {busy === 'mine' ? 'Waiting for wallet…' : `Reveal file bids (gasless)${fileMine.length ? ` · ${fileMine.length}` : ''}`}
+        </button>
+      </div>
       {blocked.length > 0 ? (
         <p className="note" role="note">
-          Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. Unrevealed bids will be penalized 10% (paid to
-          revealed bidders, never to the seller).
+          Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. If they are still unrevealed when the window ends, each loses 10% of its escrow; that 10%
+          stays in the contract and is paid to nobody. If you sealed one of them yourself, reveal it from its bid file above.
         </p>
       ) : null}
       <div role="status">

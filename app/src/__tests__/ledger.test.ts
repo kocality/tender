@@ -56,6 +56,30 @@ describe('fetchNearblocksReceipts', () => {
     expect(receipts?.[0]?.blockHeight).toBe(1501n);
   });
 
+  test('receipts from strangers or to another receiver are not ledger receipts (X12-01)', async () => {
+    const row = (id: string, height: number, predecessor: string, receiver: string) => ({
+      receipt_id: id,
+      transaction_hash: `tx${id}`,
+      predecessor_account_id: predecessor,
+      receiver_account_id: receiver,
+      block: { block_height: height },
+    });
+    const body = {
+      data: [
+        row('spam', 1501, 'mallory.near', 'v1.tenderseal.near'), // incoming call on the contract
+        row('spoof', 1500, 'mallory.near', 'v1.signer'), // a stranger's call on the MPC contract
+        row('other', 1502, 'v1.tenderseal.near', 'burner.near'),
+        row('real', 1503, 'v1.tenderseal.near', 'v1.signer'),
+      ],
+    };
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body), { status: 200 }));
+    const receipts = await fetchNearblocksReceipts('v1.tenderseal.near');
+    expect(receipts?.map((r) => r.receiptId)).toEqual(['real']);
+    const rows = matchLedger([entry], receipts);
+    expect(rows[0]?.receipt?.receiptId).toBe('real');
+    expect(receiptCheck(rows, receipts)).toBe('match');
+  });
+
   test('rate limit (429) returns null', async () => {
     vi.stubGlobal('fetch', async () => new Response('slow down', { status: 429 }));
     expect(await fetchNearblocksReceipts('v1.tenderseal.near')).toBeNull();

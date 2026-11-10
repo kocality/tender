@@ -73,7 +73,7 @@ export function validateBid(o: {
   const warnings: string[] = [];
   if (p < o.sale.reserve) {
     warnings.push(
-      'Below reserve: this bid will not win and will be refunded in full; it still counts toward the public open conditions.',
+      'Below reserve: this bid will not win and will be refunded in full once it is revealed; it still counts toward the public open conditions.',
     );
   }
   if (q === B) {
@@ -180,6 +180,11 @@ export function canRegisterKey(signed: MultiPayload, connectedId: string | undef
   } catch {
     return false;
   }
+}
+
+/** The stored bid with this signer and commitment, if any: signing the same sealed bid again would escrow it twice (the contract keeps both and one opening reveals both). */
+export function storedCopy(bids: Pick<Bid, 'idx' | 'bidder' | 'cm'>[], signerId: string, cm: string): Pick<Bid, 'idx'> | undefined {
+  return bids.find((b) => b.bidder === signerId && b.cm === cm);
 }
 
 /** Existing bids of this signer in the sale (informational: several bids are allowed). */

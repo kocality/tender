@@ -58,3 +58,21 @@ describe('payload deadlines follow the chain clock (QA-15)', () => {
     }
   });
 });
+
+describe('a bid payload never outlives the sale (X12P-02)', () => {
+  const now = Date.parse('2026-11-13T02:00:00Z');
+  const bid = (closeInMs: number) =>
+    buildBidPayload({ signerId: 'a.near', receiverId: 'v1.tenderseal.near', quoteToken: 'nep141:x', amount: 1n, sale: '1', ct: 'c', cm: 'd', saltHex: '252812b3', nowMs: now, closeNs: BigInt(now + closeInMs) * 1_000_000n });
+  test('close in 3 minutes: the deadline is close - 60 s, not now + 10 minutes', async () => {
+    const p = await bid(180_000);
+    expect(Date.parse(p.deadline)).toBe(now + 120_000);
+    expect(Number(decodeVersionedNonce(p.nonce).deadlineNs / 1_000_000n)).toBe(now + 120_000);
+  });
+  test('close in an hour: the usual 10 minutes', async () => {
+    expect(Date.parse((await bid(3_600_000)).deadline)).toBe(now + 600_000);
+  });
+  test('close in 30 s: nothing is signed', async () => {
+    await expect(bid(30_000)).rejects.toThrow('closes in under 60 seconds');
+  });
+});
+

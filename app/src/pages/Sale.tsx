@@ -49,7 +49,7 @@ export function SaleView({
           <RevealPanel sale={sale} bids={bids} decrypted={decrypted} nowNs={nowNs} />
           {sale.state === 'Finalized' && result ? (
             <>
-              <ResultTable sale={sale} bids={bids} result={result} recomputed={recomputed} />
+              <ResultTable sale={sale} bids={bids} result={result} recomputed={recomputed} decrypted={decrypted} />
               <SupplyDemandChart sale={sale} bids={bids} pStar={result.pStar} />
             </>
           ) : null}
