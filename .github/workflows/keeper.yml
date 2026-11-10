@@ -1,0 +1,39 @@
+name: keeper
+on:
+  schedule:
+    - cron: '*/10 12-23 17 11 *'   # 2026-11-17 12:00-23:50 UTC; sale 2 closes 12:00Z
+    - cron: '*/30 * 18-19 11 *'    # 2026-11-18 and 19: reveal deadline, finalize, payout retries
+  workflow_dispatch:
+    inputs:
+      sale:
+        description: 'sale id'
+        required: true
+        default: '2'
+      dry_run:
+        description: 'view-only'
+        type: boolean
+        required: true
+        default: true
+permissions: { contents: read }
+concurrency: { group: keeper, cancel-in-progress: false }
+jobs:
+  keeper:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc }
+      - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile --filter "@tender/relayer..."
+      - name: run keeper
+        env:
+          KEEPER_ACCOUNT_ID: ${{ secrets.KEEPER_ACCOUNT_ID }}
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          TENDER_CONTRACT_ID: v1.tenderseal.near
+          SALE: ${{ github.event_name == 'workflow_dispatch' && inputs.sale || '2' }}
+          # a scheduled run has no inputs: DRY is 0 there, on purpose (the schedule is the real run)
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: |
+          if [ "$DRY" = "1" ]; then pnpm keeper --sale "$SALE" --network mainnet --dry-run
+          else pnpm keeper --sale "$SALE" --network mainnet --yes; fi
