@@ -7,9 +7,10 @@ export const VERSIONED_MAGIC = Uint8Array.of(0x56, 0x28, 0xf6, 0xc6);
 /**
  * Deadline rounded down to a whole second, so the payload deadline (RFC 3339, ms precision)
  * and the nonce deadline (ns) are the same instant (the contract rejects payload > nonce).
+ * `notAfterMs` caps the deadline: a bid signed for a sale must not stay valid past the sale's close (X12P-02).
  */
-export function makeDeadline(nowMs = Date.now(), ttlMs = 600_000): { deadlineMs: number; deadlineIso: string } {
-  const deadlineMs = Math.floor((nowMs + ttlMs) / 1000) * 1000;
+export function makeDeadline(nowMs = Date.now(), ttlMs = 600_000, notAfterMs = Infinity): { deadlineMs: number; deadlineIso: string } {
+  const deadlineMs = Math.floor(Math.min(nowMs + ttlMs, notAfterMs) / 1000) * 1000;
   return { deadlineMs, deadlineIso: new Date(deadlineMs).toISOString() };
 }
 
