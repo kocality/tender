@@ -152,6 +152,8 @@ pub struct Sale {
     pub result: Option<SaleResult>,
     pub seller_payout: Payout,
     pub payouts_done: u16,
+    /// Payout item after the last one sent; `pay_next` starts there (S-03).
+    pub pay_cursor: u16,
 }
 
 #[near(serializers = [borsh])]
@@ -840,6 +842,32 @@ pub(crate) mod tests {
         );
         assert_eq!(got, vec![U128(1_000_000), U128(1_000_000)]);
         assert_eq!(refund_reason().as_deref(), Some("bad_shape"));
+    }
+
+    /// X12-05 (unicode): an unknown op was echoed into the refund event, and above ~16 KB the
+    /// log limit made mt_on_transfer panic (C21). Any msg over the self-reveal cap is refunded
+    /// before it is parsed.
+    #[test]
+    fn long_msg_refunded_without_panic() {
+        let mut t = with_sale(|_| {});
+        for op in ["A".repeat(17_000), "é".repeat(16)] {
+            let msg = json!({ "op": op, "pad": "x".repeat(MAX_SELF_REVEAL_MSG) });
+            let got = transfer(&mut t, "alice.near", USDC, 5, &msg.to_string(), NOW);
+            assert_refunded(got, 5, "msg_too_long");
+        }
+    }
+
+    /// SC-01: the seller account cannot bid in its own sale (no shill bid, no bidder count).
+    #[test]
+    fn bid_rejects_seller() {
+        let mut t = with_sale(|_| {});
+        assert_refunded(
+            bid(&mut t, SELLER, 1_000_000, &bid_msg(0)),
+            1_000_000,
+            "seller_bid",
+        );
+        let s = t.sales.get(0).unwrap();
+        assert_eq!((s.bids, s.bidders), (0, 0));
     }
 
     #[test]

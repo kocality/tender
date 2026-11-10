@@ -537,7 +537,7 @@ async fn check_fixture(w: &World, t: &Id, id: u64, fx: &Value) -> anyhow::Result
 }
 
 /// After every payout: each bidder holds its refund and allocation in Intents, the seller its
-/// USDC and unsold tokens, Tender nothing.
+/// USDC and unsold tokens, Tender only the penalty pool (paid to nobody).
 async fn check_balances(w: &World, t: &Id, plan: &[Planned], fx: &Value) -> anyhow::Result<()> {
     let e = &fx["expected"];
     for (i, b) in plan.iter().enumerate() {
@@ -562,7 +562,8 @@ async fn check_balances(w: &World, t: &Id, plan: &[Planned], fx: &Value) -> anyh
         mt_balance(&w.intents, seller, WNEAR).await?,
         num(&e["seller_tokens_back"])
     );
-    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 0);
+    let pool: u128 = e["penalty"].as_array().unwrap().iter().map(num).sum();
+    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, pool);
     assert_eq!(mt_balance(&w.intents, t.as_str(), WNEAR).await?, 0);
     Ok(())
 }
@@ -670,12 +671,20 @@ async fn s04_wrong_commitment_reveal_panics() -> anyhow::Result<()> {
 async fn s05_double_reveal() -> anyhow::Result<()> {
     let (w, t, id, items) = keyed_sale(|_| {}, ONE_NEAR, &three_bids()).await?;
     assert_ok(&reveal(&w, &t, id, &items[..1]).await?);
-    let r = reveal(&w, &t, id, &items[..1]).await?;
+    // The same opening again (another tab, the keeper) is a no-op, so the batch's other items
+    // still go through (X12-01); a different opening of a revealed bid still panics.
+    let r = reveal(&w, &t, id, &items[..2]).await?;
+    assert_ok(&r);
+    assert_eq!(get_sale(&w, &t, id).await?["revealed"], 2);
+    let mut other = items[0].clone();
+    other["q"] = json!("999999");
+    let r = reveal(&w, &t, id, &[other.clone()]).await?;
     assert_fails_with(&r, "reveal: bid 0 is not sealed");
-    // Gasless self-reveal of the same bid: logged, never panics, the 1 micro-USDC comes back.
+    // Gasless self-reveal of the other opening: logged, never panics, the 1 micro-USDC comes
+    // back.
     let alice = Who::Named(0);
     fund(&w, alice, 1).await?;
-    let msg = json!({ "op": "reveal", "sale": id.to_string(), "items": [items[0]] });
+    let msg = json!({ "op": "reveal", "sale": id.to_string(), "items": [other] });
     let r = send(&w, &t, alice, 1, &msg.to_string()).await?;
     assert_ok(&r);
     assert!(
@@ -687,7 +696,7 @@ async fn s05_double_reveal() -> anyhow::Result<()> {
         mt_balance(&w.intents, w.bidders[0].id().as_str(), USDC).await?,
         1
     );
-    assert_eq!(get_sale(&w, &t, id).await?["revealed"], 1);
+    assert_eq!(get_sale(&w, &t, id).await?["revealed"], 2);
     Ok(())
 }
 
@@ -731,14 +740,13 @@ async fn s06_broken_ct_penalized() -> anyhow::Result<()> {
     let bids = get_bids(&w, &t, id).await?;
     assert_eq!(bids[1]["state"], "Penalized");
     assert_eq!(bids[1]["penalty"], "200000");
-    // 0.9·B back to the broken bid; its 0.1·B to the honest one; the seller gets only spend.
+    // 0.9·B back to the broken bid; its 0.1·B stays in Tender (paid to nobody); the honest
+    // bid gets only its refund and the seller only spend.
     let bob = w.bidders[1].id().as_str();
     assert_eq!(mt_balance(&w.intents, bob, USDC).await?, 1_800_001);
     let alice = w.bidders[0].id().as_str();
-    assert_eq!(
-        mt_balance(&w.intents, alice, USDC).await?,
-        ONE_USDC + 200_000
-    );
+    assert_eq!(mt_balance(&w.intents, alice, USDC).await?, ONE_USDC);
+    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 200_000);
     let r = get_result(&w, &t, id).await?;
     assert_eq!(
         (r["p_star"].clone(), r["penalty_pool"].clone()),
@@ -854,7 +862,7 @@ async fn s11_payout_retry() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn s12_penalty_to_revealed_not_seller() -> anyhow::Result<()> {
+async fn s12_penalty_to_nobody() -> anyhow::Result<()> {
     let fx = clearing_fixture("penalty");
     let w_plan = plan_from(&fx, Who::Named);
     // Bid 2 is a copy of bid 1: same escrow, same commitment, from another account.
@@ -884,8 +892,8 @@ async fn s12_penalty_to_revealed_not_seller() -> anyhow::Result<()> {
     assert_ok(&finalize(&w.root, &t, id, 8).await?);
     check_fixture(&w, &t, id, &fx).await?;
     check_balances(&w, &t, &w_plan, &fx).await?;
-    // The below-reserve revealed bid (idx 3) got a share; the seller got spend only.
-    assert_eq!(get_bids(&w, &t, id).await?[3]["penalty_share"], "133333");
+    // No revealed bid (idx 3 is below reserve) gets a share; the seller got spend only.
+    assert_eq!(get_bids(&w, &t, id).await?[3]["penalty_share"], "0");
     assert_eq!(
         mt_balance(&w.intents, w.seller.id().as_str(), USDC).await?,
         350_000
@@ -959,6 +967,28 @@ async fn s15_early_finalize_when_all_revealed() -> anyhow::Result<()> {
     let deadline: u64 = s["reveal_deadline_ns"].as_str().unwrap().parse()?;
     assert!(now_ns(&w).await? < deadline);
     assert_eq!(s["payouts_done"], 3);
+    Ok(())
+}
+
+/// Audit C-01/X12-01: q == B for the marginal bid at the floor-loss knife edge. Finalize used
+/// to panic with "clearing underflow" forever; now it clears, pays every item and matches the
+/// fixture (spend == q, refund 0, one base unit of dust).
+#[tokio::test]
+async fn s22_marginal_floor_excess_finalizes() -> anyhow::Result<()> {
+    let fx = clearing_fixture("marginal-floor-excess");
+    let plan = plan_from(&fx, Who::Named);
+    run_fixture(&fx, &plan, fixture_sale(&fx)).await?;
+    Ok(())
+}
+
+/// Audit CRYPTO-01/T-01: undecryptable option bids left Sealed plus a large revealed decoy.
+/// Sock-puppet accounts: the decoy gets exactly B back and the pool stays in Tender.
+#[tokio::test]
+async fn s23_last_look_pool_not_recycled() -> anyhow::Result<()> {
+    let fx = clearing_fixture("last-look-recycle");
+    let plan = plan_from(&fx, Who::Named);
+    let (w, t, _) = run_fixture(&fx, &plan, fixture_sale(&fx)).await?;
+    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 600_000);
     Ok(())
 }
 
@@ -1067,8 +1097,23 @@ async fn s20_storage_guard() -> anyhow::Result<()> {
     assert_eq!(mt_balance(&w.intents, late, USDC).await?, 2 * ONE_USDC);
     assert_eq!(get_sale(&w, &t, id).await?["bids"], refused);
 
-    // The bids already in still open, reveal, finalize and pay out.
+    // C-02: open will not start a key request whose on_key, reveals and settle would not fit
+    // above the reserve (on_key used to fail with LackBalanceForState and strand the sale in
+    // flight). Nothing is requested or logged; anyone can top the keyless account up.
     close_now(&w, &t, id).await?;
+    let r = call_tender(&w.root, &t, "open", json!({ "sale": id.to_string() })).await?;
+    assert_fails_with(&r, "open: storage");
+    let s = get_sale(&w, &t, id).await?;
+    assert_eq!(
+        (s["in_flight"].clone(), s["key_requests"].clone()),
+        (json!(false), json!(0))
+    );
+    assert_eq!(mpc_calls(&w).await?, 0);
+    assert_eq!(key_log(&w, &t).await?.as_array().unwrap().len(), 0);
+    let top_up = near_workspaces::types::NearToken::from_near(1);
+    w.root.transfer_near(&t, top_up).await?.into_result()?;
+
+    // The bids already in then open, reveal, finalize and pay out.
     let r = call_tender(&w.root, &t, "open", json!({ "sale": id.to_string() })).await?;
     assert!(event(&r.logs(), "key").is_some(), "{:?}", r.logs());
     assert_ok(&reveal(&w, &t, id, &items).await?);
@@ -1281,7 +1326,10 @@ async fn views_json_shape() -> anyhow::Result<()> {
     );
     assert_eq!(keys(&s["key"]), sorted(&["big_y", "big_c", "block", "ns"]));
     decimal_strings(&s["key"], &["block", "ns"]);
-    assert_eq!(keys(&s["seller_payout"]), sorted(&["usdc", "tokens", "ok"]));
+    assert_eq!(
+        keys(&s["seller_payout"]),
+        sorted(&["usdc", "tokens", "ok", "pending"])
+    );
     decimal_strings(&s["seller_payout"], &["usdc", "tokens"]);
     assert_eq!(s["state"], "Finalized");
     assert_eq!(
@@ -1329,7 +1377,10 @@ async fn views_json_shape() -> anyhow::Result<()> {
             ],
         );
         small_numbers(b, &["idx"]);
-        assert_eq!(keys(&b["paid"]), sorted(&["usdc", "tokens", "ok"]));
+        assert_eq!(
+            keys(&b["paid"]),
+            sorted(&["usdc", "tokens", "ok", "pending"])
+        );
         decimal_strings(&b["paid"], &["usdc", "tokens"]);
         let ct = tender::sale::decode_ct(b["ct"].as_str().unwrap()).expect("ct");
         assert_eq!(ct, CT.to_vec());
@@ -1560,8 +1611,10 @@ async fn gas_report() -> anyhow::Result<()> {
     assert!(event(&r.logs(), "key_error").is_some(), "{:?}", r.logs());
     let per_key_log = storage_usage(&w, &t).await? - before;
     set_mpc_fail(&w, false).await?;
+    let before = storage_usage(&w, &t).await?;
     let r = call_tender(&w.root, &t, "open", json!({ "sale": "0" })).await?;
     assert!(event(&r.logs(), "key").is_some(), "{:?}", r.logs());
+    let per_open_keyed = storage_usage(&w, &t).await? - before;
     let open_total = r.total_gas_burnt.as_gas();
     let on_key = *receipt_gas(&r, &t).last().unwrap();
 
@@ -1587,8 +1640,10 @@ async fn gas_report() -> anyhow::Result<()> {
     deadline_now(&w, &t, id).await?;
 
     // finalize: the first call clears 64 bids and sends 8 payouts; later calls 8 payouts each.
+    let before = storage_usage(&w, &t).await?;
     let r = finalize(&w.root, &t, id, 8).await?;
     assert_ok(&r);
+    let per_settle = storage_usage(&w, &t).await? - before;
     let finalize_first = r.total_gas_burnt.as_gas();
     let finalize_first_receipt = receipt_gas(&r, &t)[0];
     let (mut batch, mut on_paid, paid) = payout_gas(&r, &w, &t);
@@ -1609,7 +1664,10 @@ async fn gas_report() -> anyhow::Result<()> {
     }
     let s = get_sale(&w, &t, id).await?;
     assert_eq!(s["payouts_done"], s["payouts_total"]);
-    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 0);
+    // Only the penalty pool of the 8 sealed bids stays (paid to nobody).
+    let pool = get_result(&w, &t, id).await?["penalty_pool"].clone();
+    assert_eq!(pool, json!("1600000"));
+    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 1_600_000);
 
     // cancel with 8 payouts: 7 bids + the seller, min_escrow not met.
     let id1 = create_sale(&w, &t, ONE_NEAR, |m| {
@@ -1663,6 +1721,8 @@ async fn gas_report() -> anyhow::Result<()> {
             "per_sale": per_sale,
             "per_bid": per_bid,
             "per_key_log": per_key_log,
+            "per_open_keyed": per_open_keyed,
+            "per_settle": per_settle,
         },
     });
     let out = format!("{MANIFEST_DIR}/scripts/out");
@@ -1694,6 +1754,17 @@ async fn gas_report() -> anyhow::Result<()> {
     assert!(
         per_sale * 5 <= tender::CREATE_STORAGE_BYTES * 4,
         "per_sale {per_sale}"
+    );
+    // C-02: what `open` keeps free covers its entry, the key and settle (reveals: lib.rs).
+    assert!(
+        (per_open_keyed + per_settle) * 5 <= tender::OPEN_STORAGE_BYTES * 4,
+        "open {per_open_keyed} + settle {per_settle}"
+    );
+    // C-06: on_paid runs with at least 4 × the gas it uses.
+    assert!(
+        on_paid * 4 <= tender::intents::ON_PAID_GAS.as_gas(),
+        "on_paid {} Tgas",
+        tgas_of(on_paid)
     );
     Ok(())
 }

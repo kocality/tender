@@ -1,6 +1,6 @@
 {
  "name": "penalty",
- "note": "Two bids stay Sealed (broken ciphertext and a copied bid): each loses B/10; the pool goes pro rata by B to both revealed bids, including the one below reserve; the seller gets none of it.",
+ "note": "Two bids stay Sealed (broken ciphertext and a copied bid): each loses B/10; the pool goes to nobody (stays in the contract): neither revealed bid nor the seller gets any of it.",
  "sale": {
   "S": "100000000000000000000000",
   "decimals": 24,
@@ -52,10 +52,10 @@
    "0"
   ],
   "refund": [
-   "716667",
+   "650000",
    "900000",
    "900000",
-   "2133333"
+   "2000000"
   ],
   "penalty": [
    "0",
@@ -64,10 +64,10 @@
    "0"
   ],
   "penalty_share": [
-   "66667",
    "0",
    "0",
-   "133333"
+   "0",
+   "0"
   ],
   "final_state": [
    "Revealed",

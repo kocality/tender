@@ -51,6 +51,11 @@ impl Tender {
         if token_ids.len() != 1 || amounts.len() != 1 || previous_owner_ids != [sender_id.clone()] {
             return refund("bad_shape", &sender_id, &token, &amounts, "");
         }
+        // No valid msg is longer; checked before parsing so a long op is never echoed into the
+        // refund event (whose log limit would make this method panic).
+        if msg.len() > MAX_SELF_REVEAL_MSG {
+            return refund("msg_too_long", &sender_id, &token, &amounts, "");
+        }
         let amount = amounts[0].0;
         let parsed: Option<Value> = serde_json::from_str(&msg).ok();
         let op = parsed
@@ -65,7 +70,7 @@ impl Tender {
         match op.as_str() {
             "create" => self.do_create(&sender_id, &token, amount, v),
             "bid" => self.do_bid(&sender_id, &token, amount, msg.len(), v),
-            "reveal" => self.do_self_reveal(&sender_id, &token, amount, msg.len(), v),
+            "reveal" => self.do_self_reveal(&sender_id, &token, amount, v),
             _ => refund("bad_msg", &sender_id, &token, &amounts, &op),
         }
     }
@@ -125,6 +130,7 @@ impl Tender {
             result: None,
             seller_payout: Payout::default(),
             payouts_done: 0,
+            pay_cursor: 0,
         });
         events::emit(
             "create",
@@ -157,6 +163,8 @@ impl Tender {
         let now = env::block_timestamp();
         let parsed = match self.sale(sale_id) {
             None => Err("no_sale"),
+            // SC-01: no shill bid (or bidder count) from the seller's own account.
+            Some(s) if &s.seller == sender => Err("seller_bid"),
             Some(s) => sale::validate_bid(s, token, amount, msg_len, &m, now),
         };
         let p = match parsed {
@@ -215,23 +223,27 @@ impl Tender {
     /// Sends the next `max` payout items of a Finalized or Cancelled sale that are neither paid
     /// nor in flight (WD-03): items 0..bids are the bids, item `bids` is the seller. An item
     /// with nothing to pay is marked paid at once. `pending` is set before the promise so a
-    /// second call in the same block cannot pay an item twice.
+    /// second call in the same block cannot pay an item twice. The scan starts after the last
+    /// item sent (wrapping), so items that keep failing cannot starve later ones (S-03).
     pub(crate) fn pay_next(&mut self, id: u64, max: u8) {
         let Some(s) = self.sale(id) else {
             return;
         };
-        let (n, quote, token, seller) = (
+        let (n, quote, token, seller, start) = (
             s.bids,
             s.quote_token.clone(),
             s.token.clone(),
             s.seller.clone(),
+            s.pay_cursor,
         );
         let mut sent = 0u8;
         let mut zero = 0u16;
-        for idx in 0..=n {
+        let mut cursor = start;
+        for k in 0..=n {
             if sent >= max {
                 break;
             }
+            let idx = (start + k) % (n + 1);
             let receiver = if idx < n {
                 match self.bids.get(&(id, idx)) {
                     Some(b) => b.bidder.clone(),
@@ -266,8 +278,10 @@ impl Tender {
             }
             send_payout(&self.intents, id, idx, &receiver, &ids, &amounts);
             sent += 1;
+            cursor = (idx + 1) % (n + 1);
         }
         let s = self.sale_mut(id).unwrap();
+        s.pay_cursor = cursor;
         s.payouts_done += zero;
         if s.payouts_done > n {
             env::log_str("finalize: all payouts done");
@@ -282,13 +296,9 @@ impl Tender {
         sender: &AccountId,
         token: &str,
         amount: u128,
-        msg_len: usize,
         v: Value,
     ) -> Vec<U128> {
         let amounts = [U128(amount)];
-        if msg_len > MAX_SELF_REVEAL_MSG {
-            return refund("msg_too_long", sender, token, &amounts, "reveal");
-        }
         let Ok(m) = serde_json::from_value::<RevealMsg>(v) else {
             return refund("bad_msg", sender, token, &amounts, "reveal");
         };
@@ -341,9 +351,11 @@ impl Tender {
     }
 }
 
-/// C14: per-payout gas.
+/// C14: per-payout gas. `on_paid` gets ≥ 4 × what it uses (2.04 Tgas measured, C-06): if it ran
+/// out of gas its item would stay pending and never be retried. 8 payouts reserve 240 Tgas,
+/// which still fits a 300 Tgas `finalize` with the first call's clearing (23.6 Tgas, 64 bids).
 const PAYOUT_GAS: Gas = Gas::from_tgas(20);
-const ON_PAID_GAS: Gas = Gas::from_tgas(5);
+pub const ON_PAID_GAS: Gas = Gas::from_tgas(10);
 
 /// `intents.mt_batch_transfer` (exactly 1 yocto from this contract's balance), then
 /// `on_paid(sale, idx)`.

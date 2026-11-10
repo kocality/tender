@@ -10,6 +10,7 @@
 #   H=<6 hex> account suffix for a fresh run (default: from the state file, else random)
 #   MODE=identity|generator|plain  app_pk_mode for new() (default identity)
 #   EXTRA_FUND=<testnet account in the keychain>  tops up the intents copy when fund1 is not there
+#   NEAR_NETCFG=<near-cli network-config name>  (default testnet), e.g. one that points at a less busy RPC
 # Accounts: three faucet accounts (tender-, intents-, fund1-<H>.testnet; the faucet rate-limits per IP) and
 # four subaccounts of tender-<H> funded by it: usdc., wnear., bidder1., bidder2.
 # Keys: near-cli-rs legacy keychain, ~/.near-credentials/testnet/ (never in the repo). Secret bid files:
@@ -29,6 +30,7 @@ WASM=contract/target/near/tender.wasm
 FT_WASM=contract/tests/mock-ft/target/near/mock_ft.wasm
 DEFUSE_WASM=contract/tests/res/defuse-0.4.5.wasm
 C25_NEAR=4.5
+NETCFG="${NEAR_NETCFG:-testnet}"
 mkdir -p "$OUT" "$LOGS"
 
 if [ -f "$STATE" ] && [ -z "${H:-}" ]; then H="$(jq -r .h "$STATE")"; fi
@@ -69,10 +71,15 @@ chain_ns() { rpc block '{"finality":"final"}' | jq -r .result.header.timestamp_n
 
 ntx() { # ntx <label> <near args...>: run near-cli-rs, record the tx hash under .tx[label]
   local label="$1"; shift
-  local log="$LOGS/$label.log"
-  if ! near "$@" >"$log" 2>&1; then
+  local log="$LOGS/$label.log" try
+  # An RPC rate-limit refusal comes before anything is sent (no tx hash in the log): retry it.
+  for try in 1 2 3 4 5 6; do
+    if near "$@" >"$log" 2>&1; then break; fi
+    if [ "$try" -lt 6 ] && grep -qi 'rate limit' "$log" && ! grep -q 'Transaction ID:' "$log"; then
+      echo "$label: RPC rate limit, retry $try in ${NTX_RETRY_SECS:-15} s" >&2; sleep "${NTX_RETRY_SECS:-15}"; continue
+    fi
     tail -20 "$log" >&2; echo "FAILED: $label (log $log)" >&2; exit 1
-  fi
+  done
   local hash; hash="$(grep -Eo 'Transaction ID: [1-9A-HJ-NP-Za-km-z]{43,44}' "$log" | tail -1 | awk '{print $3}')"
   if [ -z "$hash" ]; then tail -20 "$log" >&2; echo "no tx hash in output: $label" >&2; exit 1; fi
   if grep -qiE 'Failure|panicked|Smart contract panicked' "$log"; then
@@ -83,7 +90,7 @@ ntx() { # ntx <label> <near args...>: run near-cli-rs, record the tx hash under 
 }
 call() { # call <label> <signer> <receiver> <method> <json> <gas> <deposit>
   ntx "$1" contract call-function as-transaction "$3" "$4" json-args "$5" prepaid-gas "$6" attached-deposit "$7" \
-    sign-as "$2" network-config testnet sign-with-legacy-keychain send
+    sign-as "$2" network-config "$NETCFG" sign-with-legacy-keychain send
 }
 
 if [ "$STEP" -le 1 ]; then
@@ -97,7 +104,7 @@ if [ "$STEP" -le 1 ]; then
         mkdir -p "$LOGS/stale-keys" && mv "$HOME/.near-credentials/testnet/$id.json" "$HOME/.near-credentials/testnet/$id" "$LOGS/stale-keys/" 2>/dev/null || true
       fi
       if near account create-account sponsor-by-faucet-service "$id" autogenerate-new-keypair \
-        save-to-legacy-keychain network-config testnet create >"$LOGS/create-$a.log" 2>&1; then break; fi
+        save-to-legacy-keychain network-config "$NETCFG" create >"$LOGS/create-$a.log" 2>&1; then break; fi
       grep -q '429' "$LOGS/create-$a.log" || { tail -20 "$LOGS/create-$a.log" >&2; exit 1; }
       [ "$a" = fund1 ] && [ -n "${EXTRA_FUND:-}" ] && { echo "faucet 429 for $id: EXTRA_FUND=$EXTRA_FUND tops up instead"; continue 2; }
       echo "faucet 429 for $id, retry $try/30 in 120 s"; sleep 120
@@ -113,7 +120,7 @@ if [ "$STEP" -le 1 ]; then
     IFS=: read -r id amt <<<"$sub"
     if [ -n "$(balance_near "$id")" ]; then echo "$id exists"; continue; fi
     ntx "create-${id%%.*}" account create-account fund-myself "$id" "$amt NEAR" autogenerate-new-keypair \
-      save-to-legacy-keychain sign-as "$TENDER" network-config testnet sign-with-legacy-keychain send
+      save-to-legacy-keychain sign-as "$TENDER" network-config "$NETCFG" sign-with-legacy-keychain send
   done
   echo "$TENDER balance: $(balance_near "$TENDER") NEAR · $INTENTS balance: $(balance_near "$INTENTS") NEAR"
 fi
@@ -124,11 +131,11 @@ if [ "$STEP" -le 2 ]; then
   if ! node -e "process.exit(Number('$have') >= 15 ? 0 : 1)"; then
     if [ -n "$(balance_near "$FUND1")" ]; then
       x="$(node -e "console.log(Math.floor((Number('$(balance_near "$FUND1")') - 0.5) * 100) / 100)")"
-      ntx fund-fund1 tokens "$FUND1" send-near "$INTENTS" "$x NEAR" network-config testnet sign-with-legacy-keychain send
+      ntx fund-fund1 tokens "$FUND1" send-near "$INTENTS" "$x NEAR" network-config "$NETCFG" sign-with-legacy-keychain send
     else
       [ -n "${EXTRA_FUND:-}" ] || { echo "FAIL: $FUND1 does not exist and EXTRA_FUND is not set" >&2; exit 1; }
       x="$(node -e "console.log(Math.ceil((15.2 - Number('$have')) * 100) / 100)")"
-      ntx fund-extra tokens "$EXTRA_FUND" send-near "$INTENTS" "$x NEAR" network-config testnet sign-with-legacy-keychain send
+      ntx fund-extra tokens "$EXTRA_FUND" send-near "$INTENTS" "$x NEAR" network-config "$NETCFG" sign-with-legacy-keychain send
       setj --arg f "$EXTRA_FUND" '.extra_fund = $f'
     fi
   fi
@@ -142,7 +149,7 @@ if [ "$STEP" -le 3 ]; then
     if has_code "$id"; then echo "$id already deployed"; continue; fi
     ntx "deploy-$(echo "$sym" | tr "[:upper:]" "[:lower:]")" contract deploy "$id" use-file "$FT_WASM" with-init-call new \
       json-args "{\"owner_id\":\"$TENDER\",\"decimals\":$dec,\"symbol\":\"$sym\"}" prepaid-gas '100 Tgas' attached-deposit '0 NEAR' \
-      network-config testnet sign-with-legacy-keychain send
+      network-config "$NETCFG" sign-with-legacy-keychain send
   done
 fi
 
@@ -151,7 +158,7 @@ if [ "$STEP" -le 4 ]; then
   if ! has_code "$INTENTS"; then
     ntx deploy-intents contract deploy "$INTENTS" use-file "$DEFUSE_WASM" with-init-call new \
       json-args "{\"config\":{\"wnear_id\":\"$WNEAR\",\"fees\":{\"fee\":0,\"fee_collector\":\"$TENDER\"},\"roles\":{}}}" \
-      prepaid-gas '300 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
+      prepaid-gas '300 Tgas' attached-deposit '0 NEAR' network-config "$NETCFG" sign-with-legacy-keychain send
   fi
   echo "current_salt: $(view "$INTENTS" current_salt '{}')"
 fi

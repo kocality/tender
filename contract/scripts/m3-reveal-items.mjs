@@ -4,7 +4,8 @@
 //
 // Each file gives {cm, p, q, salt}; the contract's get_bids view maps cm -> idx.
 // Prints {"sale":"N","items":[{"idx":n,"p":"…","q":"…","salt":"<32 hex>"}]} on stdout.
-// Exit 1 if a file matches no bid of the sale, or if a file's sale/contract differ.
+// A file whose commitment matches no bid (a re-sealed or refunded bid) is skipped with a warning.
+// Exit 1 if no file matches a bid, or if a file's sale/contract or signer differ.
 //
 // Usage: node contract/scripts/m3-reveal-items.mjs --network testnet|mainnet --contract <id> --sale N \
 //          --bids-glob "$HOME/.tender/bids/testnet-<contract>-sale0-*.json" [--rpc <url>]
@@ -67,9 +68,13 @@ for (const f of files) {
   const s = JSON.parse(readFileSync(f, 'utf8'));
   if (s.sale !== v.sale || s.contract !== v.contract) die(`${f}: sale ${s.sale} on ${s.contract}, expected sale ${v.sale} on ${v.contract}`);
   const bid = byCm.get(s.cm);
-  if (!bid) die(`${f}: commitment ${s.cm} matches no bid of sale ${v.sale}`);
+  if (!bid) {
+    console.error(`skip ${f}: commitment ${s.cm} matches no bid of sale ${v.sale}`);
+    continue;
+  }
   if (bid.bidder !== s.signer) die(`${f}: bid ${bid.idx} belongs to ${bid.bidder}, file says ${s.signer}`);
   items.push({ idx: bid.idx, p: s.p, q: s.q, salt: s.salt });
 }
+if (items.length === 0) die(`no bid file matches a bid of sale ${v.sale}`);
 items.sort((a, b) => a.idx - b.idx);
 console.log(JSON.stringify({ sale: v.sale, items }));

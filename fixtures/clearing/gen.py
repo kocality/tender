@@ -6,10 +6,12 @@ both reproduce every `expected` field. Never edit a fixture to make an implement
 
 Rules: uniform price, sorted by price desc then arrival (idx); scale 10^(decimals + lot_exp);
 a full winner pays q and gets floor(q * scale / P*) tokens; the marginal group (every bid at
-p == P*) shares the remaining supply pro rata by q and pays ceil(t * P* / scale). A Sealed bid
-is penalized B // 10 when at least one bid was revealed; the pool goes pro rata by B to every
-revealed bid (below reserve too), rounding remainder to the lowest revealed idx, never to the
-seller. Nothing revealed: no penalty, bids stay Sealed, full refunds.
+p == P*) shares the remaining supply pro rata by q, each capped at floor(q * scale / P*) (the
+excess is dust), and pays ceil(t * P* / scale) <= q. A Sealed bid
+is penalized B // 10 when at least one bid was revealed; the pool is paid to nobody (not to
+revealed bids, which could be the penalized bidder's own decoys, and never to the seller): it
+stays in the contract, so sum(spend) + sum(refund) + pool == sum(B) and penalty_share is always 0.
+Nothing revealed: no penalty, bids stay Sealed, full refunds.
 
 JSON: u64/u128 values are decimal strings, u8/u16 values (decimals, lot_exp, idx) are numbers;
 P_star is null when nothing clears; a Sealed bid's p and q are null.
@@ -33,10 +35,7 @@ def clear(S, d, lot, reserve, bids):
     sealed = [b for b in bids if b['state'] == 'Sealed']
     if rev:                                   # K2: no penalty when nothing was revealed
         for b in sealed: pen[b['idx']] = b['B'] // 10
-    pool = sum(pen); totB = sum(b['B'] for b in rev)
-    if pool:                                  # K1: pro-rata by B over ALL revealed bids (below reserve too)
-        for b in rev: share[b['idx']] = pool * b['B'] // totB
-        share[min(b['idx'] for b in rev)] += pool - sum(share)
+    pool = sum(pen)                           # paid to nobody (CRYPTO-01/T-01): share stays 0
     el = sorted([b for b in rev if b['p'] >= reserve], key=lambda b: (-b['p'], b['idx']))
     P = None; Q = 0; dust = 0
     for k, b in enumerate(el):
@@ -52,12 +51,14 @@ def clear(S, d, lot, reserve, bids):
             for w in full: spend[w['idx']] = w['q']; alloc[w['idx']] = w['q'] * scale // P
             R = S - sum(alloc); qm = sum(w['q'] for w in marg)
             for w in marg:
-                t = R * w['q'] // qm; alloc[w['idx']] = t; spend[w['idx']] = cdiv(t * P, scale)
+                # Capped at what q buys at P*, so spend <= q (C-01); the excess becomes dust.
+                t = min(R * w['q'] // qm, w['q'] * scale // P); alloc[w['idx']] = t; spend[w['idx']] = cdiv(t * P, scale)
             dust = R - sum(alloc[w['idx']] for w in marg)
             break
-    refund = [b['B'] - spend[b['idx']] - pen[b['idx']] + share[b['idx']] for b in bids]
+    refund = [b['B'] - spend[b['idx']] - pen[b['idx']] for b in bids]
     final = [('Revealed' if b['state'] == 'Revealed' else ('Penalized' if rev else 'Sealed')) for b in bids]
-    assert sum(spend) + sum(refund) == sum(b['B'] for b in bids) and sum(alloc) <= S
+    assert sum(spend) + sum(refund) + pool == sum(b['B'] for b in bids) and sum(alloc) <= S
+    assert all(spend[b['idx']] <= (b['q'] or 0) and refund[b['idx']] >= 0 for b in bids)
     return dict(P_star=P, alloc=alloc, spend=spend, refund=refund, penalty=pen, penalty_share=share,
                 final_state=final, seller_usdc=sum(spend), seller_tokens_back=S - sum(alloc), dust=dust)
 
@@ -85,8 +86,8 @@ CASES = [
      22_400 * 10 ** 18, 18, 3, 174_000,
      [R(2_000_000, 200_000, 2_000_000), R(2_000_000, 185_000, 1_500_000)]),
     ('penalty',
-     'Two bids stay Sealed (broken ciphertext and a copied bid): each loses B/10; the pool goes '
-     'pro rata by B to both revealed bids, including the one below reserve; the seller gets none of it.',
+     'Two bids stay Sealed (broken ciphertext and a copied bid): each loses B/10; the pool goes to '
+     'nobody (stays in the contract): neither revealed bid nor the seller gets any of it.',
      10 ** 23, 24, 0, 3_000_000,
      [R(1_000_000, 3_500_000, 1_000_000), Sd(1_000_000), Sd(1_000_000),
       R(2_000_000, 2_000_000, 1_000_000)]),
@@ -109,15 +110,32 @@ CASES = [
      E24, 24, 0, 1_000_000,
      [R(3_000_000, 2_000_000, 3_000_000), R(1_000_000, 2_000_000, 1_000_000),
       R(2_000_000, 2_000_000, 2_000_000)]),
+    ('marginal-floor-excess',
+     'Audit C-01/X12-01: the full winner\'s floor loss would give the marginal bid one base unit '
+     'more than q buys at P* (spend q + 1, refund -1 with q == B). The marginal share is capped at '
+     'floor(q * scale / P*): spend == q, refund 0, one base unit of dust back to the seller.',
+     1_000_000_333_333_333_333_333_333, 24, 0, 1_000_000,
+     [R(1_000_001, 3_500_000, 1_000_001), R(2_000_000, 3_000_000, 2_000_000)]),
+    ('last-look-recycle',
+     'Audit CRYPTO-01/T-01: one bidder holds three undecryptable option bids (Sealed after the last '
+     'look) and a 1000 USDC decoy revealed below reserve. The decoy gets no share of the pool and is '
+     'refunded exactly B, so the withheld bids cost their full B/10 (0.6 USDC).',
+     10 ** 24, 24, 0, 3_000_000,
+     [R(5_000_000, 3_600_000, 5_000_000), Sd(2_000_000), Sd(2_000_000), Sd(2_000_000),
+      R(1_000_000_000, 1, 1_000_000_000)]),
 ]
 
 # Values checked by hand when the algorithm was specified; a change here is a regression.
 PINNED = {
     'demo-sale-1': {'P_star': 3_600_000, 'seller_usdc': 10_800_001,
                     'refund': [1_000_000, 2_000_000, 0, 2_199_999, 3_000_000, 2_000_000]},
-    'penalty': {'penalty_share': [66_667, 0, 0, 133_333], 'refund': [716_667, 900_000, 900_000, 2_133_333]},
+    'penalty': {'penalty_share': [0, 0, 0, 0], 'refund': [650_000, 900_000, 900_000, 2_000_000]},
     'tie-marginal': {'spend': [1_000_000, 333_334, 666_667], 'dust': 1, 'seller_tokens_back': 1},
     'bound-d-lot-exp': {'P_star': 10 ** 12, 'alloc': [5 * 10 ** 25, 5 * 10 ** 25]},
+    'marginal-floor-excess': {'P_star': 3_000_000, 'spend': [1_000_001, 2_000_000], 'refund': [0, 0],
+                              'dust': 1},
+    'last-look-recycle': {'penalty_share': [0, 0, 0, 0, 0],
+                          'refund': [1_400_000, 1_800_000, 1_800_000, 1_800_000, 1_000_000_000]},
 }
 
 

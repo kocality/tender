@@ -30,6 +30,17 @@ pub const CREATE_STORAGE_BYTES: u64 = 800;
 /// Storage estimate for one new bid incl. its bidder-seen entry (C26): 1.25 × the measured
 /// worst case (580 B: 64-character bidder, 8-byte origin).
 pub const BID_STORAGE_BYTES: u64 = 725;
+/// A key request still in flight this long after `open` is dead (its `on_key` receipt failed;
+/// the MPC's own yield timeout is ~200 blocks): `open` may ask again and cancel rule (b) applies
+/// (C-02).
+pub const IN_FLIGHT_TIMEOUT_SECS: u64 = 3_600;
+/// Storage `open` must leave room for above the C26 reserve before it asks for the key (C-02):
+/// its ledger entry, `on_key` and the first `finalize` (79 + 186 + 106 B measured, × 1.25).
+pub const OPEN_STORAGE_BYTES: u64 = 500;
+/// …plus this much per bid still Sealed, for its reveal: p, q, salt and revealed_by take at most
+/// 8 + 8 + 16 + 4 + 64 = 100 B (× 1.25).
+pub const REVEAL_STORAGE_BYTES: u64 = 125;
+const _: () = assert!(REVEAL_STORAGE_BYTES * 4 >= 100 * 5);
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -85,6 +96,8 @@ pub struct PayoutView {
     pub usdc: U128,
     pub tokens: U128,
     pub ok: bool,
+    /// A transfer was sent and its `on_paid` has not run yet (S-07).
+    pub pending: bool,
 }
 
 #[near(serializers = [json])]
@@ -227,7 +240,10 @@ impl Tender {
             .sale(id)
             .unwrap_or_else(|| env::panic_str("open: sale not found"));
         require!(s.state == SaleState::Open, "open: sale is not open");
-        require!(!s.in_flight, "open: request already in flight");
+        require!(
+            !s.in_flight || self.request_dead(s, now),
+            "open: request already in flight"
+        );
         require!(now >= s.close_ns, "open: before close");
         require!(
             s.escrow_total >= s.min_escrow,
@@ -237,7 +253,13 @@ impl Tender {
             s.bidders >= s.min_bidders,
             "open: fewer bidders than min_bidders"
         );
+        let sealed = u64::from(s.bids - s.revealed);
+        require!(
+            storage_ok(OPEN_STORAGE_BYTES + REVEAL_STORAGE_BYTES * sealed),
+            "open: storage"
+        );
         let args = seal::ckd_args(&s.path, self.app_pk_mode, self.domain_id);
+        self.close_dead_request(id);
 
         // K10: ledger entry and request count first, the MPC promise after.
         let log_idx = self.key_log.len() as u64;
@@ -266,7 +288,8 @@ impl Tender {
     }
 
     /// C15: stores the key (state Keyed, reveal window starts) or records the failure so `open`
-    /// can be retried. Never panics: a panic here would leave the request in flight forever.
+    /// can be retried. Never panics: a panic here would leave the request in flight until
+    /// IN_FLIGHT_TIMEOUT_SECS.
     #[private]
     pub fn on_key(&mut self, sale: U64, log_idx: U64) {
         let (id, log_idx) = (sale.0, log_idx.0);
@@ -343,12 +366,15 @@ impl Tender {
         let b = now
             >= s.close_ns
                 .saturating_add(sale::MIN_REVEAL_SECS * NS_PER_SEC);
+        let idle = !s.in_flight || self.request_dead(s, now);
         require!(
-            s.state == SaleState::Open && !s.in_flight && s.key.is_none() && (a || b),
+            s.state == SaleState::Open && idle && s.key.is_none() && (a || b),
             "cancel: conditions not met"
         );
         let reason = if a { "conditions" } else { "no_key_24h" };
-        for i in 0..s.bids {
+        let n = s.bids;
+        self.close_dead_request(id);
+        for i in 0..n {
             if let Some(bid) = self.bids.get_mut(&(id, i)) {
                 bid.paid = Payout {
                     usdc: bid.escrow,
@@ -405,8 +431,8 @@ impl Tender {
     }
 
     /// C18, WD-03, WD-04. On a Keyed sale, once the reveal deadline has passed or every bid is
-    /// revealed, the first call clears it at one price, applies the penalty (to revealed
-    /// bidders, never the seller) and records every payout. Every call on a Finalized or
+    /// revealed, the first call clears it at one price, applies the penalty (paid to nobody:
+    /// it stays in the contract, never to bidders or the seller) and records every payout. Every call on a Finalized or
     /// Cancelled sale then sends the next `max` unpaid payouts (1..=8, 0 means 8); failed ones
     /// are retried by the next call. Anyone can call it; not payable.
     pub fn finalize(&mut self, sale: U64, max: u8) {
@@ -523,6 +549,35 @@ impl Tender {
         }
     }
 
+    /// C-02: the sale's key request was sent IN_FLIGHT_TIMEOUT_SECS ago or more and its
+    /// `on_key` never ran (that receipt failed), so nothing will clear `in_flight`.
+    fn request_dead(&self, s: &Sale, now: u64) -> bool {
+        let sent = s
+            .pending_log
+            .and_then(|i| u32::try_from(i).ok())
+            .and_then(|i| self.key_log.get(i))
+            .map_or(0, |k| k.ns);
+        now >= sent.saturating_add(IN_FLIGHT_TIMEOUT_SECS * NS_PER_SEC)
+    }
+
+    /// Ends a dead in-flight request (callers checked `request_dead`): its ledger entry becomes
+    /// Err and its late `on_key`, if one ever runs, is stale.
+    fn close_dead_request(&mut self, id: u64) {
+        let s = self.sale_mut(id).unwrap();
+        if !s.in_flight {
+            return;
+        }
+        let log_idx = s.pending_log.take();
+        s.in_flight = false;
+        if let Some(entry) = log_idx
+            .and_then(|i| u32::try_from(i).ok())
+            .and_then(|i| self.key_log.get_mut(i))
+        {
+            entry.outcome = KeyOutcome::Err;
+            entry.resolved_block = Some(env::block_height());
+        }
+    }
+
     /// C16 checks for one opened bid, shared by `reveal` (panics on Err) and the gasless
     /// self-reveal (logs Err). On success the bid is Revealed with `p`, `q`, `salt` and
     /// `revealed_by = by`.
@@ -548,10 +603,18 @@ impl Tender {
             .bids
             .get(&(id, idx))
             .ok_or_else(|| format!("bid {idx} not found"))?;
+        let (p, q) = (item.p.0, item.q.0);
+        if bid.state == BidState::Revealed
+            && (bid.p, bid.q) == (Some(p), Some(q))
+            && bid.salt.map(|s| seal::hex_lower(&s)).as_deref() == Some(item.salt.as_str())
+        {
+            // Already revealed with this very opening (another tab, the keeper): a no-op, so
+            // the rest of the batch still goes through (X12-01).
+            return Ok(());
+        }
         if bid.state != BidState::Sealed {
             return Err(format!("bid {idx} is not sealed"));
         }
-        let (p, q) = (item.p.0, item.q.0);
         if q == 0 || u128::from(q) > bid.escrow {
             return Err(format!("q out of range for bid {idx}"));
         }
@@ -614,8 +677,12 @@ impl Tender {
                 .expect("finalize: overflow")
         };
         let sold = sum(&out.alloc);
+        // The penalty pool stays in the contract (paid to nobody, CRYPTO-01).
         require!(
-            sum(&out.refund).checked_add(out.seller_usdc) == Some(escrow_total)
+            sum(&out.refund)
+                .checked_add(out.seller_usdc)
+                .and_then(|x| x.checked_add(out.penalty_pool))
+                == Some(escrow_total)
                 && sold.checked_add(out.seller_tokens_back) == Some(supply),
             "finalize: accounting mismatch"
         );
@@ -684,6 +751,7 @@ fn payout_view(p: &Payout) -> PayoutView {
         usdc: U128(p.usdc),
         tokens: U128(p.tokens),
         ok: p.ok,
+        pending: p.pending,
     }
 }
 
@@ -954,6 +1022,9 @@ mod tests {
         at(KEEPER, LATER);
         t.finalize(U64(0), 8);
         assert!(get_created_receipts().is_empty());
+        // S-07: the views show an item in flight as pending, not as owed.
+        assert!(t.get_bids(U64(0), 0, 64).iter().all(|b| b.paid.pending));
+        assert!(t.get_sale(U64(0)).unwrap().seller_payout.pending);
 
         // Bid 0 paid; bid 1 failed and goes back to unpaid; the next finalize retries only it.
         testing_env!(
@@ -974,10 +1045,261 @@ mod tests {
         t.on_paid(U64(0), 1);
         let bids = t.get_bids(U64(0), 0, 2);
         assert!(bids[0].paid.ok && !bids[1].paid.ok);
+        assert!(!bids[0].paid.pending && !bids[1].paid.pending);
         assert_eq!(t.get_sale(U64(0)).unwrap().payouts_done, 1);
         at(KEEPER, LATER);
         t.finalize(U64(0), 8);
         assert_eq!(get_created_receipts().len(), 2);
+    }
+
+    /// X12-01 (tabs): a batch holding a bid another tab or the keeper already revealed with the
+    /// same opening goes through for its other items; a different opening still panics.
+    #[test]
+    fn reveal_skips_identical_opening() {
+        let mut t = sale_with_sealed(&[
+            (1_000_000, 3_500_000, 1_000_000),
+            (1_000_000, 3_600_000, 1_000_000),
+        ]);
+        key(&mut t);
+        at(KEEPER, LATER);
+        t.reveal(U64(0), vec![item(0, 3_500_000, 1_000_000, SALT_HEX)]);
+        at("other.near", LATER);
+        t.reveal(
+            U64(0),
+            vec![
+                item(0, 3_500_000, 1_000_000, SALT_HEX),
+                item(1, 3_600_000, 1_000_000, SALT_HEX),
+            ],
+        );
+        assert_eq!(t.get_sale(U64(0)).unwrap().revealed, 2);
+        let b = &t.get_bids(U64(0), 0, 1)[0];
+        assert_eq!(b.revealed_by.as_ref().unwrap().as_str(), KEEPER);
+    }
+
+    #[test]
+    #[should_panic(expected = "reveal: bid 0 is not sealed")]
+    fn reveal_rejects_other_opening_of_revealed_bid() {
+        let mut t = sale_with_sealed(&[(1_000_000, 3_500_000, 1_000_000)]);
+        key(&mut t);
+        at(KEEPER, LATER);
+        t.reveal(U64(0), vec![item(0, 3_500_000, 1_000_000, SALT_HEX)]);
+        t.reveal(U64(0), vec![item(0, 3_500_000, 999_999, SALT_HEX)]);
+    }
+
+    /// Item indices of the `mt_batch_transfer` receipts created in this context.
+    fn sent_items() -> Vec<u16> {
+        get_created_receipts()
+            .into_iter()
+            .flat_map(|r| r.actions)
+            .filter_map(|a| match a {
+                near_sdk::mock::MockAction::FunctionCallWeight {
+                    method_name, args, ..
+                } if method_name == b"mt_batch_transfer" => {
+                    let v: Value = serde_json::from_slice(&args).unwrap();
+                    let memo = v["memo"].as_str().unwrap().to_string();
+                    Some(memo.rsplit(':').next().unwrap().parse().unwrap())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn paid(t: &mut Tender, idx: u16, r: PromiseResult) {
+        testing_env!(
+            ctx(ME, LATER).build(),
+            test_vm_config(),
+            RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![r],
+        );
+        t.on_paid(U64(0), idx);
+    }
+
+    /// S-03 / C-05: 8 items that keep failing must not starve the later ones and the seller.
+    #[test]
+    fn pay_next_does_not_starve_later_items() {
+        let bids = [(1_000_000u128, 3_500_000u64, 1_000_000u64); 10];
+        let mut t = sale_with_sealed(&bids);
+        key(&mut t);
+        at(KEEPER, LATER);
+        let items = (0..10)
+            .map(|i| item(i, 3_500_000, 1_000_000, SALT_HEX))
+            .collect();
+        t.reveal(U64(0), items);
+        t.finalize(U64(0), 8);
+        assert_eq!(sent_items(), (0..8).collect::<Vec<_>>());
+        for i in 0..8 {
+            paid(&mut t, i, PromiseResult::Failed);
+        }
+        at(KEEPER, LATER);
+        t.finalize(U64(0), 8);
+        let sent = sent_items();
+        assert_eq!(sent.len(), 8);
+        for idx in [8, 9, 10] {
+            assert!(sent.contains(&idx), "item {idx} not sent: {sent:?}");
+        }
+    }
+
+    /// Sale 0 with two bids, closed: open at the close (key request in flight, log entry 0).
+    fn opened() -> (Tender, u64) {
+        let mut t = sale_with_sealed(&[
+            (3_000_000, 3_500_000, 1_000_000),
+            (3_000_000, 3_600_000, 1_000_000),
+        ]);
+        let s = t.sale_mut(0).unwrap();
+        s.min_bidders = 2;
+        let close = s.close_ns;
+        at(KEEPER, close);
+        t.open(U64(0));
+        assert!(t.get_sale(U64(0)).unwrap().in_flight);
+        (t, close)
+    }
+
+    /// S-08: while the key request is in flight, open is refused.
+    #[test]
+    #[should_panic(expected = "open: request already in flight")]
+    fn in_flight_refuses_second_open() {
+        let (mut t, close) = opened();
+        at(KEEPER, close + 60 * NS_PER_SEC);
+        t.open(U64(0));
+    }
+
+    /// S-08: a fresh in-flight request also blocks cancel rule (b).
+    #[test]
+    #[should_panic(expected = "cancel: conditions not met")]
+    fn in_flight_refuses_cancel() {
+        let (mut t, close) = opened();
+        let s = t.sale_mut(0).unwrap();
+        // A request sent a minute before the 24 h mark is still fresh then.
+        let log = s.pending_log.unwrap() as u32;
+        let day = sale::MIN_REVEAL_SECS * NS_PER_SEC;
+        t.key_log.get_mut(log).unwrap().ns = close + day - 60 * NS_PER_SEC;
+        at(KEEPER, close + day);
+        t.cancel(U64(0));
+    }
+
+    /// S-08: no bid is accepted while the request is in flight.
+    #[test]
+    fn in_flight_refuses_bid() {
+        let (mut t, _) = opened();
+        let s = t.sale_mut(0).unwrap();
+        s.close_ns = LATER;
+        let msg = json!({ "op": "bid", "sale": "0", "ct": ct_b64(160), "cm": "ab".repeat(32) });
+        let got = transfer(&mut t, "late.near", USDC, 1_000_000, &msg.to_string(), NOW);
+        assert_eq!(got, vec![1_000_000]);
+        assert!(
+            get_logs()
+                .iter()
+                .any(|l| l.contains("\"reason\":\"not_open\""))
+        );
+    }
+
+    /// S-08: a callback for another log entry changes nothing.
+    #[test]
+    fn on_key_with_other_log_idx_is_stale() {
+        let (mut t, close) = opened();
+        testing_env!(
+            ctx(ME, close).build(),
+            test_vm_config(),
+            RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![PromiseResult::Failed],
+        );
+        t.on_key(U64(0), U64(7));
+        assert!(get_logs().contains(&"on_key: stale callback".to_string()));
+        let s = t.get_sale(U64(0)).unwrap();
+        assert!(s.in_flight);
+        assert_eq!(t.get_key_log(U64(0), 10)[0].outcome, "Pending");
+    }
+
+    /// C-02 / S-04: if the on_key receipt itself fails, the request stays in flight. After
+    /// IN_FLIGHT_TIMEOUT_SECS `open` may ask again; the old entry is closed as Err and its late
+    /// callback is stale.
+    #[test]
+    fn stale_in_flight_can_be_reopened() {
+        let (mut t, close) = opened();
+        let later = close + IN_FLIGHT_TIMEOUT_SECS * NS_PER_SEC;
+        at(KEEPER, later);
+        t.open(U64(0));
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!((s.key_requests, s.in_flight), (2, true));
+        let log = t.get_key_log(U64(0), 10);
+        assert_eq!(
+            (log[0].outcome.as_str(), log[1].outcome.as_str()),
+            ("Err", "Pending")
+        );
+        testing_env!(
+            ctx(ME, later).build(),
+            test_vm_config(),
+            RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![PromiseResult::Failed],
+        );
+        t.on_key(U64(0), U64(0));
+        assert!(get_logs().contains(&"on_key: stale callback".to_string()));
+        assert_eq!(t.get_key_log(U64(0), 10)[1].outcome, "Pending");
+    }
+
+    /// C-02 / S-04: a dead request no longer blocks cancel rule (b): full refunds 24 h after
+    /// close.
+    #[test]
+    fn stale_in_flight_cancel_after_24h() {
+        let (mut t, close) = opened();
+        at(KEEPER, close + sale::MIN_REVEAL_SECS * NS_PER_SEC);
+        t.cancel(U64(0));
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!((s.state.as_str(), s.in_flight), ("Cancelled", false));
+        assert_eq!(t.get_key_log(U64(0), 10)[0].outcome, "Err");
+        assert!(
+            t.get_bids(U64(0), 0, 2)
+                .iter()
+                .all(|b| b.paid.usdc.0 == 3_000_000)
+        );
+    }
+
+    /// C-02: open refuses to start a request whose callback, reveals and settle would not fit
+    /// above the C26 reserve, so a storage failure cannot strand it in flight.
+    #[test]
+    #[should_panic(expected = "open: storage")]
+    fn open_checks_storage_headroom() {
+        let mut t = sale_with_sealed(&[
+            (3_000_000, 3_500_000, 1_000_000),
+            (3_000_000, 3_600_000, 1_000_000),
+        ]);
+        let s = t.sale_mut(0).unwrap();
+        s.min_bidders = 2;
+        let close = s.close_ns;
+        let mut c = ctx(KEEPER, close);
+        let usage = near_sdk::env::storage_usage();
+        let balance = (usage as u128 + 100) * near_sdk::env::storage_byte_cost().as_yoctonear()
+            + STORAGE_RESERVE_YOCTO;
+        c.account_balance(near_sdk::NearToken::from_yoctonear(balance))
+            .storage_usage(usage);
+        testing_env!(c.build());
+        t.open(U64(0));
+    }
+
+    /// X12A-01: a twin sale whose min_escrow is above the per-sale escrow cap can never be
+    /// opened, however many free accounts bid; cancel rule (a) applies.
+    #[test]
+    fn min_escrow_above_cap_is_never_met() {
+        let mut t = with_sale(|m| {
+            m["min_escrow"] = json!((sale::MAX_ESCROW_TOTAL + 1).to_string());
+            m["min_bidders"] = json!(1);
+        });
+        let cm = "ab".repeat(32);
+        let msg = json!({ "op": "bid", "sale": "0", "ct": ct_b64(160), "cm": cm });
+        let b = sale::MAX_ESCROW_TOTAL / 2;
+        for who in ["x1.near", "x2.near"] {
+            let got = transfer(&mut t, who, USDC, b, &msg.to_string(), NOW + NS_PER_SEC);
+            assert_eq!(got, vec![0]);
+        }
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!(s.escrow_total.0, sale::MAX_ESCROW_TOTAL);
+        at(KEEPER, s.close_ns.0);
+        t.cancel(U64(0));
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!((s.state.as_str(), s.key_requests), ("Cancelled", 0));
     }
 
     #[test]

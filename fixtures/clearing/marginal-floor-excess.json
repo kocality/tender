@@ -1,0 +1,56 @@
+{
+ "name": "marginal-floor-excess",
+ "note": "Audit C-01/X12-01: the full winner's floor loss would give the marginal bid one base unit more than q buys at P* (spend q + 1, refund -1 with q == B). The marginal share is capped at floor(q * scale / P*): spend == q, refund 0, one base unit of dust back to the seller.",
+ "sale": {
+  "S": "1000000333333333333333333",
+  "decimals": 24,
+  "lot_exp": 0,
+  "reserve": "1000000"
+ },
+ "bids": [
+  {
+   "idx": 0,
+   "B": "1000001",
+   "p": "3500000",
+   "q": "1000001",
+   "state": "Revealed"
+  },
+  {
+   "idx": 1,
+   "B": "2000000",
+   "p": "3000000",
+   "q": "2000000",
+   "state": "Revealed"
+  }
+ ],
+ "expected": {
+  "P_star": "3000000",
+  "alloc": [
+   "333333666666666666666666",
+   "666666666666666666666666"
+  ],
+  "spend": [
+   "1000001",
+   "2000000"
+  ],
+  "refund": [
+   "0",
+   "0"
+  ],
+  "penalty": [
+   "0",
+   "0"
+  ],
+  "penalty_share": [
+   "0",
+   "0"
+  ],
+  "final_state": [
+   "Revealed",
+   "Revealed"
+  ],
+  "seller_usdc": "3000001",
+  "seller_tokens_back": "1",
+  "dust": "1"
+ }
+}

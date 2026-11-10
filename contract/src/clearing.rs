@@ -5,10 +5,11 @@
 //! Prices are micro-USDC per 10^lot_exp whole tokens, so token amounts scale by
 //! 10^(decimals + lot_exp). Bids are ranked by price (desc), ties by arrival (idx). A full
 //! winner pays q and gets floor(q·scale/P*) tokens; every bid at p == P* forms the marginal
-//! group, which shares the remaining supply pro rata by q and pays ceil(t·P*/scale). A Sealed
-//! bid loses B/10 when at least one bid was revealed; the pool goes to every revealed bid (below
-//! reserve too) pro rata by B, rounding remainder to the lowest revealed idx, never to the
-//! seller. With nothing revealed there is no penalty and every bid stays Sealed.
+//! group, which shares the remaining supply pro rata by q, each share capped at what q buys at
+//! P* (floor(q·scale/P*), the excess is dust), and pays ceil(t·P*/scale) ≤ q. A Sealed bid loses
+//! B/10 when at least one bid was revealed; the pool is paid to nobody (not to revealed bids,
+//! not to the seller) and stays in the contract, so Σ refund + seller_usdc + pool = Σ B. With
+//! nothing revealed there is no penalty and every bid stays Sealed.
 //!
 //! u128 bounds: S ≤ 10^26 (WD-01), Σ B ≤ 10^12 and q ≤ B (C8, C16), decimals + lot_exp ≤ 26
 //! (C6), so Q·scale, q·scale, R·q and t·P* stay ≤ ~10^38 < 2^128.
@@ -62,9 +63,10 @@ pub fn clear(
     let mut alloc = vec![0u128; n];
     let mut spend = vec![0u128; n];
     let mut penalty = vec![0u128; n];
-    let mut share = vec![0u128; n];
 
-    // K1-K3: penalty only when something was revealed.
+    // K1-K3: penalty only when something was revealed. The pool is paid to nobody: any share
+    // for revealed bids could flow back to the penalized bidder's own revealed (decoy) bid
+    // (CRYPTO-01, T-01), so it stays in the contract.
     let any_revealed = bids.iter().any(|b| b.revealed.is_some());
     if any_revealed {
         for (i, b) in bids.iter().enumerate() {
@@ -74,25 +76,6 @@ pub fn clear(
         }
     }
     let pool = penalty.iter().fold(0, |a, &x| add(a, x));
-    if pool > 0 {
-        let total_b = bids
-            .iter()
-            .filter(|b| b.revealed.is_some())
-            .fold(0, |a, b| add(a, b.escrow));
-        let mut given = 0u128;
-        for (i, b) in bids.iter().enumerate() {
-            if b.revealed.is_some() {
-                share[i] = mul(pool, b.escrow) / total_b;
-                given = add(given, share[i]);
-            }
-        }
-        // any_revealed holds here, so a lowest revealed idx exists.
-        let first = (0..n)
-            .filter(|&i| bids[i].revealed.is_some())
-            .min_by_key(|&i| bids[i].idx)
-            .expect("revealed bid");
-        share[first] = add(share[first], sub(pool, given));
-    }
 
     // Eligible: revealed at or above reserve, by price desc then arrival.
     let mut el: Vec<(usize, u128, u128)> = bids
@@ -137,7 +120,8 @@ pub fn clear(
             let mut given = 0u128;
             for &(i, p, q) in &el {
                 if p == price {
-                    alloc[i] = mul(left, q) / q_marg;
+                    // Never more than q buys at P*, so spend ≤ q (C-01); the rest is dust.
+                    alloc[i] = (mul(left, q) / q_marg).min(mul(q, scale) / price);
                     spend[i] = mul(alloc[i], price).div_ceil(scale);
                     given = add(given, alloc[i]);
                 }
@@ -149,7 +133,7 @@ pub fn clear(
     }
 
     let refund: Vec<u128> = (0..n)
-        .map(|i| add(sub(sub(bids[i].escrow, spend[i]), penalty[i]), share[i]))
+        .map(|i| sub(sub(bids[i].escrow, spend[i]), penalty[i]))
         .collect();
     let final_state = bids
         .iter()
@@ -167,7 +151,8 @@ pub fn clear(
         alloc,
         spend,
         penalty,
-        penalty_share: share,
+        // Kept in the views for their shape; always 0 since the pool goes to nobody.
+        penalty_share: vec![0; n],
         refund,
         final_state,
         seller_usdc,
@@ -290,6 +275,88 @@ mod tests {
         assert!(min.alloc[0] >= 1, "{:?}", min.alloc);
     }
 
+    /// C-01 / S-01 / X12-01: the full winners' floor losses stay in `left`, so the marginal bid
+    /// could be given more tokens than q buys at P* and charged q + 1, which with q == B
+    /// underflowed the refund and made every finalize panic.
+    #[test]
+    fn marginal_never_spends_more_than_q() {
+        let rev = |idx, b: u64, p| ClearBid {
+            idx,
+            escrow: u128::from(b),
+            revealed: Some((p, b)),
+        };
+        let cases = [
+            (
+                1_000_000_333_333_333_333_333_333u128,
+                24,
+                0,
+                1_000_000,
+                [rev(0, 1_000_001, 3_500_000), rev(1, 2_000_000, 3_000_000)],
+            ),
+            (
+                18_918_924_324_324_324_324_324,
+                18,
+                3,
+                174_000,
+                [rev(0, 2_000_000, 200_000), rev(1, 1_500_001, 185_000)],
+            ),
+            (
+                11_764_705,
+                18,
+                2,
+                1,
+                [
+                    rev(0, 1_000_000, 18_000_000_000_000_000_000),
+                    rev(1, 1_000_000, 17_000_000_000_000_000_000),
+                ],
+            ),
+        ];
+        for (supply, d, lot, reserve, bids) in cases {
+            let o = clear(supply, d, lot, reserve, &bids);
+            for (i, b) in bids.iter().enumerate() {
+                assert!(o.spend[i] <= b.escrow, "{supply}: bid {i} {:?}", o.spend);
+            }
+            assert_eq!(o.refund, vec![0, 0], "{supply}");
+            assert_eq!(o.alloc.iter().sum::<u128>() + o.seller_tokens_back, supply);
+        }
+    }
+
+    /// CRYPTO-01 / T-01: three undecryptable option bids left Sealed after a last look, plus a
+    /// large below-reserve decoy that is revealed. The decoy must not win the pool back: the
+    /// withheld bids cost their full B/10 and the pool stays in the contract.
+    #[test]
+    fn penalty_pool_is_not_recycled_to_revealed_bids() {
+        let usdc = 1_000_000u128;
+        let sealed = |idx| ClearBid {
+            idx,
+            escrow: 2 * usdc,
+            revealed: None,
+        };
+        let bids = [
+            ClearBid {
+                idx: 0,
+                escrow: 5 * usdc,
+                revealed: Some((3_600_000, 5_000_000)),
+            },
+            sealed(1),
+            sealed(2),
+            sealed(3),
+            ClearBid {
+                idx: 4,
+                escrow: 1_000 * usdc,
+                revealed: Some((1, 1_000_000_000)),
+            },
+        ];
+        let o = clear(10u128.pow(24), 24, 0, 3_000_000, &bids);
+        assert_eq!(o.penalty_pool, 600_000);
+        assert_eq!(o.penalty_share, vec![0; 5]);
+        assert_eq!(o.refund[4], 1_000 * usdc);
+        assert_eq!(o.refund[1], 2 * usdc - 200_000);
+        let refunded: u128 = o.refund.iter().sum();
+        let escrow: u128 = bids.iter().map(|b| b.escrow).sum();
+        assert_eq!(refunded + o.seller_usdc + o.penalty_pool, escrow);
+    }
+
     #[derive(Debug, Clone)]
     struct Case {
         supply: u128,
@@ -326,14 +393,17 @@ mod tests {
         }
     }
 
-    /// B ∈ [1, 15 625] USDC (64 bids ≤ 10^12), ~20 % Sealed, p ∈ [1, 10^13], q ∈ [1, B].
+    /// B ∈ [1, 15 625] USDC (64 bids ≤ 10^12), ~20 % Sealed, p ∈ [1, 10^13] or anywhere in
+    /// u64, q ∈ [1, B] (half the time q == B).
     fn bid() -> impl Strategy<Value = (u128, Option<(u64, u64)>)> {
         (1_000_000u128..=15_625_000_000).prop_flat_map(|b| {
+            let p = prop_oneof![1u64..=10_000_000_000_000, 1u64..=u64::MAX];
+            let q = prop_oneof![Just(b as u64), 1u64..=b as u64];
             (
                 Just(b),
                 prop_oneof![
                     1 => Just(None),
-                    4 => (1u64..=10_000_000_000_000, 1u64..=b as u64).prop_map(Some),
+                    4 => (p, q).prop_map(Some),
                 ],
             )
         })
@@ -344,8 +414,11 @@ mod tests {
             (
                 Just(d),
                 0u8..=(26 - d),
-                1u128..=100_000_000_000_000_000_000_000_000,
-                1u64..=10_000_000_000_000,
+                prop_oneof![
+                    1u128..=100_000_000_000_000_000_000_000_000,
+                    1u128..=100_000_000_000_000,
+                ],
+                prop_oneof![1u64..=10_000_000_000_000, 1u64..=u64::MAX],
                 prop::collection::vec(bid(), 1..=64),
             )
                 .prop_map(|(decimals, lot_exp, supply, reserve, bids)| Case {
@@ -413,7 +486,7 @@ mod tests {
             let total_b: u128 = bids.iter().map(|b| b.escrow).sum();
             let spent: u128 = o.spend.iter().sum();
             let refunded: u128 = o.refund.iter().sum();
-            prop_assert_eq!(spent + refunded, total_b);
+            prop_assert_eq!(spent + refunded + o.penalty_pool, total_b);
         }
 
         #[test]
@@ -438,7 +511,7 @@ mod tests {
         fn prop_penalty_never_to_seller(c in case()) {
             let (_, o) = c.run();
             prop_assert_eq!(o.seller_usdc, o.spend.iter().sum::<u128>());
-            prop_assert_eq!(o.penalty_share.iter().sum::<u128>(), o.penalty.iter().sum::<u128>());
+            prop_assert_eq!(o.penalty_share.iter().sum::<u128>(), 0);
             prop_assert_eq!(o.penalty_pool, o.penalty.iter().sum::<u128>());
         }
 
@@ -446,6 +519,34 @@ mod tests {
         fn prop_no_panic(c in case()) {
             let (bids, o) = c.run();
             prop_assert_eq!(o.final_state.len(), bids.len());
+        }
+
+        /// The knife edge of C-01: a full winner A and a marginal B with q == escrow, and
+        /// S = floor(q_a·scale/P) + floor(q_b·scale/P) + 1 with r_a + r_b > P (r = q·scale mod
+        /// P), so the floor losses alone would push B's spend to q_b + 1.
+        #[test]
+        fn prop_knife_edge_spend_le_q(
+            exp in 20u32..=26,
+            p in 1u64..=u64::MAX,
+            q_a in 1_000_000u64..=500_000_000_000,
+            q_b in 1_000_000u64..=500_000_000_000,
+        ) {
+            let scale = 10u128.pow(exp);
+            let price = u128::from(p);
+            let (qa, qb) = (u128::from(q_a), u128::from(q_b));
+            prop_assume!((qa * scale) % price + (qb * scale) % price > price);
+            let supply = qa * scale / price + qb * scale / price + 1;
+            prop_assume!(supply <= 100_000_000_000_000_000_000_000_000);
+            prop_assume!(p < u64::MAX);
+            let decimals = exp.min(24) as u8;
+            let bids = [
+                ClearBid { idx: 0, escrow: qa, revealed: Some((p + 1, q_a)) },
+                ClearBid { idx: 1, escrow: qb, revealed: Some((p, q_b)) },
+            ];
+            let o = clear(supply, decimals, exp as u8 - decimals, 1, &bids);
+            prop_assert_eq!(o.p_star, Some(p));
+            prop_assert!(o.spend[0] <= qa && o.spend[1] <= qb, "{:?}", o.spend);
+            prop_assert_eq!(o.spend.iter().sum::<u128>() + o.refund.iter().sum::<u128>(), qa + qb);
         }
     }
 }

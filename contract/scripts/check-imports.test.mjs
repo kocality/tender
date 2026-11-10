@@ -1,7 +1,7 @@
 // node --test contract/scripts/check-imports.test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -104,4 +104,18 @@ test('json_shape', () => {
   assert.equal(out.result, 'FAIL');
   assert.deepEqual(out.forbidden, ['promise_batch_action_delete_key']);
   assert.deepEqual(out.unknown, ['ecrecover']);
+});
+
+// CI-10: build-wasms.sh must show why check-imports failed (it used to send stderr to /dev/null).
+test('build_wasms_prints_forbidden_import', () => {
+  const sh = readFileSync(join(dirname(script), 'build-wasms.sh'), 'utf8');
+  const line = sh.split('\n').find((l) => l.includes('check-imports.mjs'));
+  const root = mkdtempSync(join(tmpdir(), 'build-wasms-'));
+  mkdirSync(join(root, 'scripts'));
+  mkdirSync(join(root, 'target/near'), { recursive: true });
+  copyFileSync(script, join(root, 'scripts/check-imports.mjs'));
+  writeFileSync(join(root, 'target/near/tender.wasm'), wasmWithImports(['promise_batch_action_deploy_contract']));
+  const r = spawnSync('bash', ['-c', `set -euo pipefail; ${line}`], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /promise_batch_action_deploy_contract/);
 });
