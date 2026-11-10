@@ -28,6 +28,8 @@ export interface PaidView {
   usdc: string;
   tokens: string;
   ok: boolean;
+  /** Transfer sent, on_paid not run yet (S-07). Missing on contracts built before the field existed. */
+  pending?: boolean;
 }
 export interface SaleView {
   id: string;

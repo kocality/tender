@@ -49,6 +49,22 @@ describe('sealBid / decryptBids', () => {
     expect(out[0]).toMatchObject({ idx: 3, ok: true, cmOk: false, p: a.p, q: a.q });
   });
 
+  it('q = 0 or q > B matches its commitment but is not revealable (contract rule 1 ≤ q ≤ B)', () => {
+    const bidder = 'bidder.tenderseal.near';
+    const B = 1_000_000n;
+    const bids = [0n, B + 1n, B].map((q, idx) => {
+      const s = sealBid({ mpk, contract, path, sale: 1n, bidder, B, p: 3_600_000n, q });
+      return { idx, bidder, B, ct: s.ct_b64, cm: s.cm_hex };
+    });
+    const out = decryptBids({ S, contract, path, sale: 1n, bids });
+    expect(out.map((r) => [r.ok, r.cmOk, r.revealable])).toEqual([
+      [true, true, false],
+      [true, true, false],
+      [true, true, true],
+    ]);
+    expect(decryptBids({ S, contract, path, sale: 1n, bids: [{ ...bids[2]!, ct: 'AAAA' }] })[0]!.revealable).toBe(false);
+  });
+
   it('a fixed salt is used as given', () => {
     const salt = hexToBytes('000102030405060708090a0b0c0d0e0f');
     const r = sealBid({ mpk, contract, path, sale: 1n, bidder: 'bidder.tenderseal.near', B: 3_000_000n, p: 3_600_000n, q: 2_000_000n, salt });

@@ -15,9 +15,11 @@ import {
   makeDeadline,
   nep413Message,
   payloadString,
+  solanaSignerId,
   transferIntent,
 } from '@tender/intents';
 import { MPC_DOMAIN2_PK, sealBid } from '@tender/seal';
+import bs58 from 'bs58';
 import { COMMON_USAGE, type Io, UsageError, consoleIo, parseCli, runMain } from './lib/args.js';
 import { resolveNetwork } from './lib/config.js';
 import { parseDecimal, tokenName, utcFromNs } from './lib/format.js';
@@ -25,12 +27,14 @@ import { Rpc } from './lib/rpc.js';
 import { MpcViews, TenderViews } from './lib/views.js';
 
 const USAGE = `usage: pnpm seal:bid --sale N --price P --size Q --escrow B --signer <id> [--origin base|arb|sol|near]
-  [--salt <32 hex>] [--no-payload]
+  [--no-payload] [--unsafe-fixed-salt --salt <32 hex>]
 ${COMMON_USAGE}
   --price: USDC per 10^lot_exp whole tokens · --size, --escrow: USDC (at most 6 decimals)`;
 
 const ORIGINS = ['base', 'arb', 'sol', 'near'] as const;
 const MIN_ESCROW = 1_000_000n;
+const MAX_ESCROW_TOTAL = 1_000_000_000_000n; // contract sale::MAX_ESCROW_TOTAL (C16)
+const CLOSE_MARGIN_MS = 60_000; // the signed transfer expires a minute before close, so a late relay is never stored
 const MIN_GAS = 30_000_000_000_000n;
 const NEAR_ACCOUNT_RE = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 
@@ -44,14 +48,31 @@ export interface SealBidDeps {
 
 type SignerKind = 'evm' | 'implicit' | 'near';
 
-/** Lowercase the signer the way the Intents account id is spelled (A11, A12); uppercase changes cm and fails reveal. */
+/** Base58 that decodes to 32 bytes (a Solana address), else null. */
+function solanaKeyHex(raw: string): string | null {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(raw)) return null;
+  try {
+    const b = bs58.decode(raw);
+    return b.length === 32 ? solanaSignerId(b) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The signer as its Intents account id is spelled (A11, A12): only an EVM address is lowercased (checksum case);
+ * any other uppercase input is refused, because uppercase changes cm and fails reveal. A Solana address is refused
+ * with the 64-hex Intents id to use instead.
+ */
 export function normalizeSigner(raw: string): { signer: string; kind: SignerKind; changed: boolean } {
-  const lower = raw.toLowerCase();
-  const changed = lower !== raw;
-  if (/^0x[0-9a-f]{40}$/.test(lower)) return { signer: lower, kind: 'evm', changed };
-  if (/^[0-9a-f]{64}$/.test(lower)) return { signer: lower, kind: 'implicit', changed };
-  if (NEAR_ACCOUNT_RE.test(lower)) return { signer: lower, kind: 'near', changed };
-  throw new Error(`--signer "${raw}" is not an EVM address, a 64-hex implicit account or a NEAR account id`);
+  if (/^0x[0-9a-fA-F]{40}$/.test(raw)) return { signer: raw.toLowerCase(), kind: 'evm', changed: raw.toLowerCase() !== raw };
+  const sol = solanaKeyHex(raw);
+  if (sol && /[A-Z]/.test(raw)) {
+    throw new Error(`--signer "${raw}" looks like a Solana address; its NEAR Intents account is ${sol}: pass --signer ${sol}`);
+  }
+  if (/^[0-9a-f]{64}$/.test(raw)) return { signer: raw, kind: 'implicit', changed: false };
+  if (NEAR_ACCOUNT_RE.test(raw)) return { signer: raw, kind: 'near', changed: false };
+  throw new Error(`--signer "${raw}" is not an EVM address, a 64-hex implicit account or a NEAR account id (lowercase)`);
 }
 
 export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps = {}): Promise<number> {
@@ -63,6 +84,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     signer: { type: 'string' },
     origin: { type: 'string' },
     salt: { type: 'string' },
+    'unsafe-fixed-salt': { type: 'boolean' },
     'no-payload': { type: 'boolean' },
   });
   if (v.help) {
@@ -72,6 +94,9 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
   for (const k of ['sale', 'price', 'size', 'escrow', 'signer'] as const) if (!v[k]) throw new UsageError(`--${k} is required`);
   if (!/^\d+$/.test(v.sale!)) throw new UsageError('--sale must be a sale id');
   if (v.origin !== undefined && !(ORIGINS as readonly string[]).includes(v.origin)) throw new UsageError(`--origin must be one of ${ORIGINS.join('|')}`);
+  if (v.salt !== undefined && !v['unsafe-fixed-salt']) {
+    throw new UsageError('--salt needs --unsafe-fixed-salt: a known or reused salt lets anyone recover p and q from cm (tests only)');
+  }
   if (v.salt !== undefined && !/^[0-9a-fA-F]{32}$/.test(v.salt)) throw new UsageError('--salt must be 32 hex characters');
   const fail = (m: string) => {
     io.err(`error: ${m}`);
@@ -89,6 +114,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     return fail((e as Error).message);
   }
   if (who.changed) io.err(`warning: signer lowercased to ${who.signer} (the Intents account id is lowercase; uppercase would change cm and fail reveal)`);
+  if (v.salt !== undefined) io.err('warning: --unsafe-fixed-salt: this salt is not random; with it, p and q can be recovered from the public cm');
   if (B < MIN_ESCROW) return fail('--escrow must be at least 1 USDC');
   if (q < 1n || q > B) return fail('--size must be at least 0.000001 and at most --escrow');
   if (p < 1n) return fail('--price must be positive');
@@ -106,12 +132,19 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
   if (config.mpc_public_key !== live || live !== repo) {
     return fail(`MPC key mismatch, refusing to seal: contract ${config.mpc_public_key} · ${config.mpc} live ${live} · repo ${repo}`);
   }
-  if (sale.state !== 'Open' || head.timestamp_ns >= BigInt(sale.close_ns)) {
-    return fail(`sale closed (state ${sale.state}, closes ${utcFromNs(sale.close_ns)})`);
+  const closeMs = Number(BigInt(sale.close_ns) / 1_000_000n);
+  if (sale.state !== 'Open' || Number(head.timestamp_ns / 1_000_000n) >= closeMs - CLOSE_MARGIN_MS) {
+    return fail(`sale closed or closing within a minute (state ${sale.state}, closes ${utcFromNs(sale.close_ns)})`);
   }
+  // The contract would refund these bids, and a refunded ciphertext stays in public tx history (X12P-02).
+  if (sale.in_flight) return fail('the key request is in flight: the sale no longer takes bids');
+  if (sale.bids >= sale.max_bids) return fail(`sale is full (${sale.bids}/${sale.max_bids} bids)`);
+  if (BigInt(sale.escrow_total) + B > MAX_ESCROW_TOTAL) return fail(`escrow cap: ${sale.escrow_total} + ${B} > ${MAX_ESCROW_TOTAL} micro-USDC`);
   const unitTokens = `${10n ** BigInt(sale.lot_exp)} ${tokenName(sale.token)}`;
   io.err(`p = ${p} micro-USDC per ${unitTokens} · q = ${q} micro-USDC · escrow = ${B} micro-USDC`);
-  if (p < BigInt(sale.reserve)) io.err(`warning: below reserve (${sale.reserve}): fully refunded, still counts toward open conditions`);
+  if (p < BigInt(sale.reserve)) {
+    io.err(`warning: below reserve (${sale.reserve}): refunded in full once it is revealed (left unrevealed while another bid is revealed, 10% stays in the contract); still counts toward open conditions`);
+  }
 
   const sealed = sealBid({
     mpk: config.mpc_public_key,
@@ -153,11 +186,14 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     io.err('payload: null (--no-payload)');
   } else {
     const saltHex = await currentSalt(net.rpc, config.intents);
-    const { deadlineMs, deadlineIso } = makeDeadline();
+    // Chain time, not the local clock: a slow clock would sign an expired payload, a fast one a long-lived one.
+    const nowMs = Number(head.timestamp_ns / 1_000_000n);
+    const { deadlineMs, deadlineIso } = makeDeadline(nowMs, Math.min(600_000, closeMs - CLOSE_MARGIN_MS - nowMs));
     const nonce = buildVersionedNonce({ saltHex, deadlineMs });
     const intent = transferIntent({ receiverId: net.contract, tokenId: sale.quote_token, amount: B, msg, minGas: MIN_GAS });
     const pl = buildPayload({ signerId: who.signer, verifyingContract: config.intents, deadlineIso, nonce, intents: [intent] });
-    if (who.kind === 'near') {
+    // A NEAR account signs nep413, implicit 64-hex ones too when they come from a NEAR wallet (--origin near).
+    if (who.kind === 'near' || (who.kind === 'implicit' && origin === 'near')) {
       payload = nep413Message(pl);
       io.err(`nep413: message = payload, nonce (base64) = ${pl.nonce}, recipient = ${config.intents}`);
     } else {

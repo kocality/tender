@@ -1,7 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodeVersionedNonce } from '@tender/intents';
+import { decodeVersionedNonce, solanaSignerId } from '@tender/intents';
+import bs58 from 'bs58';
 import { MPC_DOMAIN2_PK, decryptBids } from '@tender/seal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main, normalizeSigner } from '../src/seal-bid.js';
@@ -76,11 +77,39 @@ describe('seal:bid', () => {
     expect(Object.keys(JSON.parse(j.payload) as object)).toEqual(['deadline', 'intents', 'signer_id']);
   });
 
-  it('--no-payload → payload null; --salt is used as given', async () => {
-    const r = await run([...BID, '--no-payload', '--salt', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA']);
+  it('--no-payload → payload null; --salt is used as given only with --unsafe-fixed-salt, with a warning', async () => {
+    const r = await run([...BID, '--no-payload', '--unsafe-fixed-salt', '--salt', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA']);
     expect(JSON.parse(r.out[0]!).payload).toBeNull();
     const file = join(bidsDir, readdirSync(bidsDir)[0]!);
     expect(JSON.parse(readFileSync(file, 'utf8')).salt).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(r.err.some((l) => l.startsWith('warning: --unsafe-fixed-salt'))).toBe(true);
+  });
+
+  it('--salt without --unsafe-fixed-salt → usage error (exit 2), nothing sealed (X12P-05)', async () => {
+    await expect(run([...BID, '--salt', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'])).rejects.toMatchObject({ exitCode: 2, message: expect.stringContaining('--unsafe-fixed-salt') });
+    expect(readdirSync(bidsDir)).toEqual([]);
+  });
+
+  it('the deadline comes from chain time, not the local clock (X12-01)', async () => {
+    const chainMs = Number(world.block.timestamp_ns / 1_000_000n);
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(chainMs - 15 * 60_000); // local clock 15 min slow
+    try {
+      const r = await run(BID);
+      const p = JSON.parse((JSON.parse(r.out[0]!) as { payload: string }).payload) as { deadline: string; nonce: string };
+      expect(p.deadline).toBe(new Date(chainMs + 600_000).toISOString());
+      expect(decodeVersionedNonce(p.nonce).deadlineNs).toBe(BigInt(chainMs + 600_000) * 1_000_000n);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a 64-hex signer with --origin near gets the nep413 message; without it the raw_ed25519 payload (X12A-05)', async () => {
+    const hex = '2c9d89ca154fc30f64726378a173008291b1ffe92f0eb617bb376b8de3043307';
+    const near = await run(['--sale', '1', '--price', '3.5', '--size', '1', '--escrow', '1', '--signer', hex, '--origin', 'near']);
+    expect(Object.keys(JSON.parse((JSON.parse(near.out[0]!) as { payload: string }).payload) as object)).toEqual(['deadline', 'intents', 'signer_id']);
+    expect(near.err.some((l) => l.startsWith('nep413: '))).toBe(true);
+    const sol = await run(['--sale', '1', '--price', '3.5', '--size', '1', '--escrow', '1', '--signer', hex, '--origin', 'sol']);
+    expect(sol.err).toContain('raw_ed25519: sign the payload string as is');
   });
 
   it('0xEF34… is lowercased with a warning', async () => {
@@ -96,6 +125,27 @@ describe('seal:bid', () => {
     expect(r.code).toBe(1);
     expect(r.err.join('\n')).toContain('sale closed');
     expect(r.out).toEqual([]);
+  });
+
+  it('deadline capped 1 min before close; full, capped or in-flight sale → exit 1, nothing sealed (X12P-02)', async () => {
+    const chainMs = Number(world.block.timestamp_ns / 1_000_000n);
+    world.sale.close_ns = String(BigInt(chainMs + 300_000) * 1_000_000n); // closes in 5 min
+    const r = await run(BID);
+    expect(JSON.parse((JSON.parse(r.out[0]!) as { payload: string }).payload).deadline).toBe(new Date(chainMs + 240_000).toISOString());
+    world.sale.close_ns = String(BigInt(chainMs + 59_000) * 1_000_000n);
+    expect((await run(BID)).err.join()).toContain('closing within a minute');
+    world.sale.close_ns = String(BigInt(chainMs + 86_400_000) * 1_000_000n);
+    const before = readdirSync(bidsDir).length;
+    world.sale.bids = world.sale.max_bids;
+    expect((await run(BID)).err.join()).toContain('sale is full');
+    world.sale.bids = 0;
+    world.sale.escrow_total = String(1_000_000_000_000n - 4_999_999n);
+    expect((await run(BID)).err.join()).toContain('escrow cap');
+    world.sale.escrow_total = '0';
+    world.sale.in_flight = true;
+    const f = await run(BID);
+    expect([f.code, f.err.join().includes('in flight')]).toEqual([1, true]);
+    expect(readdirSync(bidsDir).length).toBe(before);
   });
 
   it('MPC key mismatch → exit 1, nothing sealed', async () => {
@@ -119,6 +169,7 @@ describe('seal:bid', () => {
     const below = await bad({ price: '2.5' });
     expect(below.code).toBe(0);
     expect(below.err.some((l) => l.includes('below reserve'))).toBe(true);
+    expect(below.err.some((l) => l.includes('refunded in full once it is revealed'))).toBe(true); // SC-06
   });
 
   it('missing required flag or unknown flag → usage (exit 2)', async () => {
@@ -128,6 +179,15 @@ describe('seal:bid', () => {
 });
 
 describe('normalizeSigner', () => {
+  it('a Solana address is refused with its 64-hex Intents id; other uppercase input is refused, not lowercased (X12A-05)', () => {
+    const sol = '4GzZcvCFqpXRZtWHFoMqvMZtzKcm4YtuRHiQk4hK6rQr';
+    const hex = solanaSignerId(bs58.decode(sol));
+    expect(hex).toMatch(/^30abdbe2[0-9a-f]{56}$/);
+    expect(() => normalizeSigner(sol)).toThrow(`its NEAR Intents account is ${hex}`);
+    expect(() => normalizeSigner('Bidder.TenderSeal.near')).toThrow('is not an EVM address');
+    expect(() => normalizeSigner('2C9D89CA154FC30F64726378A173008291B1FFE92F0EB617BB376B8DE3043307')).toThrow();
+  });
+
   it('kinds', () => {
     expect(normalizeSigner('0xAbC0000000000000000000000000000000000001')).toEqual({ signer: '0xabc0000000000000000000000000000000000001', kind: 'evm', changed: true });
     expect(normalizeSigner('2c9d89ca154fc30f64726378a173008291b1ffe92f0eb617bb376b8de3043307').kind).toBe('implicit');

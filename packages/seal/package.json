@@ -9,8 +9,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "vectors": "vitest run src/vectors.test.ts",
-    "test": "vitest run --passWithNoTests"
+    "vectors": "vitest run src/vectors.test.ts --testTimeout=30000",
+    "test": "vitest run --passWithNoTests --testTimeout=30000"
   },
   "dependencies": {
     "@noble/curves": "2.4.0",

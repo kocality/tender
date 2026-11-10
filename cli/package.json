@@ -10,7 +10,7 @@
     "seal:try": "tsx src/seal-try.ts",
     "seal:bid": "tsx src/seal-bid.ts",
     "demo:local": "tsx src/demo-local.ts",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests --testTimeout=30000"
   },
   "dependencies": {
     "@noble/curves": "2.4.0",

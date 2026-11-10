@@ -48,11 +48,15 @@ export interface DecryptedBid {
   q?: bigint;
   salt_hex?: string;
   cmOk?: boolean;
+  /** The contract's reveal rule: decrypts, the commitment matches and 1 ≤ q ≤ B (else `reveal` panics the batch).
+   * Always set by decryptBids; optional only so hand-built rows stay valid (absent = not revealable). */
+  revealable?: boolean;
 }
 
 /**
  * Decrypt every bid with the sale key and recheck its commitment. Never throws: a malformed ciphertext gives
- * `{ok: false, reason}`, a copied ct+cm under another bidder decrypts but gives `cmOk: false`.
+ * `{ok: false, reason}`, a copied ct+cm under another bidder decrypts but gives `cmOk: false`, and a bid sealed with
+ * q = 0 or q > B matches its commitment but is not `revealable`.
  * `contract` and `path` name the sale; decryption itself needs only S.
  */
 export function decryptBids({
@@ -70,14 +74,14 @@ export function decryptBids({
   try {
     key = typeof S === 'string' ? parseG1(S) : S;
   } catch (e) {
-    return bids.map((b) => ({ idx: b.idx, ok: false, reason: `invalid key: ${(e as Error).message}` }));
+    return bids.map((b) => ({ idx: b.idx, ok: false, reason: `invalid key: ${(e as Error).message}`, revealable: false }));
   }
   return bids.map((b) => {
     let pt: Uint8Array;
     try {
       pt = decrypt(key, ctFromBase64(b.ct));
     } catch (e) {
-      return { idx: b.idx, ok: false, reason: (e as Error).message };
+      return { idx: b.idx, ok: false, reason: (e as Error).message, revealable: false };
     }
     const { p, q, salt } = decodePlaintext(pt);
     let cmOk = false;
@@ -86,6 +90,6 @@ export function decryptBids({
     } catch {
       cmOk = false;
     }
-    return { idx: b.idx, ok: true, p, q, salt_hex: bytesToHex(salt), cmOk };
+    return { idx: b.idx, ok: true, p, q, salt_hex: bytesToHex(salt), cmOk, revealable: cmOk && q >= 1n && q <= b.B };
   });
 }

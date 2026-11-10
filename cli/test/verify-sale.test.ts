@@ -98,16 +98,100 @@ describe('verify --sale', () => {
     expect(r.code).toBe(0);
   });
 
-  it('self-revealed garbage ct → #14 PASS; the same bid revealed by a third party → #12/#14 FAIL', async () => {
-    const w = buildWorld({ state: 'Finalized' });
-    w.bids[3]!.ct = bytesToB64(randomBytes(160));
+  it('self-revealed garbage ct → #12/#14 WARN (last look); revealed by a third party → WARN too, exit 0 (CRYPTO-02, S-07)', async () => {
+    const d = demoSaleInputs();
+    const w = buildWorld({ state: 'Finalized', bids: [...d.bids, { bidder: SOL2, origin: 'sol', B: 2_000_000n, p: 3_000_000n, q: 1_000_000n }] });
+    w.bids[6]!.ct = bytesToB64(new Uint8Array(160).fill(0x41));
     let r = await runVerify(w);
-    expect(r.status(12)).toBe('PASS');
-    expect(r.status(14)).toBe('PASS');
-    w.bids[3]!.revealed_by = 'keeper.near';
+    expect(r.line(12)).toMatch(/^WARN #12 ciphertexts-decrypt — 6\/7 decrypt; Revealed but not decryptable: #6 /);
+    expect(r.line(14)).toContain('WARN #14 reveal-states — #6 Revealed by its own bidder, but its ciphertext does not open to the revealed bid (could reveal after the key)');
+    expect(r.code).toBe(0);
+    w.bids[6]!.revealed_by = 'keeper.near';
     r = await runVerify(w);
-    expect(r.status(12)).toBe('FAIL');
-    expect(r.status(14)).toBe('FAIL');
+    expect(r.line(14)).toContain('#6 Revealed by keeper.near, but its ciphertext does not open');
+    expect([r.status(12), r.status(14), r.code]).toEqual(['WARN', 'WARN', 0]);
+  });
+
+  for (const q of [2_000_001n, 0n]) {
+    it(`bid sealed with q = ${q} (outside 1..B) left Penalized → #14 PASS, listed as not revealable (S-02, CRYPTO-03)`, async () => {
+      const d = demoSaleInputs();
+      const w = buildWorld({ state: 'Finalized', bids: [...d.bids, { bidder: SOL2, origin: 'sol', B: 2_000_000n, p: 3_700_000n, q, revealed: false }] });
+      expect(w.bids[6]!.state).toBe('Penalized');
+      const r = await runVerify(w);
+      expect(r.line(13)).toContain('7/7 match');
+      expect(r.line(14)).toMatch(/^PASS #14 reveal-states — 6 Revealed, 1 Penalized, 0 Sealed; .* · q outside 1\.\.B, not revealable: #6$/);
+      expect(r.code).toBe(0);
+    });
+  }
+
+  it('Penalized bid: the pool is kept by the contract → #17/#19 PASS; a shared pool or a missing pool balance → FAIL', async () => {
+    const w = worldWithSeventh();
+    w.bids[6]!.ct = bytesToB64(new Uint8Array(160).fill(0x41)); // an option bid nobody can reveal
+    expect(w.result!.penalty_pool).toBe('200000');
+    let r = await runVerify(w);
+    expect(r.line(17)).toContain('+ penalty pool 0.20; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller');
+    expect(r.line(19)).toContain('owed includes 0.20 USDC of penalty pools kept by the contract');
+    expect([r.status(16), r.status(17), r.status(19), r.code]).toEqual(['PASS', 'PASS', 'PASS', 0]);
+    w.balances[SIM_USDC] = 199_999n;
+    r = await runVerify(w);
+    expect(r.line(19)).toMatch(/^FAIL #19 escrow-balance — deficit: nep141:\S+ holds 199999 < owed 200000/);
+    w.balances[SIM_USDC] = 200_000n;
+    // the old rule: the pool recycled to the revealed bids
+    w.bids[0]!.penalty_share = '200000';
+    w.bids[0]!.paid.usdc = String(BigInt(w.bids[0]!.paid.usdc) + 200_000n);
+    r = await runVerify(w);
+    expect(r.line(17)).toContain('Σ penalty share 200000 ≠ 0 (the pool must go to nobody)');
+    expect(r.status(16)).toBe('FAIL');
+  });
+
+  it('payout in flight (pending) → #19 PASS without counting it, #20 WARN (S-07)', async () => {
+    const w = buildWorld({ state: 'Finalized' });
+    w.bids[2]!.paid.ok = false;
+    w.bids[2]!.paid.pending = true;
+    w.sale.payouts_done -= 1;
+    const r = await runVerify(w);
+    expect(r.line(19)).toContain('1 payout(s) in flight, not counted');
+    expect(r.status(19)).toBe('PASS');
+    expect(r.line(20)).toBe('WARN #20 payouts — 6/7 payouts ok; in flight (sent, callback not run yet): #2; run again in a minute');
+  });
+
+  it('request in flight for over 1 h → #21 FAIL (dead request); a fresh one → PASS (DUP-C02)', async () => {
+    const w = buildWorld({ state: 'Open', nowNs: 1_794_312_000n * 1_000_000_000n });
+    w.sale.close_ns = String(w.block.timestamp_ns - 7_200_000_000_000n);
+    w.sale.in_flight = true;
+    w.sale.state = 'Opening';
+    w.sale.key_requests = 1;
+    w.config.key_log_len = '1';
+    w.keyLog = [{ i: '0', sale: w.sale.id, block: '223900000', ns: String(w.block.timestamp_ns - 3_599_000_000_000n), outcome: 'Pending', resolved_block: null }];
+    let r = await runVerify(w);
+    expect(r.status(21)).toBe('PASS');
+    w.keyLog[0]!.ns = String(w.block.timestamp_ns - 3_600_000_000_000n);
+    r = await runVerify(w);
+    expect(r.line(21)).toContain('request #0 in flight since');
+    expect(r.line(21)).toContain('is dead (its on_key failed): call open again, or cancel after close + 24 h');
+    expect(r.status(21)).toBe('FAIL');
+  });
+
+  it('time rules (#10): a bid stored at close, a wrong reveal deadline or an early cancel → FAIL (X12-06)', async () => {
+    let w = buildWorld({ state: 'Finalized' });
+    let r = await runVerify(w);
+    expect(r.line(10)).toContain('bids before close, key requested after close, reveal deadline = key + max(reveal_secs, 24 h)');
+    expect(r.status(10)).toBe('PASS');
+    w.bids[2]!.ns = w.sale.close_ns;
+    r = await runVerify(w);
+    expect(r.line(10)).toMatch(/^FAIL #10 key-after-close — bid #2 stored at or after close/);
+    w = buildWorld({ state: 'Finalized' });
+    w.sale.reveal_deadline_ns = String(BigInt(w.sale.reveal_deadline_ns!) - 1n);
+    expect((await runVerify(w)).line(10)).toContain('reveal_deadline_ns');
+    w = buildWorld({ state: 'Finalized' });
+    w.keyLog[0]!.ns = String(BigInt(w.sale.close_ns) - 1n);
+    expect((await runVerify(w)).line(10)).toContain('key request #0 at');
+    w = buildWorld({ state: 'Cancelled' });
+    r = await runVerify(w);
+    expect(r.line(10)).toMatch(/^PASS #10 key-after-close — no key; bids before close; cancelled at .* ≥ close$/);
+    w.sale.key_requests = 1; // rule (b) only: close + 24 h, but the sim cancels 2 min after close
+    r = await runVerify(w);
+    expect(r.line(10)).toMatch(/^FAIL #10 key-after-close — no key; cancelled at .* before close \+ 24 h$/);
   });
 
   it('key_log has 2 entries (Err, Ok) and key_requests=2 → #21 PASS; a missing entry → FAIL', async () => {
@@ -204,6 +288,32 @@ describe('verify --sale', () => {
     expect(r.status(24)).toBe('WARN');
     expect(r.status(25)).toBe('WARN');
     expect(r.code).toBe(0);
+  });
+
+  it('a bid tx that succeeded at top level but was refunded by Tender → #25 WARN (S-05)', async () => {
+    const w = buildWorld({ state: 'Finalized' });
+    const ev = (event: string, data: object) => `EVENT_JSON:${JSON.stringify({ standard: 'tender', version: '1.0.0', event, data: [data] })}`;
+    const logs: Record<string, string[]> = {
+      H1: [ev('bid', { sale: '1', idx: 0 })],
+      H2: [ev('refund', { reason: 'closed', op: 'bid' })],
+      H3: [ev('payout', { sale: '1', idx: 0, ok: false })],
+    };
+    const base = fakeRpc(w);
+    const rpcFetch = (async (input: unknown, init?: { body?: unknown }) => {
+      const body = JSON.parse(String(init?.body)) as { method: string; params: { tx_hash: string } };
+      if (body.method === 'EXPERIMENTAL_tx_status') {
+        const result = { status: { SuccessValue: '' }, receipts_outcome: [{ outcome: { logs: ['other log'] } }, { outcome: { logs: logs[body.params.tx_hash] } }] };
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 'tender', result }), { status: 200 });
+      }
+      return base(input as string, init as RequestInit);
+    }) as typeof fetch;
+    const row = { sale: '1', step: 'bid', tx_hash: 'H1', signer_id: 'relayer.near', network: 'mainnet' };
+    expect((await runVerify(w, { evidenceFile: writeEvidence([row]), rpcFetch })).status(25)).toBe('PASS');
+    let r = await runVerify(w, { evidenceFile: writeEvidence([{ ...row, tx_hash: 'H2' }]), rpcFetch });
+    expect(r.line(25)).toContain('bid H2: failure, expected success');
+    r = await runVerify(w, { evidenceFile: writeEvidence([{ ...row, step: 'finalize', tx_hash: 'H3' }]), rpcFetch });
+    expect(r.status(25)).toBe('WARN');
+    expect((await runVerify(w, { evidenceFile: writeEvidence([{ ...row, tx_hash: 'H2', expected: 'failure' }]), rpcFetch })).status(25)).toBe('PASS');
   });
 
   it('all RPC providers down → exit 2', async () => {

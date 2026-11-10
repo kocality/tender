@@ -181,13 +181,14 @@ export function buildWorld(opts: WorldOptions = {}): World {
     spend: '0',
     penalty: '0',
     penalty_share: '0',
-    paid: { usdc: '0', tokens: '0', ok: false },
+    paid: { usdc: '0', tokens: '0', ok: false, pending: false },
   }));
 
   const escrowTotal = bidsIn.reduce((a, b) => a + b.B, 0n);
   let result: ResultView | null = null;
-  let sellerPayout = { usdc: '0', tokens: '0', ok: false };
+  let sellerPayout = { usdc: '0', tokens: '0', ok: false, pending: false };
   let payoutsDone = 0;
+  let pool = 0n;
   if (state === 'Finalized') {
     const r = clear(
       { S: supply, decimals, lot_exp, reserve },
@@ -200,23 +201,24 @@ export function buildWorld(opts: WorldOptions = {}): World {
       b.spend = r.spend[i]!.toString();
       b.penalty = r.penalty[i]!.toString();
       b.penalty_share = r.penalty_share[i]!.toString();
-      b.paid = { usdc: r.refund[i]!.toString(), tokens: r.alloc[i]!.toString(), ok: true };
+      b.paid = { usdc: r.refund[i]!.toString(), tokens: r.alloc[i]!.toString(), ok: true, pending: false };
     }
+    pool = r.penalty.reduce((a, x) => a + x, 0n);
     result = {
       p_star: r.P_star === null ? null : r.P_star.toString(),
       sold: r.alloc.reduce((a, x) => a + x, 0n).toString(),
       seller_usdc: r.seller_usdc.toString(),
       seller_tokens_back: r.seller_tokens_back.toString(),
       token_dust: r.dust.toString(),
-      penalty_pool: r.penalty.reduce((a, x) => a + x, 0n).toString(),
+      penalty_pool: pool.toString(),
       block: '223900500',
       ns: String(keyNs + 86_400n * NS + 60n * NS),
       cancelled: false,
     };
-    sellerPayout = { usdc: r.seller_usdc.toString(), tokens: r.seller_tokens_back.toString(), ok: true };
+    sellerPayout = { usdc: r.seller_usdc.toString(), tokens: r.seller_tokens_back.toString(), ok: true, pending: false };
     payoutsDone = bids.length + 1;
   } else if (state === 'Cancelled') {
-    for (const b of bids) b.paid = { usdc: b.escrow, tokens: '0', ok: true };
+    for (const b of bids) b.paid = { usdc: b.escrow, tokens: '0', ok: true, pending: false };
     result = {
       p_star: null,
       sold: '0',
@@ -228,7 +230,7 @@ export function buildWorld(opts: WorldOptions = {}): World {
       ns: String(closeNs + 120n * NS),
       cancelled: true,
     };
-    sellerPayout = { usdc: '0', tokens: supply.toString(), ok: true };
+    sellerPayout = { usdc: '0', tokens: supply.toString(), ok: true, pending: false };
     payoutsDone = bids.length + 1;
   }
 
@@ -300,8 +302,9 @@ export function buildWorld(opts: WorldOptions = {}): World {
     currentSalt: '252812b3',
     codeHash: '11111111111111111111111111111111',
     accessKeys: [],
-    // What Tender holds in Intents: the escrow and supply of an unsettled sale, nothing once everything is paid.
-    balances: state === 'Open' || state === 'Keyed' ? { [SIM_USDC]: escrowTotal, [token]: supply } : {},
+    // What Tender holds in Intents: the escrow and supply of an unsettled sale; once everything is paid, only the
+    // penalty pool, which is paid to nobody.
+    balances: state === 'Open' || state === 'Keyed' ? { [SIM_USDC]: escrowTotal, [token]: supply } : pool > 0n ? { [SIM_USDC]: pool } : {},
     teeAccounts: 17,
     allowedImages: 1,
     sourceMetadata: null,

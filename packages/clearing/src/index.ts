@@ -43,9 +43,11 @@ const cdiv = (a: bigint, b: bigint): bigint => (a + b - 1n) / b; // a ≥ 0, b >
 const sum = (xs: bigint[]): bigint => xs.reduce((a, b) => a + b, 0n);
 
 /**
- * Pure, deterministic. Unrevealed bids (Sealed or Penalized) pay 10% of B to the revealed bidders pro rata by B
- * (remainder to the lowest revealed idx), never to the seller; with no revealed bid there is no penalty.
- * Eligible bids: revealed with p ≥ reserve, sorted by p descending then idx.
+ * Pure, deterministic. Unrevealed bids (Sealed or Penalized) lose 10% of B when at least one bid was revealed; the
+ * pool is paid to nobody (not to revealed bids, not to the seller) and stays in the contract, so
+ * Σ refund + seller_usdc + pool = Σ B. With no revealed bid there is no penalty.
+ * Eligible bids: revealed with p ≥ reserve, sorted by p descending then idx. A marginal bid never gets more than its
+ * q buys at P* (floor(q·scale/P*)), so spend ≤ q; the excess is dust.
  */
 export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
   const { S, reserve } = sale;
@@ -55,7 +57,6 @@ export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
   const zero = () => Array.from({ length: n }, () => 0n);
   const alloc = zero();
   const spend = zero();
-  const share = zero();
   const pen = zero();
 
   const rev = bids.filter((b) => b.state === 'Revealed');
@@ -64,12 +65,6 @@ export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
   if (rev.length > 0) for (const b of unrevealed) pen[b.idx] = b.B / 10n;
 
   const pool = sum(pen);
-  const totB = sum(rev.map((b) => b.B));
-  if (pool > 0n) {
-    for (const b of rev) share[b.idx] = u128(pool * b.B) / totB;
-    const first = Math.min(...rev.map((b) => b.idx));
-    share[first] = share[first]! + pool - sum(share);
-  }
 
   const el = rev
     .filter((b) => b.p! >= reserve)
@@ -101,7 +96,9 @@ export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
       const R = S - sum(alloc);
       const qm = sum(marg.map((w) => w.q!));
       for (const w of marg) {
-        const t = u128(R * w.q!) / qm;
+        const cap = u128(w.q! * scale) / P;
+        const t0 = u128(R * w.q!) / qm;
+        const t = t0 < cap ? t0 : cap;
         alloc[w.idx] = t;
         spend[w.idx] = cdiv(u128(t * P), scale);
       }
@@ -110,12 +107,16 @@ export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
     }
   }
 
-  const refund = bids.map((b) => b.B - spend[b.idx]! - pen[b.idx]! + share[b.idx]!);
+  const refund = bids.map((b) => {
+    const r = b.B - spend[b.idx]! - pen[b.idx]!;
+    if (r < 0n) throw new Error(`clearing underflow: bid ${b.idx} refund ${r}`); // the contract's u128 sub panics here
+    return r;
+  });
   const final_state: FinalState[] = bids.map((b) =>
     b.state === 'Revealed' ? 'Revealed' : rev.length > 0 ? 'Penalized' : 'Sealed',
   );
   const seller_usdc = sum(spend);
-  if (seller_usdc + sum(refund) !== sum(bids.map((b) => b.B))) throw new Error('clearing: USDC not conserved');
+  if (seller_usdc + sum(refund) + pool !== sum(bids.map((b) => b.B))) throw new Error('clearing: USDC not conserved');
   if (sum(alloc) > S) throw new Error('clearing: allocation exceeds supply');
   return {
     P_star: P,
@@ -123,7 +124,7 @@ export function clear(sale: ClearSale, bids: ClearBid[]): ClearResult {
     spend,
     refund,
     penalty: pen,
-    penalty_share: share,
+    penalty_share: zero(), // kept for the fixture/view shape; always 0 since the pool goes to nobody
     final_state,
     seller_usdc,
     seller_tokens_back: S - sum(alloc),
