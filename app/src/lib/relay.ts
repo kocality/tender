@@ -30,6 +30,8 @@ export async function relay(signed: MultiPayload[], url: string = config.relayer
   if (res.status === 429) throw new RelayError('Relayer busy, retry in 30 s', 'busy');
   const detail = body.detail ?? body.error ?? `relayer answered ${res.status}`;
   if (res.status === 400 && body.error === 'simulate_failed') throw new RelayError(detail, classifyIntentsError(detail));
+  // 502 execute_failed: the transaction ran and the signed payload failed in it (the Intents panic is in `detail`).
+  if (body.error === 'execute_failed') throw new RelayError(detail, classifyIntentsError(detail), body.txHash);
   // A relayer-side failure (502 upstream, 503 low allowance) says nothing about the signed payload: the user may try again.
   if (res.status >= 500) throw new RelayError(detail, 'unavailable', body.txHash);
   throw new RelayError(detail, classifyIntentsError(detail), body.txHash);

@@ -165,7 +165,7 @@ export function Wizard({
   const requestQuote = async (s: IntentSigner, deposit: bigint, fresh = false) => {
     if (s.origin === 'near' || quoting.current) return;
     const g = flow.current;
-    const key = quoteKey(config.network, id, s.signerId);
+    const key = quoteKey(config.network, id, s.signerId, s.origin);
     // A reload during the swap must not ask for a second address: the first one is still waiting for the deposit.
     const kept = fresh ? null : reusableQuote(loadQuote(key), deposit, Date.now());
     if (kept) {
@@ -271,7 +271,7 @@ export function Wizard({
 
   // While funding: follow the 1Click swap and the Intents balance every 5 s. This only reads; no signature is requested here.
   const depositAddress = quote?.quote.depositAddress;
-  const qKey = signer ? quoteKey(config.network, id, signer.signerId) : '';
+  const qKey = signer ? quoteKey(config.network, id, signer.signerId, signer.origin) : '';
   useEffect(() => {
     if (step !== 'fund' || !signer || !plan) return;
     let alive = true;
@@ -361,14 +361,24 @@ export function Wizard({
     try {
       const sim = await simulateIntents(rpc, config.intentsContractId, [mp]);
       if (g !== flow.current) return;
-      if (!sim.ok) {
+      // A used nonce means this signed payload already ran (an earlier relay landed although its answer was lost):
+      // look for the stored bid, never offer a second signature for the same sealed bid.
+      if (!sim.ok && sim.kind !== 'nonce_used') {
         route(recoveryFor(sim.kind, sim.message, mp.standard));
         return;
       }
       setStep('relay');
-      const { txHash: h } = await relay([mp]);
-      if (g !== flow.current) return;
-      setTxHash(h);
+      if (sim.ok) {
+        const h = await relay([mp]).then(
+          (r) => r.txHash,
+          (e: unknown) => {
+            if (e instanceof RelayError && e.kind === 'nonce_used') return null;
+            throw e;
+          },
+        );
+        if (g !== flow.current) return;
+        if (h) setTxHash(h);
+      }
       clearQuote(qKey);
       setBusy('confirm');
       const found = signer && sealed ? await confirmBid({ sale: id, bidder: signer.signerId, cm: sealed.cm }) : null;

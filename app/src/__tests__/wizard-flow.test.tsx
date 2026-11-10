@@ -114,6 +114,23 @@ describe('relay failure leaves a way out (QA-04)', () => {
   });
 });
 
+describe('a used nonce means this signed bid already ran: no second signature for the same sealed bid', () => {
+  test('the relayer answers nonce_used (an earlier relay landed): the wizard goes to the result, Sign is not offered', async () => {
+    m.relay.mockRejectedValue(new RelayError('Smart contract panicked: nonce was already used', 'nonce_used'));
+    await reachRelayFailure(signer('0xaaa'));
+    expect(has('Sign with wallet')).toBe(false);
+    expect(has('Sign again')).toBe(false);
+    expect(has('Place another bid')).toBe(true);
+  });
+  test('the pre-flight simulation sees the nonce used: the same, and nothing is relayed', async () => {
+    m.simulate.mockResolvedValue({ ok: false, kind: 'nonce_used', message: 'nonce was already used' });
+    await reachRelayFailure(signer('0xaaa'));
+    expect(has('Sign with wallet')).toBe(false);
+    expect(has('Place another bid')).toBe(true);
+    expect(m.relay).not.toHaveBeenCalled();
+  });
+});
+
 describe('reconnecting starts over (QA-13)', () => {
   test("the old account's signed payload, retry and error are gone after another wallet connects", async () => {
     await reachRelayFailure(signer('0xaaa'));
@@ -228,7 +245,7 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
     const mem = new Map<string, string>();
     vi.stubGlobal('sessionStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
     m.balance.mockResolvedValue(0n);
-    m.quote.mockResolvedValue({ quote: { depositAddress: 'dep-1', amountIn: '5100000', amountOut: '5000000', minAmountOut: '5000000', deadline: new Date(Date.now() + 3_600_000).toISOString() } });
+    m.quote.mockResolvedValue({ quote: { depositAddress: 'dep-1', amountIn: '5110000', amountOut: '5000000', minAmountOut: '5000000', deadline: new Date(Date.now() + 3_600_000).toISOString() } });
     await connect(signer('0xaaa'));
     await submitForm();
     expect(m.quote).toHaveBeenCalledTimes(1);

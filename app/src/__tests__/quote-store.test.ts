@@ -21,7 +21,7 @@ const quote = (over: Partial<QuoteResponse['quote']> = {}): QuoteResponse => ({
 describe('a reload during funding keeps the deposit address (QA-10)', () => {
   test('the stored quote comes back after a remount and is reused instead of asking 1Click again', () => {
     vi.stubGlobal('sessionStorage', memoryStorage());
-    const key = quoteKey('mainnet', '2', 'bidder.near');
+    const key = quoteKey('mainnet', '2', 'bidder.near', 'base');
     saveQuote(key, quote());
     const back = reusableQuote(loadQuote(key), 3_080_000n, NOW);
     expect(back?.quote.depositAddress).toBe('abc123');
@@ -34,13 +34,20 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
   });
   test('a quote whose swap ended is cleared and never paid into again', () => {
     vi.stubGlobal('sessionStorage', memoryStorage());
-    const key = quoteKey('mainnet', '2', 'bidder.near');
+    const key = quoteKey('mainnet', '2', 'bidder.near', 'base');
     saveQuote(key, quote());
     clearQuote(key);
     expect(loadQuote(key)).toBeNull();
   });
-  test('quotes are kept per network, sale and account', () => {
-    expect(new Set([quoteKey('mainnet', '2', 'a'), quoteKey('testnet', '2', 'a'), quoteKey('mainnet', '3', 'a'), quoteKey('mainnet', '2', 'b')]).size).toBe(4);
+  test('quotes are kept per network, sale, origin chain and account', () => {
+    expect(new Set([quoteKey('mainnet', '2', 'a', 'base'), quoteKey('testnet', '2', 'a', 'base'), quoteKey('mainnet', '3', 'a', 'base'), quoteKey('mainnet', '2', 'b', 'base'), quoteKey('mainnet', '2', 'a', 'arbitrum')]).size).toBe(5);
+  });
+  test('a Base quote is never offered to the same EVM address funding from Arbitrum', () => {
+    vi.stubGlobal('sessionStorage', memoryStorage());
+    const signer = '0x' + 'ab'.repeat(20);
+    saveQuote(quoteKey('mainnet', '2', signer, 'base'), quote());
+    expect(reusableQuote(loadQuote(quoteKey('mainnet', '2', signer, 'arbitrum')), 3_080_000n, NOW)).toBeNull();
+    expect(reusableQuote(loadQuote(quoteKey('mainnet', '2', signer, 'base')), 3_080_000n, NOW)?.quote.depositAddress).toBe('abc123');
   });
   test('only the quote is stored: no price, size, salt or ciphertext field exists in it', () => {
     const store = memoryStorage();

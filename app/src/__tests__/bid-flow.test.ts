@@ -47,7 +47,12 @@ describe('wizard step decisions', () => {
     expect(fundDecision(3_000_001n, 3_000_000n)).toEqual({ skip: true });
   });
   test('short balance: deposit covers the gap plus the buffer', () => {
-    expect(fundDecision(1_000_000n, 3_000_000n)).toEqual({ skip: false, gap: 2_000_000n, deposit: 2_070_000n });
+    expect(fundDecision(1_000_000n, 3_000_000n)).toEqual({ skip: false, gap: 2_000_001n, deposit: 2_080_000n });
+  });
+  test('the gap is what is missing for the escrow plus the self-reveal reserve', () => {
+    expect(fundDecision(999_999n, 1_000_000n)).toMatchObject({ gap: 2n });
+    expect(fundDecision(1_000_000n, 1_000_000n)).toMatchObject({ gap: 1n });
+    expect(fundDecision(0n, 1_000_000n)).toMatchObject({ gap: 1_000_001n });
   });
   test('an unregistered NEAR key shows the Register button', () => {
     expect(recoveryFor('public_key_not_registered', "public key 'x' doesn't exist for account 'y'").to).toBe('register_key');

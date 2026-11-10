@@ -13,9 +13,9 @@ function store(): Storage | null {
   }
 }
 
-/** One quote per network, sale and Intents account. */
-export function quoteKey(network: string, sale: string, signerId: string): string {
-  return `tender:quote:${network}:${sale}:${signerId}`;
+/** One quote per network, sale, Intents account and origin chain: an EVM address is the same account on Base and Arbitrum. */
+export function quoteKey(network: string, sale: string, signerId: string, origin: string): string {
+  return `tender:quote:${network}:${sale}:${origin}:${signerId}`;
 }
 
 export function saveQuote(key: string, quote: QuoteResponse): void {

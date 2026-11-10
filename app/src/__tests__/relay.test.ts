@@ -14,6 +14,12 @@ describe('relay failures other than 429 (QA-04)', () => {
     answer(503, { error: 'relayer_allowance_low', detail: 'allowance low' });
     await expect(relay([...signed], 'http://relay.invalid')).rejects.toMatchObject({ kind: 'unavailable' });
   });
+  test('a 502 execute_failed is a failure of the signed payload: its Intents kind and tx hash survive', async () => {
+    answer(502, { error: 'execute_failed', txHash: 'H', detail: 'Smart contract panicked: insufficient balance or overflow' });
+    await expect(relay([...signed], 'http://relay.invalid')).rejects.toMatchObject({ kind: 'insufficient_balance', txHash: 'H' });
+    answer(502, { error: 'execute_failed', txHash: 'H2', detail: 'Smart contract panicked: deadline has expired' });
+    await expect(relay([...signed], 'http://relay.invalid')).rejects.toMatchObject({ kind: 'deadline_expired', txHash: 'H2' });
+  });
   test('an unreachable relayer and 429 keep their kinds; a simulate_failed 400 keeps its Intents kind', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
     await expect(relay([...signed], 'http://relay.invalid')).rejects.toMatchObject({ kind: 'unavailable' });

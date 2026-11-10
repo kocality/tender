@@ -121,7 +121,7 @@ export type FundDecision = { skip: true } | { skip: false; gap: bigint; deposit:
 /** Skip the deposit when the Intents account already holds the escrow and the self-reveal reserve. */
 export function fundDecision(balance: bigint, escrow: bigint): FundDecision {
   if (isFunded(balance, escrow)) return { skip: true };
-  const gap = escrow - balance > SELF_REVEAL_RESERVE ? escrow - balance : SELF_REVEAL_RESERVE;
+  const gap = escrow + SELF_REVEAL_RESERVE - balance; // at least 1: isFunded failed
   return { skip: false, gap, deposit: depositAmountFor(gap) };
 }
 
