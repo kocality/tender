@@ -1,5 +1,6 @@
 import { CipherWall } from '../components/CipherWall';
 import { Countdown } from '../components/Countdown';
+import { OpenPanel } from '../components/OpenPanel';
 import { SaleCard } from '../components/SaleCard';
 import { config } from '../config';
 import { OPEN_RULE, VERIFY_KEYS_LINE } from '../copy';
@@ -31,7 +32,7 @@ export function TwinView({ bundles, nowNs }: { bundles: SaleBundle[]; nowNs: big
       </div>
       <div className="grid-2">
         {bundles.map((b) => (
-          <SaleCard key={b.id} id={b.id} sale={b.sale} nowNs={nowNs}>
+          <SaleCard key={b.id} id={b.id} sale={b.sale} nowNs={nowNs} actions={b.sale ? <OpenPanel sale={b.sale} nowNs={nowNs} keyRequestBlock={b.keyRequestBlock} /> : undefined}>
             {b.sale ? (
               <>
                 <h3 style={{ marginTop: 12 }}>Ciphertext wall</h3>
