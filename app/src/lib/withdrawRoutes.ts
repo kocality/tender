@@ -1,4 +1,5 @@
 import { b58decode } from '@tender/intents';
+import { isAddress } from 'viem';
 import { ORIGIN_ASSET } from './oneclick';
 
 // What can leave an Intents account and where it can go (1Click INTENTS -> DESTINATION_CHAIN).
@@ -59,7 +60,9 @@ export function recipientError(chain: DestChain, address: string): string | null
     }
     return 'Not a Solana address (base58, 32 bytes).';
   }
-  return /^0x[0-9a-fA-F]{40}$/.test(a) ? null : 'Not an EVM address (0x followed by 40 hex characters).';
+  if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return 'Not an EVM address (0x followed by 40 hex characters).';
+  // A mixed-case address carries an EIP-55 checksum: one wrong character in it is a typo that would send the funds to nobody.
+  return isAddress(a, { strict: true }) ? null : 'The checksum of this address is wrong (upper and lower case letters do not match EIP-55). Check it character by character, or paste it in lower case.';
 }
 
 /** The connected wallet's own address on `chain`; empty when the wallet lives on another chain. */

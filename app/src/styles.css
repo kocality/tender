@@ -5,6 +5,7 @@
   --text: #1b1b18;
   --muted: #5d5b53;
   --border: #dcd9cf;
+  --field-border: #85827a;
   --accent: #0b5cd5;
   --accent-text: #ffffff;
   --ok: #17703a;
@@ -26,6 +27,7 @@
     --text: #ecebe4;
     --muted: #a3a197;
     --border: #3a3a32;
+    --field-border: #77766b;
     --accent: #6ea3ff;
     --accent-text: #0b1220;
     --ok: #6fd596;
@@ -45,6 +47,7 @@
   --text: #ecebe4;
   --muted: #a3a197;
   --border: #3a3a32;
+  --field-border: #77766b;
   --accent: #6ea3ff;
   --accent-text: #0b1220;
   --ok: #6fd596;
@@ -95,7 +98,8 @@ h2 {
   margin: 1.5rem 0 0.5rem;
 }
 
-h3 {
+h3,
+h2.sub {
   font-size: 1rem;
   margin: 0 0 0.25rem;
 }
@@ -222,7 +226,7 @@ input {
   font: inherit;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   background: var(--surface);
   color: var(--text);
 }
@@ -377,9 +381,24 @@ td {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+main:focus {
+  outline: none;
+}
+
+/* A live region that is always mounted but has nothing to say takes no space (and no grid gap). */
+[role='status']:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
 }
 
 /* Bid wizard */
@@ -404,7 +423,7 @@ textarea {
   font-size: 0.85rem;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   background: var(--surface);
   color: var(--text);
   width: 100%;
@@ -428,6 +447,14 @@ textarea:focus-visible {
 
 .steps li.done {
   color: var(--ok);
+}
+
+.steps li.done::before {
+  content: '\2713\00a0';
+}
+
+.steps li.failed {
+  color: var(--bad);
 }
 
 .steps li.current {
@@ -523,6 +550,13 @@ tr.row-pstar td {
   font-size: 11px;
 }
 
+/* The 600-unit viewBox shrinks to the screen width: 11 px would print at about 6 px on a 375 px phone. */
+@media (max-width: 480px) {
+  .chart .tick {
+    font-size: 20px;
+  }
+}
+
 .chart .tick.strong {
   fill: var(--text);
   font-weight: 700;
@@ -531,6 +565,17 @@ tr.row-pstar td {
 .chart .demand {
   stroke: var(--accent);
   stroke-width: 2;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .chart .supply {

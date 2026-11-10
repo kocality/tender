@@ -42,7 +42,7 @@ describe('buildTryBid', () => {
     expect(intent).toMatchObject({ intent: 'transfer', receiver_id: 'spike.tenderseal.near', tokens: { [USDC]: '1000000' }, min_gas: '30000000000000' });
     const msg = JSON.parse(intent.msg!) as { op: string; sale: string; ct: string; cm: string; origin: string };
     expect(Object.keys(msg)).toEqual(['op', 'sale', 'ct', 'cm', 'origin']);
-    expect(msg).toMatchObject({ op: 'bid', sale: '0', origin: 'sol' });
+    expect(msg).toMatchObject({ op: 'bid', sale: '18446744073709551615', origin: 'sol' });
     expect(fromBase64(msg.ct)).toHaveLength(160);
     expect(msg.cm).toMatch(/^[0-9a-f]{64}$/);
     const nonce = decodeVersionedNonce(p.nonce);
@@ -94,4 +94,17 @@ describe('raw_ed25519 try bid (stands in for Phantom)', () => {
     const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [mp]);
     expect(sim).toMatchObject({ ok: false, kind: 'insufficient_balance' });
   }, 60_000);
+});
+
+describe('a not-registered panic means a different account for EVM and Solana (X12A-02)', () => {
+  const sim = { ok: false as const, kind: 'public_key_not_registered' as const, message: "public key 'secp256k1:x' doesn't exist for account '0xabc'" };
+  test('nep413 keeps the register hint; erc191 and raw_ed25519 are told another account signed', () => {
+    expect(interpretSimulation(sim, 'nep413')).toMatchObject({ tone: 'warn' });
+    for (const standard of ['erc191', 'raw_ed25519'] as const) {
+      const out = interpretSimulation(sim, standard);
+      expect(out.tone).toBe('bad');
+      expect(out.text).toMatch(/different account/);
+      expect(out.text).not.toMatch(/not registered/);
+    }
+  });
 });

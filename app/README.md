@@ -9,7 +9,7 @@ The app has no send-transaction code for EVM or Solana deposits: a deposit is a 
 | Route | What |
 |---|---|
 | `#/` | Twin sales side by side: countdown, public open conditions, key-request counter, ciphertext wall |
-| `#/sale/:id` | One sale: Open, Decrypt, Reveal, result table, supply and demand chart, ciphertext wall |
+| `#/sale/:id` | One sale: Open, Decrypt, Reveal, Finalize, result table, supply and demand chart, ciphertext wall |
 | `#/bid/:id` | Bid wizard: wallet, price and size, fund through 1Click, seal, sign, relay. `?mode=fund` stops after funding. "Paste a sealed bid" accepts the output of `pnpm seal:bid` |
 | `#/try` | Try signing (free): sign a real bid payload and ask `simulate_intents` to check it. Nothing is sent |
 | `#/keys` | Key ledger: every MPC key request, matched with NearBlocks receipts |
@@ -29,7 +29,7 @@ Read from the repository-root `.env` (`envDir: '..'`); only `VITE_*` variables r
 |---|---|
 | `VITE_NETWORK` | `mainnet` (`testnet` also accepted) |
 | `VITE_NEAR_RPC_URL` | `https://free.rpc.fastnear.com` |
-| `VITE_NEAR_RPC_FALLBACKS` | `https://rpc.mainnet.near.org` |
+| `VITE_NEAR_RPC_FALLBACKS` | empty (comma separated URLs tried after the primary; the old default `rpc.mainnet.near.org` is deprecated and answers HTTP 429) |
 | `VITE_TENDER_CONTRACT_ID` | `v1.tenderseal.near` |
 | `VITE_INTENTS_CONTRACT_ID` | `intents.near` |
 | `VITE_MPC_CONTRACT_ID` | `v1.signer` |
@@ -37,6 +37,8 @@ Read from the repository-root `.env` (`envDir: '..'`); only `VITE_*` variables r
 | `VITE_RELAYER_URL` | empty; the full endpoint, e.g. `http://localhost:8787/relay` |
 | `VITE_ONECLICK_API_URL` | `https://1click.chaindefuser.com` |
 | `VITE_TWIN_SALES` | `1,0` |
+| `VITE_TEAM_ACCOUNTS` | `tenderseal.near`; a sale sold by one of these accounts is labelled a team-funded demo sale |
+| `VITE_DEMO_FAIL_SALES` | `0` on mainnet, empty on testnet; sale ids labelled as configured by the team to miss their open thresholds |
 | `VITE_NEARBLOCKS_API_URL` | `https://api.nearblocks.io/v3` (testnet: `https://api-testnet.nearblocks.io/v3`) |
 | `VITE_EXPLORER_URL` | `https://nearblocks.io` (testnet: `https://testnet.nearblocks.io`) |
 
@@ -46,6 +48,7 @@ Read from the repository-root `.env` (`envDir: '..'`); only `VITE_*` variables r
 pnpm install --frozen-lockfile
 pnpm --filter @tender/app dev                    # http://localhost:5173/#/ against mainnet defaults
 pnpm --filter @tender/app test
+ORACLE=1 pnpm --filter @tender/app test          # also runs the payload test against @defuse-protocol/intents-sdk (loads ~1700 dependency modules; off by default)
 pnpm --filter @tender/app build                  # tsc + vite build into app/dist
 ```
 
@@ -58,6 +61,10 @@ VITE_TENDER_CONTRACT_ID=v1.tender-<hex>.testnet VITE_INTENTS_CONTRACT_ID=intents
 VITE_MPC_CONTRACT_ID=v1.signer-prod.testnet VITE_TWIN_SALES=0,1 VITE_RELAYER_URL=http://localhost:8787/relay \
 pnpm --filter @tender/app dev
 ```
+
+## NEAR wallets
+
+The NEAR wallet list is fixed in `src/wallets/near-manifest.json`, and every wallet executor script in it is pinned to a commit. The connector's default manifest is read from a mutable branch at run time and would run whatever code is there as the signer bridge. A wallet that cannot be pinned (hosted on its vendor's own server) is not in the list. To add or update one, copy its entry from the upstream manifest, replace the executor URL by one that contains a 40-hex commit, and put the first 7 hex characters of that commit after a `+` in `version` (the connector caches executor code under `id:version`).
 
 ## Trust note
 

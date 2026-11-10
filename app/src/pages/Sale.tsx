@@ -17,13 +17,26 @@ import { recompute } from '../lib/results';
 import { usePolling } from '../lib/usePolling';
 import { getConfig, type Config } from '../lib/views';
 
-export function SaleView({ bundle, nowNs, cfg = null }: { bundle: SaleBundle; nowNs: bigint; cfg?: Config | null }) {
+export function SaleView({
+  bundle,
+  nowNs,
+  cfg = null,
+  cfgError = null,
+  onRetryCfg,
+}: {
+  bundle: SaleBundle;
+  nowNs: bigint;
+  cfg?: Config | null;
+  /** The failed `get_config` read, when there is one: Decrypt needs the config, so a retry is offered. */
+  cfgError?: string | null;
+  onRetryCfg?: () => void;
+}) {
   const { id, sale, bids, result = null } = bundle;
   const [decrypted, setDecrypted] = useState<DecryptResult | null>(null);
   const recomputed = useMemo(() => (sale && sale.state === 'Finalized' && result ? recompute(sale, bids, result) : null), [sale, bids, result]);
   return (
     <div>
-      <SaleCard id={id} sale={sale} nowNs={nowNs} actions={sale ? <OpenPanel sale={sale} nowNs={nowNs} keyRequestBlock={bundle.keyRequestBlock} /> : undefined}>
+      <SaleCard id={id} sale={sale} nowNs={nowNs} asH1 actions={sale ? <OpenPanel sale={sale} nowNs={nowNs} keyRequestBlock={bundle.keyRequestBlock} /> : undefined}>
         {sale ? (
           <div style={{ marginTop: 12 }}>
             <Countdown closeNs={sale.closeNs} nowNs={nowNs} />
@@ -32,7 +45,7 @@ export function SaleView({ bundle, nowNs, cfg = null }: { bundle: SaleBundle; no
       </SaleCard>
       {sale ? (
         <>
-          {sale.key ? <DecryptPanel sale={sale} bids={bids} cfg={cfg} result={decrypted} onResult={setDecrypted} /> : null}
+          {sale.key ? <DecryptPanel sale={sale} bids={bids} cfg={cfg} cfgError={cfgError} onRetryCfg={onRetryCfg} result={decrypted} onResult={setDecrypted} /> : null}
           <RevealPanel sale={sale} bids={bids} decrypted={decrypted} nowNs={nowNs} />
           {sale.state === 'Finalized' && result ? (
             <>
@@ -61,12 +74,13 @@ export function SaleView({ bundle, nowNs, cfg = null }: { bundle: SaleBundle; no
 export function Sale({ id }: { id: string }) {
   const { nowNs } = useChainClock();
   const { data, error, loading } = usePolling(() => loadSaleBundle(id), 5000, [id]);
-  const { data: cfg } = usePolling(getConfig, 0, []);
+  const [cfgTry, setCfgTry] = useState(0);
+  const { data: cfg, error: cfgError } = usePolling(getConfig, 0, [cfgTry]);
   return (
     <>
       <ReadError error={error} stale={data !== null} />
       {loading && !data ? <Loading what="sale" /> : null}
-      {data ? <SaleView key={id} bundle={data} nowNs={nowNs} cfg={cfg} /> : null}
+      {data ? <SaleView key={id} bundle={data} nowNs={nowNs} cfg={cfg} cfgError={cfgError} onRetryCfg={() => setCfgTry((n) => n + 1)} /> : null}
     </>
   );
 }

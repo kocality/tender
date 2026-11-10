@@ -1,16 +1,20 @@
 import { NearConnector, type NearWalletBase } from '@hot-labs/near-connect';
 import { fromBase64, nep413FromWallet, nep413Message } from '@tender/intents';
 import { config } from '../config';
+import nearManifest from './near-manifest.json';
 import { WalletError, type IntentSigner } from './types';
 
-// One connector for the whole page. It is created lazily: constructing it starts a manifest download,
+type NearManifest = NonNullable<ConstructorParameters<typeof NearConnector>[0]>['manifest'] & object;
+
+// One connector for the whole page. It is created lazily: it registers window listeners,
 // which must not happen at import time (tests, server rendering) or on pages that never use NEAR.
 let connector: NearConnector | null = null;
 let connected: NearWalletBase | null = null;
 let connectedSigner: IntentSigner | null = null;
 
 export function getNearConnector(): NearConnector {
-  connector ??= new NearConnector({ network: config.network, features: { signMessage: true } });
+  // A curated manifest whose wallet executors are pinned to a commit: the default one is read from a mutable branch and runs unreviewed code as the signer bridge.
+  connector ??= new NearConnector({ network: config.network, features: { signMessage: true }, manifest: nearManifest as NearManifest });
   return connector;
 }
 
@@ -39,7 +43,11 @@ export async function connectNear(): Promise<IntentSigner> {
         message: nep413Message(p),
         recipient: p.verifying_contract,
         nonce: nonce32,
+        signerId: account.accountId,
       });
+      if (signed.accountId !== account.accountId) {
+        throw new WalletError(`The wallet signed as ${signed.accountId}, not ${account.accountId}, the account connected here. Reconnect the wallet and sign again.`);
+      }
       const publicKey = signed.publicKey.startsWith(ED25519_PREFIX) ? signed.publicKey : `${ED25519_PREFIX}${signed.publicKey}`;
       return nep413FromWallet({ payload: p, nonce32, publicKey, signature: signed.signature });
     },
@@ -62,6 +70,7 @@ export async function callFunction(
 ): Promise<unknown> {
   if (!connected) throw new WalletError('Connect a NEAR wallet first.');
   return connected.signAndSendTransaction({
+    signerId: connectedSigner?.signerId,
     receiverId,
     actions: [
       {

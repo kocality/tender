@@ -9,6 +9,26 @@ export interface Route {
   query: URLSearchParams;
 }
 
+/** The document title for a route, so tabs, history and a screen reader's title command tell the pages apart. */
+export function titleFor(route: Pick<Route, 'path' | 'params'>): string {
+  switch (route.path) {
+    case '/':
+      return 'Sealed token sales · Tender';
+    case '/sale/:id':
+      return `Sale #${route.params.id ?? ''} · Tender`;
+    case '/bid/:id':
+      return `Bid on sale #${route.params.id ?? ''} · Tender`;
+    case '/try':
+      return 'Try signing (free) · Tender';
+    case '/keys':
+      return 'Key ledger · Tender';
+    case '/withdraw':
+      return 'Withdraw · Tender';
+    default:
+      return 'Not found · Tender';
+  }
+}
+
 const PATTERNS: RoutePattern[] = ['/', '/sale/:id', '/bid/:id', '/try', '/keys', '/withdraw'];
 
 /** `#/sale/7?x=1` → `{path: '/sale/:id', params: {id: '7'}, query: x=1}`. Pure, so it can be tested without a DOM. */

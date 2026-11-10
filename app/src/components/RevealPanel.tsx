@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
 import { config } from '../config';
 import type { DecryptResult } from '../lib/decrypt';
-import { revealBatch } from '../lib/near-tx';
+import { formatCountdown, formatNsUtc } from '../lib/format';
+import { addIntentsKey, revealBatch } from '../lib/near-tx';
 import { pollBid, relay } from '../lib/relay';
 import { batches, revealWindowOpen, revealable, toRevealItems, unrevealable } from '../lib/revealFilter';
 import { buildSelfReveal } from '../lib/selfReveal';
-import { recoveryFor } from '../lib/bidFlow';
-import { simulateIntents } from '@tender/intents';
+import { canRegisterKey, recoveryFor } from '../lib/bidFlow';
+import { simulateIntents, type MultiPayload } from '@tender/intents';
 import type { Bid, Sale } from '../lib/views';
 import { ensureNear } from '../wallets/near';
 import { walletErrorMessage, type IntentSigner } from '../wallets/types';
+import { FinalizeButton } from './FinalizeButton';
 import { TxLink } from './TxLink';
 import { WalletPicker } from './WalletPicker';
 
@@ -20,12 +22,15 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
   const [log, setLog] = useState<string[]>([]);
   const [hashes, setHashes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** A signed self-reveal that waits for its NEAR key to be registered with Intents. */
+  const [needsKey, setNeedsKey] = useState<MultiPayload | null>(null);
 
   const open = revealWindowOpen(sale, nowNs);
   const items = useMemo(() => revealable(decrypted, bids), [decrypted, bids]);
   const blocked = useMemo(() => unrevealable(decrypted, bids), [decrypted, bids]);
   const mine = signer ? items.filter((i) => i.bidder === signer.signerId) : [];
   const enabled = open && decrypted?.keyOk === true;
+  const allRevealed = sale.bids > 0 && sale.revealed >= sale.bids;
 
   const revealAll = async () => {
     setBusy('all');
@@ -48,10 +53,39 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
     }
   };
 
+  /** Simulate, relay and follow one signed self-reveal. A key that is not registered stops here with a Register button. */
+  const submitSigned = async (signed: MultiPayload) => {
+    const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [signed]);
+    if (!sim.ok) {
+      const r = recoveryFor(sim.kind, sim.message, signed.standard);
+      if (r.to === 'register_key' && canRegisterKey(signed, signer?.signerId)) setNeedsKey(signed);
+      setError(
+        r.to === 'fund'
+          ? 'This account holds no USDC in NEAR Intents. The gasless reveal needs 0.000001 USDC there; it is returned right away.'
+          : r.message,
+      );
+      return;
+    }
+    setNeedsKey(null);
+    const { txHash } = await relay([signed]);
+    setHashes([txHash]);
+    setLog(['Reveal relayed, waiting for the contract…']);
+    const want = new Set(mine.map((m) => m.idx));
+    const stored = await pollBid((bs) => (bs.filter((b) => want.has(b.idx) && b.state === 'Revealed').length === want.size ? bs[0] : undefined), sale.id);
+    setLog([
+      stored === 'unknown'
+        ? 'Could not confirm: the RPC did not answer. The reveal may still have gone through; check again in a minute.'
+        : stored
+          ? 'Revealed on chain.'
+          : 'Not revealed yet: the contract may have refunded the transfer (see tx logs).',
+    ]);
+  };
+
   const revealMine = async () => {
     if (!signer) return;
     setBusy('mine');
     setError(null);
+    setNeedsKey(null);
     setLog([]);
     setHashes([]);
     try {
@@ -62,23 +96,21 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
         sale: sale.id,
         items: toRevealItems(mine),
       });
-      const signed = await signer.sign(payload);
-      const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [signed]);
-      if (!sim.ok) {
-        const r = recoveryFor(sim.kind, sim.message);
-        setError(
-          r.to === 'fund'
-            ? 'This account holds no USDC in NEAR Intents. The gasless reveal needs 0.000001 USDC there; it is returned right away.'
-            : r.message,
-        );
-        return;
-      }
-      const { txHash } = await relay([signed]);
-      setHashes([txHash]);
-      setLog(['Reveal relayed, waiting for the contract…']);
-      const want = new Set(mine.map((m) => m.idx));
-      const stored = await pollBid((bs) => (bs.filter((b) => want.has(b.idx) && b.state === 'Revealed').length === want.size ? bs[0] : undefined), sale.id);
-      setLog([stored ? 'Revealed on chain.' : 'Not revealed yet: the contract may have refunded the transfer (see tx logs).']);
+      await submitSigned(await signer.sign(payload));
+    } catch (e) {
+      setError(walletErrorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const registerKey = async () => {
+    if (!needsKey || needsKey.standard !== 'nep413') return;
+    setBusy('mine');
+    setError(null);
+    try {
+      await addIntentsKey(needsKey.public_key);
+      await submitSigned(needsKey);
     } catch (e) {
       setError(walletErrorMessage(e));
     } finally {
@@ -94,7 +126,18 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
         Revealing publishes a bid&apos;s price, size and salt so the contract can check them against the commitment. Unrevealed bids get 90% of their
         escrow back; the other 10% goes to the revealed bidders pro rata, never to the seller.
       </p>
-      {!open ? <p className="note">The reveal window is closed. Only finalize is left.</p> : null}
+      {sale.revealDeadlineNs !== null ? (
+        <p className="small">
+          Reveal deadline {formatNsUtc(sale.revealDeadlineNs)}
+          {open ? ` · ${formatCountdown(sale.revealDeadlineNs - nowNs)} left` : ' · passed'}
+        </p>
+      ) : null}
+      {!open ? (
+        <p className="note">
+          The reveal window is closed. Anyone can finalize: it settles the sale and pays out up to 8 bids per call.
+        </p>
+      ) : null}
+      {allRevealed || !open ? <FinalizeButton saleId={sale.id} /> : null}
       {!decrypted ? <p className="small muted">Decrypt the bids first.</p> : null}
       {decrypted && !decrypted.keyOk ? (
         <p className="result bad" role="alert">
@@ -107,7 +150,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
         </button>
       </div>
       <h3 style={{ marginTop: 16 }}>Reveal my bid (gasless)</h3>
-      <WalletPicker signer={signer} onConnect={setSigner} />
+      <WalletPicker signer={signer} onConnect={setSigner} showOrigin={false} />
       <div style={{ marginTop: 8 }}>
         <button type="button" onClick={revealMine} disabled={!enabled || !signer || mine.length === 0 || busy !== null}>
           {busy === 'mine' ? 'Waiting for wallet…' : `Reveal my bid${mine.length === 1 ? '' : 's'} (gasless)${mine.length ? ` · ${mine.length}` : ''}`}
@@ -120,16 +163,25 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
           revealed bidders, never to the seller).
         </p>
       ) : null}
-      {log.map((l) => (
-        <p key={l} className="small" role="status">
-          {l}
-        </p>
-      ))}
+      <div role="status">
+        {log.map((l, i) => (
+          <p key={i} className="small">
+            {l}
+          </p>
+        ))}
+      </div>
       {hashes.map((h) => (
         <p key={h} className="small">
           transaction <TxLink hash={h} />
         </p>
       ))}
+      {needsKey ? (
+        <div style={{ marginTop: 8 }}>
+          <button type="button" className="primary" onClick={() => void registerKey()} disabled={busy !== null}>
+            Register this key with NEAR Intents (1 yoctoNEAR)
+          </button>
+        </div>
+      ) : null}
       {error ? (
         <p className="result bad" role="alert">
           {error}

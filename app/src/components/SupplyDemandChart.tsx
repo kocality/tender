@@ -47,10 +47,11 @@ export function SupplyDemandChart({ sale, bids, pStar }: { sale: Sale; bids: Bid
   }
 
   const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const per = lot === 1 ? name : `${lot} ${name}`;
   const label =
     pStar === null
-      ? `Supply and demand for ${name}: no bid cleared`
-      : `Clearing price ${formatUsdc(pStar)} USDC per ${lot === 1 ? name : `${lot} ${name}`}, supply ${formatUnits(sale.supply, sale.decimals)} ${name}`;
+      ? `Supply and demand for ${name}: no bid cleared, reserve ${formatUsdc(sale.reserve)} USDC per ${per}`
+      : `Clearing price ${formatUsdc(pStar)} USDC per ${per}, reserve ${formatUsdc(sale.reserve)} USDC per ${per}, supply ${formatUnits(sale.supply, sale.decimals)} ${name}`;
 
   return (
     <figure className="chart" style={{ margin: '16px 0 0' }}>
@@ -69,6 +70,11 @@ export function SupplyDemandChart({ sale, bids, pStar }: { sale: Sale; bids: Bid
           </g>
         ))}
         {d ? <path className="demand" d={d} fill="none" /> : null}
+        {steps[0] ? (
+          <text className="tick" x={M.l + 6} y={y(steps[0].price) - 6}>
+            demand
+          </text>
+        ) : null}
         <line className="supply" x1={x(supply)} y1={M.t} x2={x(supply)} y2={H - M.b} />
         <line className="reserve" x1={M.l} y1={y(reserve)} x2={W - M.r} y2={y(reserve)} />
         {star !== null ? <line className="pstar" data-testid="pstar" x1={M.l} y1={y(star)} x2={W - M.r} y2={y(star)} /> : null}
@@ -90,6 +96,12 @@ export function SupplyDemandChart({ sale, bids, pStar }: { sale: Sale; bids: Bid
           {unit}
         </text>
       </svg>
+      <ul className="chart-legend">
+        <li>demand: bids by limit price, cumulative</li>
+        <li>supply: vertical line</li>
+        <li>reserve: dashed line</li>
+        {star !== null ? <li>P*: clearing price, thick line</li> : null}
+      </ul>
     </figure>
   );
 }

@@ -6,9 +6,10 @@ import type { KeysData } from '../lib/loaders';
 import { KeysView } from '../pages/Keys';
 
 describe('loading, error and empty states', () => {
-  test('loading placeholder is announced as busy', () => {
+  test('loading placeholder is a status region that can be read (not aria-busy)', () => {
     const html = renderToString(<Loading what="sales" />);
-    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('aria-busy');
     expect(html).toContain('Loading sales…');
   });
 

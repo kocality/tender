@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { config } from '../config';
+import { priceUnitLabel } from '../lib/amounts';
 import { formatUnits, formatUsdc, tokenLabel } from '../lib/format';
 import { keyStatusLabel, openConditions } from '../lib/conditions';
 import type { Sale } from '../lib/views';
@@ -20,17 +22,24 @@ export function SaleCard({
   nowNs,
   actions,
   children,
+  asH1 = false,
 }: {
   id: string;
   sale: Sale | null;
   nowNs: bigint;
   actions?: ReactNode;
   children?: ReactNode;
+  /** The sale page has no other h1: the card title is it, at the size of an h2. */
+  asH1?: boolean;
 }) {
   if (!sale) {
     return (
       <section className="card" aria-label={`Sale ${id}`}>
-        <h2 style={{ marginTop: 0 }}>{`Sale #${id} · not created yet`}</h2>
+        {asH1 ? (
+          <h1 style={{ marginTop: 0, fontSize: '1.15rem' }}>{`Sale #${id} · not created yet`}</h1>
+        ) : (
+          <h2 style={{ marginTop: 0 }}>{`Sale #${id} · not created yet`}</h2>
+        )}
         <p className="small muted" style={{ margin: 0 }}>
           Nothing is on chain for this sale id yet. The page checks again every few seconds.
         </p>
@@ -42,11 +51,20 @@ export function SaleCard({
   return (
     <section className="card" aria-label={`Sale ${id}`}>
       <div className="row">
-        <h2 style={{ margin: 0 }}>Sale #{sale.id}</h2>
+        {asH1 ? (
+          <h1 style={{ margin: 0, fontSize: '1.15rem' }}>Sale #{sale.id}</h1>
+        ) : (
+          <h2 style={{ margin: 0 }}>Sale #{sale.id}</h2>
+        )}
         <StatusPill tone={STATE_TONE[sale.state]}>{sale.state}</StatusPill>
       </div>
       <p className="small muted" style={{ margin: '4px 0 12px' }}>
-        {formatUnits(sale.supply, sale.decimals)} {tokenLabel(sale.token)} · reserve {formatUsdc(sale.reserve)} USDC · {sale.bids} sealed bids
+        {formatUnits(sale.supply, sale.decimals)} {tokenLabel(sale.token)} · reserve {formatUsdc(sale.reserve)} {priceUnitLabel(tokenLabel(sale.token), sale.lotExp)} ·{' '}
+        {sale.bids} sealed bids
+      </p>
+      <p className="small muted" style={{ margin: '0 0 12px' }}>
+        Seller <span className="mono">{sale.seller}</span>
+        {config.teamAccounts.includes(sale.seller) ? ' · team-funded demo sale; the seller also runs the keeper, the relayer and this page' : ''}
       </p>
       <ConditionBar sale={sale} />
       {sale.state === 'Open' && cond.closed && (!cond.escrowOk || !cond.biddersOk) ? (

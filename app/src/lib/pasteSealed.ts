@@ -10,15 +10,36 @@ export interface PastedBid {
   origin: 'base' | 'arb' | 'sol' | 'near' | undefined;
   /** The JSON carried a `salt`: it is ignored and never sent. */
   saltIgnored: boolean;
-  /** The signer the CLI sealed for, when the JSON says so. */
-  signer: string | undefined;
+  /** The signer the CLI sealed for (required: only paste output you produced yourself, for your own account). */
+  signer: string;
+}
+
+/** The deployment this page talks to; the ciphertext only opens under the contract and network it was sealed for. */
+export interface PasteTarget {
+  contract: string;
+  network: 'mainnet' | 'testnet';
 }
 
 export type PasteResult = { ok: true; bid: PastedBid } | { ok: false; error: string };
 
 const ORIGINS = ['base', 'arb', 'sol', 'near'] as const;
 
-export function parsePastedBid(text: string, saleId: string): PasteResult {
+/** The transfer inside the printed `payload` must move exactly the pasted escrow to the contract. */
+function payloadMismatch(payload: unknown, escrow: bigint, contract: string): string | null {
+  if (typeof payload !== 'string') return null; // --no-payload
+  try {
+    const intent = (JSON.parse(payload) as { intents?: { receiver_id?: unknown; tokens?: Record<string, unknown> }[] }).intents?.[0];
+    const amounts = Object.values(intent?.tokens ?? {}).map((a) => BigInt(a as string));
+    if (intent?.receiver_id !== contract || amounts.length !== 1 || amounts[0] !== escrow) {
+      return 'The payload in this JSON does not transfer the escrow to this contract. Re-run `pnpm seal:bid` and paste its output unchanged.';
+    }
+  } catch {
+    return 'The payload in this JSON cannot be read. Re-run `pnpm seal:bid` and paste its output unchanged.';
+  }
+  return null;
+}
+
+export function parsePastedBid(text: string, saleId: string, target: PasteTarget): PasteResult {
   let j: unknown;
   try {
     j = JSON.parse(text);
@@ -28,6 +49,13 @@ export function parsePastedBid(text: string, saleId: string): PasteResult {
   if (typeof j !== 'object' || j === null || Array.isArray(j)) return { ok: false, error: 'Expected a JSON object.' };
   const o = j as Record<string, unknown>;
   if (String(o.sale) !== saleId) return { ok: false, error: `This bid is for sale ${String(o.sale)}, this page is sale ${saleId}.` };
+  if (o.contract !== target.contract || o.network !== target.network) {
+    return {
+      ok: false,
+      error: `This bid was sealed for ${String(o.contract)} on ${String(o.network)}, but this page uses ${target.contract} on ${target.network}. Re-run \`pnpm seal:bid --network ${target.network}\` for this sale.`,
+    };
+  }
+  if (typeof o.signer !== 'string' || o.signer === '') return { ok: false, error: 'Missing signer. Paste only the output of `pnpm seal:bid --signer <your account>` that you produced yourself.' };
   if (typeof o.ct !== 'string') return { ok: false, error: 'Missing ct.' };
   let ctLen = -1;
   try {
@@ -45,10 +73,12 @@ export function parsePastedBid(text: string, saleId: string): PasteResult {
     return { ok: false, error: 'escrow must be a whole number of micro-USDC (as printed by `pnpm seal:bid`).' };
   }
   if (escrow < MIN_ESCROW) return { ok: false, error: 'escrow must be at least 1 USDC (1000000).' };
+  const mismatch = payloadMismatch(o.payload, escrow, target.contract);
+  if (mismatch) return { ok: false, error: mismatch };
   const origin = ORIGINS.find((x) => x === o.origin);
   return {
     ok: true,
-    bid: { ct: o.ct, cm: o.cm, escrow, origin, saltIgnored: o.salt !== undefined, signer: typeof o.signer === 'string' ? o.signer : undefined },
+    bid: { ct: o.ct, cm: o.cm, escrow, origin, saltIgnored: o.salt !== undefined, signer: o.signer },
   };
 }
 

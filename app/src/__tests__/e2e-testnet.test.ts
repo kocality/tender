@@ -203,7 +203,7 @@ describe.skipIf(!RUN)('testnet end to end', () => {
 
     // decrypt in the app's own module: every bid must come back ok
     const cfg = await getConfig();
-    const decrypt = async () => decryptSale({ config: cfg, sale: keyed, bids: await getAllBids(saleId), contractId: config.tenderContractId });
+    const decrypt = async () => decryptSale({ config: cfg, sale: keyed, bids: await getAllBids(saleId), contractId: config.tenderContractId, expectedMpk: cfg.mpcPublicKey });
     let dec = await decrypt();
     expect(dec.keyOk, dec.keyError).toBe(true);
     expect(dec.rows.map((r) => r.status)).toEqual(['ok', 'ok']);
@@ -268,7 +268,7 @@ describe.skipIf(!RUN)('testnet end to end', () => {
     expect(bundle.sale!.state).toBe('Finalized');
     expect(bundle.result).not.toBeNull();
     const cfg = await getConfig();
-    const dec = await decryptSale({ config: cfg, sale: bundle.sale!, bids: bundle.bids, contractId: config.tenderContractId });
+    const dec = await decryptSale({ config: cfg, sale: bundle.sale!, bids: bundle.bids, contractId: config.tenderContractId, expectedMpk: cfg.mpcPublicKey });
     expect(dec.keyOk, dec.keyError).toBe(true);
     expect(dec.rows.every((r) => r.status === 'ok')).toBe(true);
     for (const r of dec.rows) {

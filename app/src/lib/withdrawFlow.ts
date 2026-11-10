@@ -7,6 +7,7 @@ import {
   type DefusePayload,
 } from '@tender/intents';
 import { config } from '../config';
+import { chainNowMs } from './chainClock';
 import { parseUnits } from './amounts';
 import { OneClickError, getStatus, isTerminal, type QuoteResponse, type StatusResponse } from './oneclick';
 import { recipientError, type DestChain, type WithdrawSource } from './withdrawRoutes';
@@ -38,6 +39,11 @@ export function validateWithdraw(o: {
   return errors.length > 0 ? { ok: false, errors } : { ok: true, amount };
 }
 
+/** What the form says while "Get quote" is disabled: an empty amount gets its own sentence instead of silence. */
+export function withdrawMessages(check: Extract<WithdrawValidation, { ok: false }>, amountText: string): string[] {
+  return amountText.trim() === '' ? ['Enter an amount to withdraw.', ...check.errors.filter((e) => !e.startsWith('Amount'))] : check.errors;
+}
+
 /** `null` when the quote can be paid with a Transfer now, else why not. */
 export function quoteProblem(quote: QuoteResponse, balance: bigint, nowMs: number = Date.now()): string | null {
   const q = quote.quote;
@@ -60,7 +66,7 @@ export async function buildWithdrawPayload(o: {
   nowMs?: number;
 }): Promise<DefusePayload> {
   const saltHex = o.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
-  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs);
+  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs ?? chainNowMs());
   return buildPayload({
     signerId: o.signerId,
     verifyingContract: config.intentsContractId,

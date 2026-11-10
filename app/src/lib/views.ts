@@ -265,8 +265,9 @@ export function parseKeyReq(raw: unknown): KeyReq {
   };
 }
 
-function view<T>(method: string, args: unknown): Promise<T> {
-  return viewCall<T>(config.rpcUrls, config.tenderContractId, method, args);
+/** `at` = read the state at that block height (one height for every view of a bundle), else the latest final block. */
+function view<T>(method: string, args: unknown, at?: number): Promise<T> {
+  return viewCall<T>(config.rpcUrls, config.tenderContractId, method, args, at === undefined ? undefined : { blockId: at });
 }
 
 const SALES_PAGE = 50;
@@ -279,8 +280,8 @@ export async function getConfig(): Promise<Config> {
 }
 
 /** `null` when the sale does not exist (not created yet). */
-export async function getSale(id: string): Promise<Sale | null> {
-  const raw = await view<unknown>('get_sale', { id });
+export async function getSale(id: string, at?: number): Promise<Sale | null> {
+  const raw = await view<unknown>('get_sale', { id }, at);
   return raw === null ? null : parseSale(raw);
 }
 
@@ -290,25 +291,25 @@ export async function getSales(from: number, limit = SALES_PAGE): Promise<Sale[]
 }
 
 /** Pages of 64 until a short page (the contract silently trims `limit`). `from` is a JSON number here (u16), unlike the u64 string ids. */
-export async function getAllBids(id: string): Promise<Bid[]> {
+export async function getAllBids(id: string, at?: number): Promise<Bid[]> {
   const out: Bid[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
-    const raw = await view<unknown[]>('get_bids', { id, from: out.length, limit: BIDS_PAGE });
+    const raw = await view<unknown[]>('get_bids', { id, from: out.length, limit: BIDS_PAGE }, at);
     out.push(...raw.map(parseBid));
     if (raw.length < BIDS_PAGE) break;
   }
   return out;
 }
 
-export async function getResult(id: string): Promise<SaleResult | null> {
-  return parseResult(await view<unknown>('get_result', { id }));
+export async function getResult(id: string, at?: number): Promise<SaleResult | null> {
+  return parseResult(await view<unknown>('get_result', { id }, at));
 }
 
 /** Pages of 100 until a short page. */
-export async function getKeyLog(): Promise<KeyReq[]> {
+export async function getKeyLog(at?: number): Promise<KeyReq[]> {
   const out: KeyReq[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
-    const raw = await view<unknown[]>('get_key_log', { from: String(out.length), limit: KEY_LOG_PAGE });
+    const raw = await view<unknown[]>('get_key_log', { from: String(out.length), limit: KEY_LOG_PAGE }, at);
     out.push(...raw.map(parseKeyReq));
     if (raw.length < KEY_LOG_PAGE) break;
   }

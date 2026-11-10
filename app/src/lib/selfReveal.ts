@@ -1,5 +1,6 @@
 import { buildPayload, buildVersionedNonce, currentSalt, makeDeadline, revealMsg, transferIntent, type DefusePayload, type RevealItem } from '@tender/intents';
 import { config } from '../config';
+import { chainNowMs } from './chainClock';
 
 /**
  * Gasless self-reveal: one Intents Transfer of 1 micro-USDC to the contract with `msg = {op: reveal, sale, items}`.
@@ -15,7 +16,7 @@ export async function buildSelfReveal(o: {
   nowMs?: number;
 }): Promise<DefusePayload> {
   const saltHex = o.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
-  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs);
+  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs ?? chainNowMs());
   return buildPayload({
     signerId: o.signerId,
     verifyingContract: config.intentsContractId,

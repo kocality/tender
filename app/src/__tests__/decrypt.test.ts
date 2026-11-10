@@ -34,7 +34,7 @@ function saleFor(mode: AppPkMode, msk = v0.msk) {
 describe.each(['identity', 'generator', 'plain'] as const)('decryptSale in %s mode', (mode) => {
   test('6 honest bids are ok, a random ciphertext is invalid_ct, a copied bid is cm_mismatch', async () => {
     const { cfg, sale } = saleFor(mode);
-    const out = await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId });
+    const out = await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId, expectedMpk: mpk });
     expect(out.keyOk).toBe(true);
     expect(out.rows.map((r) => r.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'invalid_ct', 'cm_mismatch']);
     for (const [i, b] of demo.bids.entries()) {
@@ -47,29 +47,29 @@ describe.each(['identity', 'generator', 'plain'] as const)('decryptSale in %s mo
 describe('decryptSale key checks', () => {
   test('a key made with another master secret fails the key check and decrypts nothing', async () => {
     const { cfg, sale } = saleFor('identity', vectors[1]!.msk);
-    const out = await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId });
+    const out = await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId, expectedMpk: mpk });
     expect(out.keyOk).toBe(false);
     expect(out.rows).toEqual([]);
   });
   test('a key for another sale path fails the key check', async () => {
     const { cfg, sale } = saleFor('generator');
-    const out = await decryptSale({ config: cfg, sale: { ...sale, path: 'tender/2/00112233445566778899aabbccddeeff' }, bids: sealedBids(), contractId });
+    const out = await decryptSale({ config: cfg, sale: { ...sale, path: 'tender/2/00112233445566778899aabbccddeeff' }, bids: sealedBids(), contractId, expectedMpk: mpk });
     expect(out.keyOk).toBe(false);
   });
   test('no key yet', async () => {
     const { cfg } = saleFor('identity');
-    const out = await decryptSale({ config: cfg, sale: { id: '1', path, key: null }, bids: [], contractId });
+    const out = await decryptSale({ config: cfg, sale: { id: '1', path, key: null }, bids: [], contractId, expectedMpk: mpk });
     expect(out.keyOk).toBe(false);
   });
   test('the app mode matters: reading a generator-mode key as identity fails the check', async () => {
     const { sale } = saleFor('generator');
-    const out = await decryptSale({ config: { appPkMode: 'identity', mpcPublicKey: mpk }, sale, bids: [], contractId });
+    const out = await decryptSale({ config: { appPkMode: 'identity', mpcPublicKey: mpk }, sale, bids: [], contractId, expectedMpk: mpk });
     expect(out.keyOk).toBe(false);
   });
   test('reports progress and yields between chunks of four', async () => {
     const { cfg, sale } = saleFor('identity');
     const seen: number[] = [];
-    await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId, onProgress: (d) => seen.push(d) });
+    await decryptSale({ config: cfg, sale, bids: sealedBids(), contractId, expectedMpk: mpk, onProgress: (d) => seen.push(d) });
     expect(seen).toEqual([4, 8]);
   });
 });

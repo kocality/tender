@@ -45,30 +45,32 @@ export function OpenPanel({ sale, nowNs, keyRequestBlock }: { sale: Sale; nowNs:
         </p>
       ) : null}
       {cond.canOpen ? (
-        <button type="button" className="primary" onClick={() => run('open')} disabled={busy !== null}>
+        <button type="button" className="primary" onClick={() => run('open')} disabled={busy !== null} aria-label={busy === 'open' ? undefined : `Open (anyone), sale ${sale.id}`}>
           {busy === 'open' ? 'Waiting for wallet…' : 'Open (anyone)'}
         </button>
       ) : null}
       {cond.canCancel ? (
-        <button type="button" onClick={() => run('cancel')} disabled={busy !== null}>
+        <button type="button" onClick={() => run('cancel')} disabled={busy !== null} aria-label={busy === 'cancel' ? undefined : `Cancel (anyone), sale ${sale.id}`}>
           {busy === 'cancel' ? 'Waiting for wallet…' : 'Cancel (anyone)'}
         </button>
       ) : null}
       {cond.canCancel && cond.cancelReason === 'no_key_after_24h' ? (
         <p className="small muted">More than 24 hours after close with no key and no request in flight.</p>
       ) : null}
-      {tx ? (
-        <p className="small" role="status">
-          {tx.kind === 'open' ? 'Open submitted' : 'Cancel submitted'}
-          {tx.hash ? (
-            <>
-              {' '}
-              · transaction <TxLink hash={tx.hash} />
-            </>
-          ) : null}
-          . The page follows the sale state every few seconds.
-        </p>
-      ) : null}
+      <div role="status">
+        {tx ? (
+          <p className="small" style={{ margin: 0 }}>
+            {tx.kind === 'open' ? 'Open submitted' : 'Cancel submitted'}
+            {tx.hash ? (
+              <>
+                {' '}
+                · transaction <TxLink hash={tx.hash} />
+              </>
+            ) : null}
+            . The page follows the sale state every few seconds.
+          </p>
+        ) : null}
+      </div>
       {error ? (
         <p className="result bad" role="alert">
           {error}

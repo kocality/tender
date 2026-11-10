@@ -1,5 +1,5 @@
 import { ViewPanic, viewCall } from '@tender/intents';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { recoveryFor } from '../lib/bidFlow';
 import { WALLET_BUSY, WALLET_DECLINED, humanError, humanStatus, isRpcUnavailable, isUserRejection } from '../lib/errors';
 import { OneClickError } from '../lib/oneclick';
@@ -112,5 +112,21 @@ describe('a dead RPC URL (the real error from the intents RPC client)', () => {
     const msg = (err as Error).message;
     expect(isRpcUnavailable(msg)).toBe(true);
     expect(humanError(err)).toContain('not answering');
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('a missing contract is not "RPC unavailable" (X12F-02)', () => {
+  test('UNKNOWN_ACCOUNT from the node surfaces at once with its own text', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url === 'http://one.invalid'
+        ? Response.json({ jsonrpc: '2.0', id: 'tender', error: { name: 'HANDLER_ERROR', cause: { name: 'UNKNOWN_ACCOUNT' }, code: -32000, message: 'Server error', data: 'account v1.tenderseal.near does not exist while viewing' } })
+        : new Response('THIS ENDPOINT IS DEPRECATED', { status: 429 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const err = (await viewCall(['http://one.invalid', 'http://two.invalid'], 'v1.tenderseal.near', 'get_config', {}).catch((e: Error) => e)) as Error;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(isRpcUnavailable(err.message)).toBe(false); // the page says "Could not read <contract>", not "RPC unavailable, retrying"
   });
 });

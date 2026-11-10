@@ -4,7 +4,7 @@ import { RPC_UNAVAILABLE, isRpcUnavailable } from '../lib/errors';
 /** Shown while the initial read is under way; the page keeps its place so nothing jumps when data arrives. */
 export function Loading({ what }: { what: string }) {
   return (
-    <div className="card skeleton" role="status" aria-busy="true">
+    <div className="card skeleton" role="status">
       <p className="muted" style={{ margin: 0 }}>
         {`Loading ${what}…`}
       </p>

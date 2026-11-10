@@ -32,8 +32,8 @@ function ratio(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
-// [text token, background token]
-const PAIRS: [string, string][] = [
+// [foreground token, background token, minimum ratio]: 4.5 for text, 3 for the boundary of a form field (WCAG 1.4.11)
+const PAIRS: [string, string, number?][] = [
   ['text', 'bg'],
   ['text', 'surface'],
   ['text', 'surface-2'],
@@ -49,6 +49,9 @@ const PAIRS: [string, string][] = [
   ['bad', 'bad-bg'],
   ['bad', 'surface'],
   ['text', 'bad-bg'],
+  ['field-border', 'surface', 3],
+  ['field-border', 'bg', 3],
+  ['field-border', 'surface-2', 3],
 ];
 
 describe('colour contrast', () => {
@@ -63,12 +66,31 @@ describe('colour contrast', () => {
   });
 
   for (const [name, t] of Object.entries(themes)) {
-    test(`${name}: every text pair reaches 4.5:1`, () => {
+    test(`${name}: every text pair reaches 4.5:1 and every field border 3:1`, () => {
       expect(Object.keys(t).length).toBeGreaterThanOrEqual(14); // the parser found the whole token block
-      const low = PAIRS.map(([fg, bg]) => ({ fg, bg, r: ratio(t[fg]!, t[bg]!) })).filter((x) => x.r < 4.5);
+      const low = PAIRS.map(([fg, bg, min = 4.5]) => ({ fg, bg, min, r: ratio(t[fg]!, t[bg]!) })).filter((x) => x.r < x.min);
       expect(low).toEqual([]);
     });
   }
+});
+
+describe('form fields and the chart (X12A-03, QA-18)', () => {
+  const rule = (selector: string) => {
+    const at = css.indexOf(`\n${selector} {`) + 1;
+    if (at === 0) throw new Error(`styles.css has no rule for ${selector}`);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  test('input, select and textarea draw their border with --field-border', () => {
+    expect(rule('select,\ninput')).toContain('border: 1px solid var(--field-border)');
+    expect(rule('textarea')).toContain('border: 1px solid var(--field-border)');
+  });
+  test('chart text is raised on phones, where the 600-unit viewBox shrinks it to about half', () => {
+    expect(css).toMatch(/@media \(max-width: 480px\) \{\s*\.chart \.tick \{\s*font-size: 20px;/);
+  });
+  test('the visually hidden helper is complete, and an empty live region takes no space', () => {
+    expect(rule('.sr-only')).toMatch(/margin: -1px;[\s\S]*padding: 0;[\s\S]*border: 0;/);
+    expect(css).toMatch(/\[role='status'\]:empty \{\s*position: absolute;/);
+  });
 });
 
 describe('stylesheet rules the polish card needs', () => {

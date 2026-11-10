@@ -36,6 +36,8 @@ export async function connectPhantom(): Promise<IntentSigner> {
     origin: 'sol',
     publicKey: pk.toString(),
     async sign(p) {
+      // An account switch in Phantom is global across tabs: signing with the new key under the old public key fails as invalid_signature.
+      if (phantom.publicKey?.toString() !== pk.toString()) throw new WalletError('Phantom switched account since you connected. Reconnect the wallet and sign again.');
       const str = payloadString(p);
       const out = await phantom.signMessage(utf8(str), 'utf8');
       return rawEd25519FromWallet(str, pk32, signatureBytes(out));

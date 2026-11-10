@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { describe, expect, test } from 'vitest';
-import { ORIGIN_ASSET, TERMINAL, depositAmountFor, depositQuoteBody, isTerminal, quoteDeposit } from '../lib/oneclick';
+import { ORIGIN_ASSET, TERMINAL, depositAmountFor, depositQuoteBody, isTerminal, quoteDeposit, quoteShortfall } from '../lib/oneclick';
 
 const QUOTE_TOKEN = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
 
@@ -14,6 +14,25 @@ describe('depositAmountFor', () => {
   });
   test('always covers the gap', () => {
     for (const gap of [1n, 999_999n, 1_000_001n, 7_654_321n]) expect(depositAmountFor(gap)).toBeGreaterThan(gap);
+  });
+});
+
+describe('the deposit survives the quote\'s own 1 % slippage (X12-04 numbers)', () => {
+  test('99 % of the deposit still covers the gap for every size, not only below about 495 USDC', () => {
+    for (const usdc of [1n, 100n, 495n, 496n, 1000n, 50_000n]) {
+      const gap = usdc * 1_000_000n;
+      expect((depositAmountFor(gap) * 99n) / 100n).toBeGreaterThanOrEqual(gap);
+    }
+    expect((depositAmountFor(1_000_000_000n) * 99n) / 100n).toBeGreaterThanOrEqual(1_000_000_000n);
+  });
+  test('small gaps keep the I9 amounts exactly', () => {
+    expect(depositAmountFor(495_000_000n)).toBe(500_000_000n);
+    expect(depositAmountFor(3_000_000n)).toBe(3_080_000n);
+  });
+  test('a quote whose guaranteed minimum is below what is needed reports the shortfall', () => {
+    expect(quoteShortfall('2999000', 3_000_000n)).toBe(1_000n);
+    expect(quoteShortfall('3000000', 3_000_000n)).toBe(0n);
+    expect(quoteShortfall('3100000', 3_000_000n)).toBe(0n);
   });
 });
 

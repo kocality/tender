@@ -12,12 +12,16 @@ export function DecryptPanel({
   sale,
   bids,
   cfg,
+  cfgError = null,
+  onRetryCfg,
   result,
   onResult,
 }: {
   sale: Sale;
   bids: Bid[];
   cfg: Config | null;
+  cfgError?: string | null;
+  onRetryCfg?: () => void;
   result: DecryptResult | null;
   onResult: (r: DecryptResult) => void;
 }) {
@@ -46,6 +50,16 @@ export function DecryptPanel({
       <p className="small muted">
         The sale key is public once released. Decryption happens in this browser; nothing you see here is sent anywhere.
       </p>
+      {!cfg && cfgError ? (
+        <p className="note" role="status">
+          Config not loaded: reading the contract config failed, so bids cannot be decrypted yet.{' '}
+          {onRetryCfg ? (
+            <button type="button" onClick={onRetryCfg}>
+              Retry
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       <button type="button" className="primary" onClick={run} disabled={!cfg || progress !== null || bids.length === 0}>
         {progress ? `Decrypting ${progress.done} / ${progress.total}…` : 'Decrypt all bids in this browser'}
       </button>

@@ -1,4 +1,4 @@
-import { createWalletClient, custom, type EIP1193Provider } from 'viem';
+import { createWalletClient, custom, recoverMessageAddress, type EIP1193Provider } from 'viem';
 import { erc191FromWallet, evmSignerId, payloadString } from '@tender/intents';
 import { WalletError, type IntentSigner } from './types';
 
@@ -49,6 +49,11 @@ export async function connectEvm(origin: 'base' | 'arb'): Promise<IntentSigner> 
     async sign(p) {
       const str = payloadString(p);
       const sig = await client.signMessage({ account: address, message: str });
+      // MetaMask signs with its selected account, which may no longer be the one connected here.
+      const by = await recoverMessageAddress({ message: str, signature: sig });
+      if (evmSignerId(by) !== evmSignerId(address)) {
+        throw new WalletError(`The wallet signed as ${evmSignerId(by)}, not ${evmSignerId(address)}, the account connected here. Reconnect the wallet and sign again.`);
+      }
       return erc191FromWallet(str, sig);
     },
   };

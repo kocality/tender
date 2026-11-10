@@ -90,6 +90,12 @@ describe('sale page panels', () => {
     expect(html).not.toMatch(FORBIDDEN);
   });
 
+  test('the rows at the clearing price are named in text, not only set in bold (X12A-09)', () => {
+    const html = render({ id: '1', sale: parseSale(sale1f), bids: finalBids, result: finalResult });
+    expect(html).toContain('class="row-pstar"');
+    expect(html).toContain('bid at the clearing price P*');
+  });
+
   test('a stored result that disagrees with the recomputation shows the difference table', () => {
     const sale = parseSale(sale1f);
     const html = render({ id: '1', sale, bids: finalBids, result: { ...finalResult, sellerUsdc: finalResult.sellerUsdc + 1n } });

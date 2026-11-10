@@ -1,4 +1,4 @@
-import type { IntentsErrorKind, simulateIntents } from '@tender/intents';
+import type { IntentsErrorKind, MultiPayload, simulateIntents } from '@tender/intents';
 import { TRY_RESULT } from '../copy';
 import { humanError } from './errors';
 
@@ -16,12 +16,14 @@ export interface TryOutcome {
  * What a `simulate_intents` answer means for the free signing check. The contract verifies the signature before it
  * looks at balances (F7), so insufficient balance and an unregistered NEAR key both prove the signature itself is valid.
  */
-export function interpretSimulation(sim: SimulationResult): TryOutcome {
+export function interpretSimulation(sim: SimulationResult, standard?: MultiPayload['standard']): TryOutcome {
   if (sim.ok) return { kind: 'ok', tone: 'ok', text: TRY_RESULT.funded, signAgain: false };
   switch (sim.kind) {
     case 'insufficient_balance':
       return { kind: sim.kind, tone: 'ok', text: TRY_RESULT.insufficientBalance, signAgain: false };
     case 'public_key_not_registered':
+      // Only a named NEAR account has a key to register; for EVM and Solana the same panic means another account signed.
+      if (standard !== undefined && standard !== 'nep413') return { kind: sim.kind, tone: 'bad', text: TRY_RESULT.otherAccount, signAgain: false };
       return { kind: sim.kind, tone: 'warn', text: TRY_RESULT.notRegistered, signAgain: false };
     case 'invalid_salt':
       return { kind: sim.kind, tone: 'bad', text: `The Intents salt changed while signing (${sim.message}). Sign again.`, signAgain: true };

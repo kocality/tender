@@ -12,12 +12,22 @@ export function usePolling<T>(load: () => Promise<T>, intervalMs: number, deps: 
 
   useEffect(() => {
     let alive = true;
+    // Reads can overlap (3+ views with retries outlast the 5 s interval): only an answer newer than the last one shown may replace it.
+    let started = 0;
+    let shown = 0;
     const run = async () => {
+      const mine = ++started;
       try {
         const data = await load();
-        if (alive) setState({ data, error: null, loading: false });
+        if (alive && mine > shown) {
+          shown = mine;
+          setState({ data, error: null, loading: false });
+        }
       } catch (e) {
-        if (alive) setState((s) => ({ data: s.data, error: e instanceof Error ? e.message : String(e), loading: false }));
+        if (alive && mine > shown) {
+          shown = mine;
+          setState((s) => ({ data: s.data, error: e instanceof Error ? e.message : String(e), loading: false }));
+        }
       }
     };
     setState({ data: null, error: null, loading: true });

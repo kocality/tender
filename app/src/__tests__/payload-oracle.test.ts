@@ -1,6 +1,8 @@
 /// <reference types="node" />
 // Our hand-built payloads vs @defuse-protocol/intents-sdk 0.95.0 (dev-only oracle: production code builds its own payloads).
 // The SDK's ESM build fails to load in Node, so it is loaded through its CJS build.
+// It pulls ~1700 modules from ~160 packages that would run with the privileges of whoever runs `pnpm -r test` (on a machine that
+// holds mainnet keys), so it is loaded only on request: `ORACLE=1 pnpm --filter @tender/app test` (CI job, or after a deliberate SDK bump).
 import { createRequire } from 'node:module';
 import { describe, expect, test } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -26,7 +28,8 @@ import {
   type MultiPayload,
 } from '@tender/intents';
 
-const sdk = createRequire(import.meta.url)('@defuse-protocol/intents-sdk');
+const ORACLE = process.env.ORACLE === '1';
+const sdk: any = ORACLE ? createRequire(import.meta.url)('@defuse-protocol/intents-sdk') : null;
 
 const USDC = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
 const SALT = '252812b3';
@@ -86,7 +89,7 @@ async function nep413Pair(): Promise<{ ours: MultiPayload; theirs: MultiPayload;
   return { ours, theirs, sdkHash, ourHash };
 }
 
-describe('intents-sdk 0.95.0 oracle', () => {
+describe.skipIf(!ORACLE)('intents-sdk 0.95.0 oracle', () => {
   test('oracle_nonce', () => {
     const theirs = sdk.VersionedNonceBuilder.encodeNonce(fromHex(SALT), new Date(DEADLINE_ISO), RANDOM15);
     expect(toBase64(NONCE)).toBe(theirs);

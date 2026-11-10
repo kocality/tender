@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { mtBatchBalanceOf, simulateIntents, type MultiPayload } from '@tender/intents';
+import { AmountField } from '../components/AmountField';
 import { CopyButton } from '../components/CopyButton';
 import { HonestNote } from '../components/HonestNote';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
-import { recoveryFor, type Recovery } from '../lib/bidFlow';
+import { canRegisterKey, recoveryFor, type Recovery } from '../lib/bidFlow';
+import { useChainOffset } from '../lib/chainClock';
 import { liveQuoteToken } from '../lib/bidPayload';
 import { humanError, humanStatus } from '../lib/errors';
 import { formatUnits } from '../lib/format';
 import { addIntentsKey } from '../lib/near-tx';
 import { quoteWithdraw, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
 import { RelayError, relay } from '../lib/relay';
-import { buildWithdrawPayload, followWithdraw, quoteProblem, txHashes, validateWithdraw, withdrawEvidence } from '../lib/withdrawFlow';
+import { buildWithdrawPayload, followWithdraw, quoteProblem, txHashes, validateWithdraw, withdrawEvidence, withdrawMessages } from '../lib/withdrawFlow';
 import {
   WITHDRAW_TARGETS,
   defaultRecipient,
@@ -24,6 +26,7 @@ import {
 import type { IntentSigner } from '../wallets/types';
 
 export function Withdraw() {
+  useChainOffset(); // payload deadlines follow the chain's clock
   const [signer, setSigner] = useState<IntentSigner | null>(null);
   const [sources, setSources] = useState<WithdrawSource[]>([]);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -60,10 +63,10 @@ export function Withdraw() {
   };
 
   const onConnect = async (s: IntentSigner) => {
+    startOver(); // a signed payload belongs to the account that signed it
     setSigner(s);
     setRecipient(defaultRecipient(target.chain, s));
     setBusy('balances');
-    forgetQuote();
     try {
       const list = withdrawSources(await liveQuoteToken());
       const values = await mtBatchBalanceOf(config.rpcUrls, config.intentsContractId, s.signerId, list.map((x) => x.tokenId));
@@ -122,6 +125,9 @@ export function Withdraw() {
   };
 
   const route = (r: Recovery) => {
+    // The signed payload cannot be fixed: sign again / get a new quote starts from an unsigned state, or the buttons would stay hidden.
+    if (r.to === 'sign_again' || r.to === 'fund') setSigned(null);
+    if (r.to === 'fund') setQuote(null);
     setRecovery(r);
     setProblem(r.to === 'fund' ? 'Your Intents balance is below the quoted amount. Get a new quote.' : r.message);
   };
@@ -135,7 +141,7 @@ export function Withdraw() {
     try {
       const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [mp]);
       if (!sim.ok) {
-        route(recoveryFor(sim.kind, sim.message));
+        route(recoveryFor(sim.kind, sim.message, mp.standard));
         return;
       }
       const { txHash } = await relay([mp]);
@@ -145,7 +151,7 @@ export function Withdraw() {
       setStatus(final);
       void refreshBalances();
     } catch (e) {
-      if (e instanceof RelayError) route(recoveryFor(e.kind, e.message));
+      if (e instanceof RelayError) route(recoveryFor(e.kind, e.message, mp.standard));
       else fail(e);
     } finally {
       setBusy(null);
@@ -180,7 +186,7 @@ export function Withdraw() {
   };
 
   const doRegisterKey = async () => {
-    if (!signed || signed.standard === 'erc191') return;
+    if (!signed || !canRegisterKey(signed, signer?.signerId) || signed.standard !== 'nep413') return;
     setBusy('register');
     setProblem(null);
     try {
@@ -216,13 +222,13 @@ export function Withdraw() {
       </HonestNote>
 
       <section className="card" aria-label="Wallet">
-        <h3>1. Wallet</h3>
-        <WalletPicker signer={signer} onConnect={(s) => void onConnect(s)} />
+        <h2 className="sub">1. Wallet</h2>
+        <WalletPicker signer={signer} onConnect={(s) => void onConnect(s)} showOrigin={false} />
       </section>
 
       {signer && source ? (
         <section className="card" style={{ marginTop: 16 }} aria-label="Withdrawal">
-          <h3>2. What to withdraw</h3>
+          <h2 className="sub">2. What to withdraw</h2>
           <div className="stack">
             <label className="field">
               <span>Token in your Intents account</span>
@@ -241,23 +247,17 @@ export function Withdraw() {
                 ))}
               </select>
             </label>
-            <label className="field">
-              <span>Amount ({source.symbol})</span>
-              <span className="row">
-                <input
-                  value={amountText}
-                  disabled={locked}
-                  inputMode="decimal"
-                  onChange={(e) => {
-                    setAmountText(e.target.value);
-                    forgetQuote();
-                  }}
-                />
-                <button type="button" disabled={locked} onClick={() => pickSource(source, balances[source.tokenId] ?? 0n)}>
-                  All
-                </button>
-              </span>
-            </label>
+            <AmountField
+              id="withdraw-amount"
+              label={`Amount (${source.symbol})`}
+              value={amountText}
+              disabled={locked}
+              onChange={(text) => {
+                setAmountText(text);
+                forgetQuote();
+              }}
+              onAll={() => pickSource(source, balances[source.tokenId] ?? 0n)}
+            />
             <label className="field">
               <span>Send to</span>
               <select value={targetId} disabled={locked} onChange={(e) => onTarget(e.target.value as WithdrawTarget['id'])}>
@@ -282,13 +282,15 @@ export function Withdraw() {
               />
             </label>
           </div>
-          {check && !check.ok && amountText !== '' ? (
-            <ul className="small">
-              {check.errors.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
-          ) : null}
+          <div role="status">
+            {check && !check.ok ? (
+              <ul className="small">
+                {withdrawMessages(check, amountText).map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
           {!signed ? (
             <button type="button" className="primary" disabled={busy !== null || !check || !check.ok} onClick={() => void doQuote()}>
               {busy === 'quote' ? 'Requesting a quote…' : 'Get quote'}
@@ -299,7 +301,7 @@ export function Withdraw() {
 
       {q && source ? (
         <section className="card" style={{ marginTop: 16 }} aria-label="Quote">
-          <h3>3. Quote</h3>
+          <h2 className="sub">3. Quote</h2>
           <dl className="kv">
             <dt>You send</dt>
             <dd>
@@ -348,7 +350,7 @@ export function Withdraw() {
 
       {signed && depositAddress ? (
         <section className="card" style={{ marginTop: 16 }} aria-label="Status">
-          <h3>4. Status</h3>
+          <h2 className="sub">4. Status</h2>
           <p className="small" role="status">
             1Click status: <strong>{status?.status ?? (relayTx ? 'waiting for 1Click' : 'not relayed yet')}</strong>
             {busy === 'follow' ? ' · checking every 5 s' : ''}

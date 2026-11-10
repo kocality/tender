@@ -18,7 +18,8 @@ const env = import.meta.env;
 
 const network: 'mainnet' | 'testnet' = env.VITE_NETWORK === 'testnet' ? 'testnet' : 'mainnet';
 const rpcUrl = str(env.VITE_NEAR_RPC_URL, 'https://free.rpc.fastnear.com');
-const rpcFallbacks = list(env.VITE_NEAR_RPC_FALLBACKS, ['https://rpc.mainnet.near.org']);
+// No default fallback: rpc.mainnet.near.org is deprecated and answers HTTP 429. Set VITE_NEAR_RPC_FALLBACKS to a live provider.
+const rpcFallbacks = list(env.VITE_NEAR_RPC_FALLBACKS, []);
 const tenderContractId = str(env.VITE_TENDER_CONTRACT_ID, 'v1.tenderseal.near');
 
 export interface AppConfig {
@@ -35,6 +36,10 @@ export interface AppConfig {
   oneClickApiUrl: string;
   /** Sale ids shown on the twin view, in order (left, right). */
   twinSales: [string, string];
+  /** Accounts of the team: a sale sold by one of them is labelled "team-funded demo sale". */
+  teamAccounts: string[];
+  /** Sale ids the team configured to miss their open thresholds on purpose (labelled on the twin view). */
+  demoFailSales: string[];
   nearblocksApiUrl: string;
   explorerUrl: string;
 }
@@ -54,6 +59,8 @@ export const config: AppConfig = {
   relayerUrl: str(env.VITE_RELAYER_URL, ''),
   oneClickApiUrl: str(env.VITE_ONECLICK_API_URL, 'https://1click.chaindefuser.com'),
   twinSales: twinSales(env.VITE_TWIN_SALES),
+  teamAccounts: list(env.VITE_TEAM_ACCOUNTS, ['tenderseal.near']),
+  demoFailSales: list(env.VITE_DEMO_FAIL_SALES, network === 'mainnet' ? ['0'] : []).filter((s) => /^\d+$/.test(s)),
   nearblocksApiUrl: str(env.VITE_NEARBLOCKS_API_URL, network === 'testnet' ? 'https://api-testnet.nearblocks.io/v3' : 'https://api.nearblocks.io/v3'),
   explorerUrl: str(env.VITE_EXPLORER_URL, network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io'),
 };

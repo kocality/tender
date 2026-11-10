@@ -2,13 +2,25 @@ import { USDC_DECIMALS } from './constants';
 
 const U64_MAX = (1n << 64n) - 1n;
 
-/** "3.6", 6 → 3600000n. Decimal text only, no floats; more fraction digits than `decimals` is an error, never rounded. */
+/**
+ * "3.6", 6 → 3600000n. Decimal text only, no floats; more fraction digits than `decimals` is an error, never rounded.
+ * A single comma with no dot is a decimal comma ("3,6"), as typed on keypads of comma-decimal locales. Mixed separators
+ * ("1.234,5") and a comma that may be a thousands separator ("1,000") are errors: they could be read two ways.
+ */
 export function parseUnits(text: string, decimals: number): bigint {
-  const s = text.trim();
+  const s = decimalPoint(text.trim());
   if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) throw new Error('Enter a number such as 3.6');
   const [whole = '', frac = ''] = s.split('.');
   if (frac.length > decimals) throw new Error(`At most ${decimals} decimal places`);
   return BigInt(whole || '0') * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, '0') || '0');
+}
+
+function decimalPoint(s: string): string {
+  if (!s.includes(',')) return s;
+  const [whole = '', frac = '', ...rest] = s.split(',');
+  if (s.includes('.') || rest.length > 0) throw new Error('Enter a number such as 3.6');
+  if (frac.length === 3 && /^[1-9]\d*$/.test(whole)) throw new Error('Write decimals with a dot, for example 3.600');
+  return `${whole}.${frac}`;
 }
 
 /**

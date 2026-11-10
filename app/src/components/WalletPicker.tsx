@@ -4,8 +4,24 @@ import { connectNear, nearReady } from '../wallets/near';
 import { connectPhantom } from '../wallets/phantom';
 import { walletErrorMessage, type IntentSigner } from '../wallets/types';
 
-/** Connects one of the three wallet kinds. A connection only reads the account; nothing is signed here. */
-export function WalletPicker({ signer, onConnect }: { signer: IntentSigner | null; onConnect: (s: IntentSigner) => void }) {
+/** The origin is fixed in the signer at connect time: picking another chain while connected must reconnect, or the quote and the badge would name the wrong chain. */
+export function shouldReconnectOnOrigin(signer: Pick<IntentSigner, 'kind' | 'origin'> | null, next: 'base' | 'arb'): boolean {
+  return signer?.kind === 'evm' && signer.origin !== next;
+}
+
+/**
+ * Connects one of the three wallet kinds. A connection only reads the account; nothing is signed here.
+ * `showOrigin` = false hides "Funds come from" on pages that never deposit (Withdraw, Reveal).
+ */
+export function WalletPicker({
+  signer,
+  onConnect,
+  showOrigin = true,
+}: {
+  signer: IntentSigner | null;
+  onConnect: (s: IntentSigner) => void;
+  showOrigin?: boolean;
+}) {
   const [evmOrigin, setEvmOrigin] = useState<'base' | 'arb'>('base');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,13 +56,23 @@ export function WalletPicker({ signer, onConnect }: { signer: IntentSigner | nul
         <button type="button" disabled={busy !== null} onClick={() => run('evm', () => connectEvm(evmOrigin))}>
           {busy === 'evm' ? 'Waiting for wallet…' : 'MetaMask'}
         </button>
-        <label className="small">
-          Funds come from{' '}
-          <select value={evmOrigin} onChange={(e) => setEvmOrigin(e.target.value as 'base' | 'arb')}>
-            <option value="base">Base</option>
-            <option value="arb">Arbitrum</option>
-          </select>
-        </label>
+        {showOrigin ? (
+          <label className="small">
+            Funds come from{' '}
+            <select
+              value={evmOrigin}
+              disabled={busy !== null}
+              onChange={(e) => {
+                const next = e.target.value as 'base' | 'arb';
+                setEvmOrigin(next);
+                if (shouldReconnectOnOrigin(signer, next)) void run('evm', () => connectEvm(next));
+              }}
+            >
+              <option value="base">Base</option>
+              <option value="arb">Arbitrum</option>
+            </select>
+          </label>
+        ) : null}
         <button type="button" disabled={busy !== null} onClick={() => run('phantom', connectPhantom)}>
           {busy === 'phantom' ? 'Waiting for wallet…' : 'Phantom (Solana)'}
         </button>

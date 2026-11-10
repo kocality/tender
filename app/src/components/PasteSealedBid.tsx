@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { config } from '../config';
 import { parsePastedBid, sealCommand, type PastedBid } from '../lib/pasteSealed';
 
 /** Use a bid sealed offline with `pnpm seal:bid`: the browser never sees the price. Salt, if present, is ignored. */
@@ -19,12 +20,12 @@ export function PasteSealedBid({
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
-    const res = parsePastedBid(text, saleId);
+    const res = parsePastedBid(text, saleId, { contract: config.tenderContractId, network: config.network });
     if (!res.ok) {
       setError(res.error);
       return;
     }
-    if (signerId && res.bid.signer && res.bid.signer !== signerId) {
+    if (signerId && res.bid.signer !== signerId) {
       setError(`This bid was sealed for ${res.bid.signer}, but the connected account is ${signerId}.`);
       return;
     }

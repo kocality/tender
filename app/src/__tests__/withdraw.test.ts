@@ -61,7 +61,7 @@ describe('the withdrawal Transfer', () => {
 describe('recipient validation', () => {
   test('EVM addresses', () => {
     expect(recipientError('base', SIGNER)).toBeNull();
-    expect(recipientError('arb', '0x19E7E376E7c213B7E7e7e46cc70A5dD086DAFF2A')).toBeNull();
+    expect(recipientError('arb', '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A')).toBeNull(); // EIP-55 checksum
     expect(recipientError('base', '0x123')).not.toBeNull();
     expect(recipientError('base', `0x${'g'.repeat(40)}`)).not.toBeNull();
     expect(recipientError('base', '')).not.toBeNull();
@@ -197,4 +197,17 @@ describe.skipIf(!process.env.LIVE)('live 1Click dry withdrawal quote', () => {
     expect(sim.ok).toBe(false);
     if (!sim.ok) expect(sim.kind).toBe('insufficient_balance');
   }, 30_000);
+});
+
+describe('EVM recipient checksum (X12-02 unicode, X12A-04)', () => {
+  const good = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'; // EIP-55 reference vector
+  const typo = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD'; // last letter's case flipped
+  test('a mixed-case address with a broken checksum is rejected on Base and Arbitrum', () => {
+    expect(recipientError('base', typo)).toMatch(/checksum/i);
+    expect(recipientError('arb', typo)).not.toBeNull();
+  });
+  test('the correct checksum and the all-lowercase form are accepted', () => {
+    expect(recipientError('base', good)).toBeNull();
+    expect(recipientError('base', good.toLowerCase())).toBeNull();
+  });
 });

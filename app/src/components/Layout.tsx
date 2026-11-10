@@ -24,7 +24,7 @@ export function Layout({ current, children }: { current: string; children: React
         </nav>
       </header>
       <p className="trust">{TRUST_LINE}</p>
-      <main>{children}</main>
+      <main tabIndex={-1}>{children}</main>
     </div>
   );
 }

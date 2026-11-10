@@ -1,4 +1,5 @@
-import { appId, checkKey, decryptBids, keyFromCkd } from '@tender/seal';
+import { MPC_DOMAIN2_PK, appId, checkKey, decryptBids, keyFromCkd } from '@tender/seal';
+import { config as appConfig } from '../config';
 import type { Bid, Config, Sale } from './views';
 
 // Everything here runs in the browser. Decrypted prices are shown on screen and never sent anywhere.
@@ -35,14 +36,18 @@ export async function decryptSale(o: {
   sale: Pick<Sale, 'id' | 'path' | 'key'>;
   bids: Pick<Bid, 'idx' | 'bidder' | 'escrow' | 'ct' | 'cm'>[];
   contractId: string;
+  /** The MPC key the sale key is checked against. Defaults to the key pinned for this app's network, never the one from get_config(). */
+  expectedMpk?: string;
   onProgress?: (done: number, total: number) => void;
 }): Promise<DecryptResult> {
   const { config, sale, bids, contractId } = o;
+  const mpk = o.expectedMpk ?? MPC_DOMAIN2_PK[appConfig.network];
   if (!sale.key) return { keyOk: false, keyError: 'No key has been released for this sale yet.', rows: [] };
   let S;
   try {
+    if (config.mpcPublicKey !== mpk) return { keyOk: false, keyError: 'Key check failed: the contract reports an MPC public key that is not the pinned one.', rows: [] };
     S = keyFromCkd({ big_y: sale.key.bigY, big_c: sale.key.bigC }, config.appPkMode);
-    if (!checkKey(S, config.mpcPublicKey, appId(contractId, sale.path))) {
+    if (!checkKey(S, mpk, appId(contractId, sale.path))) {
       return { keyOk: false, keyError: 'Key check failed: this key does not belong to this sale.', rows: [] };
     }
   } catch (e) {

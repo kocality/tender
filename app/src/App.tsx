@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { NotFound } from './components/Feedback';
 import { Layout } from './components/Layout';
 import { Bid } from './pages/Bid';
@@ -6,7 +7,7 @@ import { Sale } from './pages/Sale';
 import { Try } from './pages/Try';
 import { Twin } from './pages/Twin';
 import { Withdraw } from './pages/Withdraw';
-import { useHashRoute } from './router';
+import { titleFor, useHashRoute } from './router';
 
 /** Sale ids are counters; anything else would only make the contract view panic. */
 function isSaleId(id: string | undefined): id is string {
@@ -15,6 +16,14 @@ function isSaleId(id: string | undefined): id is string {
 
 export function App() {
   const route = useHashRoute();
+  const first = useRef(true);
+  const href = `${route.path}:${JSON.stringify(route.params)}`;
+  useEffect(() => {
+    document.title = titleFor(route);
+    // A hash navigation keeps focus on the link that was used: move it to the page, but not on the first load.
+    if (first.current) first.current = false;
+    else document.querySelector<HTMLElement>('main')?.focus();
+  }, [href]);
   let page;
   switch (route.path) {
     case '/':

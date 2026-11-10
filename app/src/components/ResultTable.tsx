@@ -71,7 +71,10 @@ export function ResultTable({ sale, bids, result, recomputed }: { sale: Sale; bi
           <tbody>
             {bids.map((b) => (
               <tr key={b.idx} className={b.alloc > 0n && b.p === result.pStar ? 'row-pstar' : undefined}>
-                <td>{b.idx}</td>
+                <td>
+                  {b.idx}
+                  {b.alloc > 0n && b.p === result.pStar ? <span className="sr-only"> (bid at the clearing price P*)</span> : null}
+                </td>
                 <td className="mono">{shortId(b.bidder, 8, 6)}</td>
                 <td>{b.p !== null ? formatUsdc(b.p) : <span className="muted">{b.state === 'Revealed' ? '–' : 'not revealed'}</span>}</td>
                 <td>{b.q !== null ? formatUsdc(b.q) : '–'}</td>

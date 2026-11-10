@@ -23,15 +23,26 @@ export const ORIGIN_CHAIN_NAME: Record<DepositOrigin, string> = { base: 'BASE', 
 
 const TEN_THOUSAND = 10_000n;
 const QUOTE_TTL_MS = 30 * 60_000;
+const SLIPPAGE_BPS = 100n;
+
+const roundUpCent = (v: bigint) => ((v + TEN_THOUSAND - 1n) / TEN_THOUSAND) * TEN_THOUSAND;
 
 /**
  * What to send from the origin chain so that, after the swap fee and slippage, the Intents balance still covers the
- * gap: gap plus 1 %, rounded up to 0.01 USDC, plus 0.05 USDC. Any surplus stays in the Intents account.
+ * gap: gap plus 1 %, rounded up to 0.01 USDC, plus 0.05 USDC (I9). Any surplus stays in the Intents account. For gaps
+ * above about 495 USDC that does not survive the quote's own 1 % slippage, so the amount is raised until 99 % of it covers the gap.
  */
 export function depositAmountFor(gapMicro: bigint): bigint {
-  const withBuffer = (gapMicro * 101n + 99n) / 100n;
-  const rounded = ((withBuffer + TEN_THOUSAND - 1n) / TEN_THOUSAND) * TEN_THOUSAND;
-  return rounded + 50_000n;
+  const i9 = roundUpCent((gapMicro * 101n + 99n) / 100n) + 50_000n;
+  const worstCase = (d: bigint) => (d * (10_000n - SLIPPAGE_BPS)) / 10_000n;
+  if (worstCase(i9) >= gapMicro) return i9;
+  return roundUpCent((gapMicro * 10_000n + (10_000n - SLIPPAGE_BPS) - 1n) / (10_000n - SLIPPAGE_BPS)) + 50_000n;
+}
+
+/** How far the quote's guaranteed minimum falls short of what the Intents account still needs; 0 when it covers it. */
+export function quoteShortfall(minAmountOut: string, need: bigint): bigint {
+  const min = BigInt(minAmountOut);
+  return min >= need ? 0n : need - min;
 }
 
 export interface QuoteResponse {
@@ -119,7 +130,7 @@ export function depositQuoteBody(o: {
   return {
     dry: o.dry,
     swapType: 'EXACT_INPUT',
-    slippageTolerance: 100,
+    slippageTolerance: Number(SLIPPAGE_BPS),
     originAsset: ORIGIN_ASSET[o.origin],
     depositType: 'ORIGIN_CHAIN',
     destinationAsset: o.quoteToken,

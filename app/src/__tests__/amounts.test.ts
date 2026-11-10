@@ -13,7 +13,28 @@ describe('parseUnits', () => {
     expect(() => parseUnits('0.0000001', 6)).toThrow();
   });
   test('rejects text that is not a plain decimal', () => {
-    for (const bad of ['', ' ', 'abc', '1e6', '-1', '1,5', '1.2.3', '0x10']) expect(() => parseUnits(bad, 6)).toThrow();
+    for (const bad of ['', ' ', 'abc', '1e6', '-1', '1.2.3', '0x10', ',']) expect(() => parseUnits(bad, 6)).toThrow();
+  });
+});
+
+describe('parseUnits with a decimal comma (QA-05)', () => {
+  test('a single comma and no dot is the decimal point', () => {
+    expect(parseUnits('3,6', 6)).toBe(3_600_000n);
+    expect(parseUnits('0,174', 6)).toBe(174_000n);
+    expect(parseUnits(',5', 6)).toBe(500_000n);
+    expect(parseUnits(' 12,25 ', 6)).toBe(12_250_000n);
+  });
+  test('mixed separators and repeated commas stay errors', () => {
+    expect(() => parseUnits('1.234,5', 6)).toThrow();
+    expect(() => parseUnits('1,234.5', 6)).toThrow();
+    expect(() => parseUnits('1,2,3', 6)).toThrow();
+  });
+  test('a comma that may be a thousands separator is refused, not read as 1.000', () => {
+    expect(() => parseUnits('1,000', 6)).toThrow(/dot/);
+    expect(() => parseUnits('10,500', 6)).toThrow(/dot/);
+  });
+  test('every amount path takes it: price, and the whole bid form', () => {
+    expect(priceToP('3,60', 0)).toBe(3_600_000n);
   });
 });
 

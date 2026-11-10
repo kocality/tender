@@ -36,10 +36,15 @@ export function TwinView({ bundles, nowNs }: { bundles: SaleBundle[]; nowNs: big
           <SaleCard key={b.id} id={b.id} sale={b.sale} nowNs={nowNs} actions={b.sale ? <OpenPanel sale={b.sale} nowNs={nowNs} keyRequestBlock={b.keyRequestBlock} /> : undefined}>
             {b.sale ? (
               <>
+                {config.demoFailSales.includes(b.id) ? (
+                  <p className="note">Team demo: this sale was configured by us to miss its open thresholds.</p>
+                ) : null}
                 <h3 style={{ marginTop: 12 }}>Ciphertext wall</h3>
                 <CipherWall bids={b.bids} />
                 <p className="small">
-                  <a href={`#/sale/${b.id}`}>Open sale page</a>
+                  <a href={`#/sale/${b.id}`} aria-label={`Open sale page, sale ${b.id}`}>
+                    Open sale page
+                  </a>
                 </p>
               </>
             ) : null}

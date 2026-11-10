@@ -12,8 +12,13 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
     setTimeout(() => setState('idle'), 1500);
   };
   return (
-    <button type="button" onClick={onClick}>
-      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : label}
-    </button>
+    <>
+      <button type="button" onClick={onClick}>
+        {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : label}
+      </button>
+      <span className="sr-only" role="status">
+        {state === 'copied' ? 'Copied to the clipboard' : state === 'failed' ? 'Copy failed, select the text and copy it yourself' : ''}
+      </span>
+    </>
   );
 }

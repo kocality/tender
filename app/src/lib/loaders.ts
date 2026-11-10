@@ -1,3 +1,4 @@
+import { finalBlockHeight } from '@tender/intents';
 import { config } from '../config';
 import { fetchNearblocksReceipts, matchLedger, type LedgerRow, type Receipt } from './ledger';
 import { getAllBids, getAllSales, getKeyLog, getMpcVersion, getResult, getSale, type Bid, type Sale, type SaleResult } from './views';
@@ -12,13 +13,15 @@ export interface SaleBundle {
   keyRequestBlock?: bigint | null;
 }
 
+/** One final height for every view of a bundle: sale, bids, result and key log describe the same block, not three different ones. */
 export async function loadSaleBundle(id: string): Promise<SaleBundle> {
-  const sale = await getSale(id);
+  const at = await finalBlockHeight(config.rpcUrls);
+  const sale = await getSale(id, at);
   if (!sale) return { id, sale, bids: [] };
   const [bids, result, keyRequestBlock] = await Promise.all([
-    getAllBids(id),
-    sale.state === 'Finalized' ? getResult(id).catch(() => null) : Promise.resolve(null),
-    sale.key ? getKeyLog().then((log) => log.filter((k) => k.sale === id).at(-1)?.block ?? null).catch(() => null) : Promise.resolve(null),
+    getAllBids(id, at),
+    sale.state === 'Finalized' ? getResult(id, at).catch(() => null) : Promise.resolve(null),
+    sale.key ? getKeyLog(at).then((log) => log.filter((k) => k.sale === id).at(-1)?.block ?? null).catch(() => null) : Promise.resolve(null),
   ]);
   return { id, sale, bids, result, keyRequestBlock };
 }

@@ -5,6 +5,7 @@ import { HonestNote } from '../components/HonestNote';
 import { StatusPill } from '../components/StatusPill';
 import { config } from '../config';
 import { buildTryBid, liveQuoteToken } from '../lib/bidPayload';
+import { useChainOffset } from '../lib/chainClock';
 import { interpretSimulation, type TryOutcome } from '../lib/tryResult';
 import { connectEvm } from '../wallets/evm';
 import { connectNear, nearReady } from '../wallets/near';
@@ -25,6 +26,7 @@ interface CardState {
 const IDLE: CardState = { busy: false };
 
 export function Try() {
+  useChainOffset(); // payload deadlines follow the chain's clock
   const [cards, setCards] = useState<Record<Kind, CardState>>({ evm: IDLE, phantom: IDLE, near: IDLE });
   const [evmOrigin, setEvmOrigin] = useState<'base' | 'arb'>('base');
   const [nearLoading, setNearLoading] = useState(true);
@@ -61,7 +63,7 @@ export function Try() {
       patch(kind, {
         busy: false,
         signerId: signer.signerId,
-        outcome: interpretSimulation(sim),
+        outcome: interpretSimulation(sim, signed.standard),
         signed,
         signedString: payloadString(payload),
       });
@@ -133,7 +135,9 @@ function WalletCard({
   return (
     <section className="card" aria-label={title}>
       <div className="row">
-        <h3 style={{ margin: 0 }}>{title}</h3>
+        <h2 className="sub" style={{ margin: 0 }}>
+          {title}
+        </h2>
         <StatusPill>{standard}</StatusPill>
       </div>
       <div className="row" style={{ margin: '12px 0' }}>
@@ -147,11 +151,7 @@ function WalletCard({
           account <span className="mono">{state.signerId}</span>
         </p>
       ) : null}
-      {outcome ? (
-        <p className={`result ${outcome.tone}`} role="status">
-          {outcome.text}
-        </p>
-      ) : null}
+      <div role="status">{outcome ? <p className={`result ${outcome.tone}`}>{outcome.text}</p> : null}</div>
       {state.error ? (
         <p className="result bad" role="alert">
           {state.error}
