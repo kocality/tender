@@ -100,7 +100,7 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 |---|---|---|---|
 | P1 | hosted app URL | up at least until 2026-11-18 | pending |
 | P2 | demo video URL | unlisted video | pending |
-| P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | pending |
+| P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | [run 43080695741](https://github.com/kocality/tender/actions/runs/43080695741), job `repro` |
 | P4 | tag `hackathon-submission` | tree link | pending |
 | P5 | repository public | `git clone https://github.com/kocality/tender` works | pending |
 | P6 | Arrow repository | public; its URL goes in this cell | pending |
