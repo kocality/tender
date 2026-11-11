@@ -22,11 +22,12 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 ## Key request
 
 - **App key mode.** It is fixed in `new()`: `identity` (`S = big_c`), `generator` (`S = big_c − big_y`) or `plain` (app public key = the G1 generator, `S = big_c − big_y`). `sales/v1-init.json` sets `generator` (CRYPTO-07: both modes passed on mainnet, but identity passes the upstream pairing check only as a degenerate case that a later `v1.signer` could reject, which would stop a non-upgradeable v1 from ever opening a sale; generator is the documented case a = 1). The RC2 testnet copy runs `identity`.
-- **Ledger entry and call.** The entry starts as `Pending`. The call to `v1.signer.request_app_private_key` carries 1 yoctoNEAR from the contract balance and 30 Tgas plus the unused gas (weight 1); `on_key` gets 15 Tgas.
-- **Failed answer.** If the answer does not parse, `on_key` records `Err` and clears the in-flight flag, so `open` can be retried.
+- **Ledger entry and call.** The entry starts as `Pending`. The call to `v1.signer.request_app_private_key` carries 1 yoctoNEAR from the contract balance and 30 Tgas plus the unused gas (weight 1); `on_key` gets 30 Tgas.
+- **Key check.** `on_key` stores a key only if `e(S, G2) = e(H(mpk ‖ app_id), mpk)` holds for the domain-2 key `mpk` pinned in `new()`, with `app_id = sha3_256("near-mpc v0.1.0 app_id derivation:" ‖ contract ‖ "," ‖ path)`. `new()` refuses an `mpc_public_key` that is not a G2 point.
+- **Failed answer.** If the answer does not parse or fails the key check, `on_key` records `Err`, logs a `key_error` event and clears the in-flight flag; the sale stays Open, so `open` can be retried.
 - **Dead request.** A request still in flight 1 h after `open` (`IN_FLIGHT_TIMEOUT_SECS`) counts as dead: `open` may ask again and cancel rule (b) applies.
 - **Late or failed key.** A key the MPC delivers after that timeout, or one whose `on_key` failed, is not stored but stays public in the MPC receipt ([`verify` #23](verify.md#the-27-checks-of---sale)).
-- **Changed MPC key.** `on_key` does not compare the answer with the stored domain-2 MPC key, so after a key change the sale still goes Keyed with a key that does not decrypt its bids (`verify` #1 and #11 fail). Only bidders who kept their bid file can reveal ([Recovery](#reveal)); the others can lose the [penalty](#clearing-and-penalty).
+- **Changed MPC key.** After a change of the MPC's domain-2 key, its answers fail the key check against the pinned key, so no sale goes Keyed with a key that cannot decrypt its bids: each `open` records `Err`, and cancel rule (b) refunds every bid in full at close + 24 h.
 
 ## Reveal
 
@@ -48,12 +49,12 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 
 `mt_on_transfer` never panics; each rejection logs a `refund` event with one of these reasons.
 
-- **Bid reasons:** `closed`, `not_open` (also while a key request is in flight), `escrow_below_min`, `escrow_cap` (sale total over 1,000,000 USDC), `max_bids`, `msg_too_long` (bid message over 512 bytes), `bad_ct`, `bad_cm`, `bad_origin`, `wrong_token`, `seller_bid` (from the seller account), `no_sale`, `storage`.
+- **Bid reasons:** `closed`, `not_open` (also while a key request is in flight), `escrow_below_min`, `escrow_cap` (sale total over 1,000,000 USDC), `max_bids`, `msg_too_long` (bid message over 512 bytes), `bad_ct`, `bad_cm`, `bad_origin`, `wrong_token`, `seller_bid` (from the seller account), `no_sale`, `storage`, `dup_bid`, `bid_seq` (see Repeated bids).
 - **Malformed transfers:** `bad_msg`, `bad_shape`, `not_from_intents`.
 
 - **Signing deadline.** The app signs a bid payload valid for min(10 min, close − 60 s) and stops offering Seal and Sign in the last 60 s. It refuses a full sale, a sale at its escrow cap, or a sale with a key request in flight. The CLI signs deadlines that end a minute before close.
 - **Plain transfers.** An Intents transfer to the contract without a bid message credits the contract and cannot be recovered.
-- **Duplicates.** The same (bidder, ciphertext, commitment) can be stored twice if it is signed from two tabs at once. The app refuses to sign a commitment the account already has stored, but the contract does not.
+- **Repeated bids.** A bid whose `cm` the sender already has stored in this sale is refunded `dup_bid`. A bid message may carry `seq`, a JSON number: how many bids the sender had stored in this sale when the bid was prepared; a bid whose `seq` differs from that count is refunded `bid_seq`. Only the sender's own bids are compared, and a refused bid changes no state. Both refunds name the `cm` and the sender's count (`have`, plus the stored copy's `idx` for `dup_bid`); the `bid` event names the `cm` and `nth`, the sender's earlier bids. The app, `pnpm seal:bid` and the scripts sign every copy of one sealed bid with the same Intents nonce, so a second signature of it fails as `nonce_used`.
 
 ## Storage guard
 
@@ -61,21 +62,22 @@ Every state-growing path keeps 0.3 NEAR free after storage (`STORAGE_RESERVE_YOC
 
 ## Gas and storage
 
-Measured with the RC2 wasm in the sandbox (nearcore 2.14.0, the mock MPC, 64 bids in one sale). Source: `evidence/wasm.json`.
+Measured with the RC3 wasm in the sandbox (nearcore 2.14.0, the mock MPC, 64 bids in one sale). Source: `evidence/wasm.json`.
 
 | Call | Tgas |
 |---|---|
-| `create` | 1.8 |
-| bid via `mt_transfer_call` (its `mt_on_transfer` receipt) | 10.49 (2.12) |
-| `open` total | 6.73 |
-| `on_key` | 2.06 |
-| `reveal` of 8 bids | 4.94 |
-| gasless self-reveal | 4.81 |
-| `finalize` of 64 bids, settle call (its receipt) | 70.9 (23.38) |
-| `finalize` sending 8 payouts | 59.69 |
+| `create` | 1.81 |
+| bid via `mt_transfer_call` (its `mt_on_transfer` receipt) | 16.07 (7.72) |
+| bid refunded `dup_bid` after scanning 64 bids (its receipt) | 7.34 |
+| `open` total | 16.28 |
+| `on_key` (with the key check) | 10.04 |
+| `reveal` of 8 bids | 4.95 |
+| gasless self-reveal | 4.82 |
+| `finalize` of 64 bids, settle call (its receipt) | 70.97 (23.38) |
+| `finalize` sending 8 payouts | 59.76 |
 | `mt_batch_transfer` receipt | 4.47 |
-| `on_paid` | 2.02 |
-| `cancel` of a 64-bid sale (its receipt) | 68.67 (21.54) |
+| `on_paid` | 2.03 |
+| `cancel` of a 64-bid sale (its receipt) | 68.69 (21.55) |
 
 `cancel` and the settling `finalize` reserve 240 Tgas for up to 8 payouts, so the 64-bid cancel fits in 300 Tgas.
 

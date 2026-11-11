@@ -155,12 +155,12 @@ Node 18 does not work, nor Node 20: the install stops with `ERR_PNPM_UNSUPPORTED
 1. (network: GitHub, npm) `git clone https://github.com/kocality/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` - see `Scope: 4 of 7 workspace projects` and `Packages: +46`: the CLI and its libraries, no wallet SDKs.
 2. (offline) `pnpm demo:local` - see `P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6` and `done in` under a second: [the story's sale](#the-story), sealed, opened and cleared on your machine. If you run only one step, run this one.
 3. (offline) `pnpm vectors` - see `4 passed (4)`: the near/mpc CKD test vectors.
-4. (offline) `node contract/scripts/check-imports.mjs contract/res/tender.wasm` - see `PASS 24 imports`: none can add a key, deploy code or delete the account.
-5. (network: testnet RPC) `curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc2.tender-339e4b.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"7Wr8DDsDA9XYJMw48HwDg4Y5vbWLwd38EN2A9trAezDv"` (the base58 form of step 9's sha256) and `"keys":[]`.
+4. (offline) `node contract/scripts/check-imports.mjs contract/res/tender.wasm` - see `PASS 30 imports`: none can add a key, deploy code or delete the account.
+5. (network: testnet RPC) `curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc2.tender-339e4b.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"7Wr8DDsDA9XYJMw48HwDg4Y5vbWLwd38EN2A9trAezDv"` (the RC2 wasm this copy runs; step 9's RC3 wasm has code hash `ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y` and no testnet copy yet) and `"keys":[]`.
 6. (network: testnet RPC) `pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --keys` - see `key log (contract state): 0 requests` and `= 0 (match)`.
 7. (network on a fresh machine) `pnpm install && pnpm -r test`, now for the whole workspace - see every package pass with the counts in the [Tests row](#build-and-test-evidence).
 8. (Rust; downloads near-sandbox) `bash contract/scripts/build-wasms.sh && (cd contract && cargo test)` - see the unit, sandbox and S3a tests pass with the counts in the Tests row.
-9. (Docker, about 3 min plus a one-time image pull, full git history) `git checkout 8812fce143290ba83a2597acc60e49e161a20383 && (cd contract && cargo near build reproducible-wasm && shasum -a 256 target/near/tender.wasm)` - see `60cb8293f4d48883d693cae051ed14d04cb8686669ab9477def8d110c412b2a9`, the value `contract/res/tender.wasm.sha256` holds on `main` and the hash CI printed for this commit ([JUDGES row P3](JUDGES.md#off-chain)). Build exactly this commit: the NEP-330 metadata embeds the commit, so any later commit gives a different hash. On arm64 Macs, Docker's linux/amd64 platform warning is expected.
+9. (Docker, about 3 min plus a one-time image pull, full git history) `git checkout ab48e6690048e9b506c51c3667f852457758a706 && (cd contract && cargo near build reproducible-wasm && shasum -a 256 target/near/tender.wasm)` - see `9285e1873b70e3f99cb6e7118f5468a136e288081d5fb884a773e6ab7cf65650`, the value `contract/res/tender.wasm.sha256` holds on `main` and the hash CI printed for this commit ([JUDGES row P3](JUDGES.md#off-chain)). Build exactly this commit: the NEP-330 metadata embeds the commit, so any later commit gives a different hash. On arm64 Macs, Docker's linux/amd64 platform warning is expected.
 
 <details><summary>Steps 10-18: on chain, once the rows they need exist</summary>
 
@@ -168,7 +168,7 @@ Step 10 needs testnet rows T4-T9; steps 11-15 need the mainnet rows of their sal
 
 | # | Do | See |
 |---|---|---|
-| 10 | `pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --sale 0` | no `FAIL` line; `#3 code-hash` PASS against the RC2 wasm |
+| 10 | `git show 0e5a603:contract/res/tender.wasm > rc2.wasm && pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --sale 0 --wasm rc2.wasm` | no `FAIL` line; `#3 code-hash` PASS against the RC2 wasm |
 | 11 | `pnpm verify --keys` | every key `v1.tenderseal.near` ever requested, one line per sale |
 | 12 | `pnpm seal:try --sale 2` | before `2026-11-17T12:00:00Z`: `sealed: no key has been requested for sale 2 (key_requests = 0)`; after close: `key released at block …` |
 | 13 | `pnpm verify --sale 1` | no `FAIL` line; `#15 clearing-price` `P* = 3.60 USDC/NEAR` |
@@ -316,8 +316,8 @@ Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | What | Result |
 |---|---|
-| Tests | clearing 13, intents 36, seal 37, relayer 369, app 351, cli 104 passing (pnpm; 22 more skipped); cargo 74 unit + 30 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Clean clone at `0e5a603` (step 9's commit plus its build output), 2026-11-11 UTC; one app test was added since |
-| Wasm RC2 | the release candidate from the step 9 commit: 275,115 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
+| Tests | clearing 13, intents 63, seal 37, relayer 418, app 436, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Clean clone at `ab48e66` (step 9's commit), 2026-11-11 UTC |
+| Wasm RC3 | the release candidate from the step 9 commit: 281,895 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
 | Entry points | integrators: `packages/seal/src/index.ts` (workspace package, not on npm); evidence file formats: `evidence/README.md` |
 
 ## Built during the hackathon (rules Q-001, Q-003)
