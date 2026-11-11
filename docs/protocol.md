@@ -25,7 +25,7 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 - **Ledger entry and call.** The entry starts as `Pending`. The call to `v1.signer.request_app_private_key` carries 1 yoctoNEAR from the contract balance and 30 Tgas plus the unused gas (weight 1); `on_key` gets 15 Tgas.
 - **Failed answer.** If the answer does not parse, `on_key` records `Err` and clears the in-flight flag, so `open` can be retried.
 - **Dead request.** A request still in flight 1 h after `open` (`IN_FLIGHT_TIMEOUT_SECS`) counts as dead: `open` may ask again and cancel rule (b) applies.
-- **Late or failed key.** A key the MPC delivers after that timeout, or one whose `on_key` failed, is not stored but stays public in the MPC receipt, so a sale cancelled after a request may be decryptable; `verify` [#23](verify.md#the-27-checks-of---sale) labels it apart from "never requested".
+- **Late or failed key.** A key the MPC delivers after that timeout, or one whose `on_key` failed, is not stored but stays public in the MPC receipt ([`verify` #23](verify.md#the-27-checks-of---sale)).
 - **Changed MPC key.** `on_key` does not compare the answer with the stored domain-2 MPC key, so after a key change the sale still goes Keyed with a key that does not decrypt its bids (`verify` #1 and #11 fail). Only bidders who kept their bid file can reveal ([Recovery](#reveal)); the others can lose the [penalty](#clearing-and-penalty).
 
 ## Reveal

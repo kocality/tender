@@ -27,4 +27,4 @@ Total: 268 receipts from 18 callers. Callers using a public app key (excluding T
 
 ## Tender's own accounts
 
-`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, the planned `v1.tenderseal.near` and the implicit spike account `0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620`: none appears among the callers above. Our recorded requests came later on 2026-11-10 and all used a public app key ([JUDGES › Mainnet spikes](../JUDGES.md#mainnet-spikes-before-the-contract)).
+`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, the planned `v1.tenderseal.near` and the implicit spike account `0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620`: none appears among the callers above. All our recorded requests used a public app key ([JUDGES › Mainnet spikes](../JUDGES.md#mainnet-spikes-before-the-contract)).

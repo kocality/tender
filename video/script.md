@@ -1,7 +1,7 @@
 # Tender demo video script (full cut, at most 2:59, voice-over at most 380 words)
 
 Status: draft v1 written 2026-11-10. Numbers marked TODO(evidence) are re-read from their source before recording (card B step); the voice-over is recorded last, with the final numbers.
-The X cut (at most 2:20) drops the 0:20-0:40 row, trims 1:35-2:05 to 15 s (keep the withdraw shot and the JAMBO sentence, drop "This winner swaps NEAR to SOL.") and trims 2:05-2:35 to 20 s (drop "No wallet, no archival node."). Target about 2:14. Captions: `captions.srt` (full), `captions-x.srt` (X).
+The X cut (at most 2:20) drops the 0:20-0:40 row, trims 1:35-2:05 to 15 s (keep the withdraw shot and the JAMBO sentence, drop "This winner swaps NEAR to SOL.") and trims 2:05-2:35 to 20 s (drop "No wallet, no archival node."). Target about 2:14. Captions (`captions.srt` full, `captions-x.srt` X) are regenerated from this script before recording..
 
 | Time | Screen | Voice-over (verbatim) | Evidence |
 |---|---|---|---|

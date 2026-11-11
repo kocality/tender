@@ -11,7 +11,7 @@ The steps: [README › Try it](README.md#try-it-free-no-wallet).
 | The MPC key and live threshold are the ones [README › Trust and limits](README.md#trust-and-limits) cites | checks #1 `mpc-key`, #2 `mpc-network` | `cli/src/lib/verify-sale.ts` | |
 | Deployed wasm = repo wasm = source | steps 5 and 9; checks #3 `code-hash`, #6 `reproducible-build` | `contract/res/tender.wasm.sha256` | T3, M01 |
 | Bids are ciphertext before close | step 12; check #10 `key-after-close` | `packages/seal/src/ibe.ts` | S2, M07-M12 |
-| Each stored bid is decrypted and checked against its commitment; `verify` lists the ones that fail | checks #12 `ciphertexts-decrypt`, #13 `plaintext-matches-commitment` | `contract/src/lib.rs` `reveal` | M15 |
+| Each stored bid is decrypted and checked against its commitment | checks #12 `ciphertexts-decrypt`, #13 `plaintext-matches-commitment` | `contract/src/lib.rs` `reveal` | M15 |
 | One uniform, recomputable price | step 13; checks #15 `clearing-price` to #18 `uniform-price` | `contract/src/clearing.rs`, `packages/clearing` | M16 |
 | The penalty never goes to the seller's account ([rule](docs/protocol.md#clearing-and-penalty)) | step 15; check #17 `conservation` (and #16 `allocations`) | `contract/src/clearing.rs` | M31 |
 | A failed sale's key is never requested | step 14; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | M05 |
@@ -27,7 +27,7 @@ Raw RPC responses: `evidence/rpc/` (snapshot, not live). Machine-readable rows: 
 | ID | Step | Expected | Tx |
 |---|---|---|---|
 | M01 | birth of `v1.tenderseal.near` | one transaction, no `AddKey`; code_hash = README step 5 | pending |
-| M02 | sale 0: create | configured to fail (README › Demo sales) | pending |
+| M02 | sale 0: create | [README › Demo sales](README.md#demo-sales) | pending |
 | M03 | sale 0: one 1 USDC bid | stored sealed | pending |
 | M04 | sale 0: `open` | panics: escrow below `min_escrow` | pending |
 | M05 | sale 0: `cancel` | `Cancelled`, `key_requests = 0` | pending |
@@ -100,7 +100,7 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 |---|---|---|---|
 | P1 | hosted app URL | up at least until 2026-11-18 | pending |
 | P2 | demo video URL | unlisted video | pending |
-| P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | pending |
+| P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | [run 42928253236](https://github.com/kocality/tender/actions/runs/42928253236), job `repro` |
 | P4 | tag `hackathon-submission` | tree link | pending |
 | P5 | repository public | `git clone https://github.com/kocality/tender` works | pending |
 | P6 | Arrow repository | public; its URL goes in this cell | pending |
