@@ -46,7 +46,8 @@ export async function settle(io: SettleIO, t: Ticket): Promise<{ verdict: Settle
     // "Stored" is only ever a bid row with one of this plan's commitments. A relayer 409, a tx event or a row of another bid does not count.
     const ours = mine.find((x) => t.cms.includes(x.cm));
     if (ours) return { verdict: { kind: 'stored', idx: ours.idx, cm: ours.cm }, usedSeenMs: t.usedSeenMs };
-    const refund = outcomes.find((o) => o?.kind === 'refunded');
+    // A dup_bid refund names the stored copy of this very bid (idx): the tx is read ahead of the final block, so its row decides, not the refund.
+    const refund = outcomes.find((o) => o?.kind === 'refunded' && !(o.reason === 'dup_bid' && typeof o.idx === 'number'));
     if (refund?.kind === 'refunded') {
       return { verdict: { kind: 'refunded', why: refund.reason, ...(refund.reason === 'bid_seq' ? { other: mine.map((x) => x.idx) } : {}) }, usedSeenMs: t.usedSeenMs };
     }

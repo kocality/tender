@@ -48,6 +48,14 @@ describe('settle: what became of the bid, read at one final block', () => {
     const txs = async () => [{ kind: 'refunded' as const, reason: 'closed' }];
     expect((await settle(io({ ts: 500, used: true, txs }), { ...t0, txHashes: ['H'], relayer: 'relayer.near' })).verdict).toEqual({ kind: 'refunded', why: 'closed' });
   });
+  test('a dup_bid refund that names the stored copy is not a final "refunded": the row decides once the final block shows it', async () => {
+    const t = { ...t0, txHashes: ['H'], relayer: 'relayer.near' };
+    const txs = async () => [{ kind: 'refunded' as const, reason: 'dup_bid', cm: CM, have: 1, idx: 3 }];
+    const lag = await settle(io({ ts: 500, used: true, txs }), t); // the tx outcome is ahead of the final block: no row yet
+    expect(lag.verdict).toEqual({ kind: 'executed', sinceMs: 500 });
+    expect(isFinal(lag.verdict)).toBe(false);
+    expect((await settle(io({ ts: 600, used: true, txs, bids: [{ idx: 3, bidder: 'alice.testnet', cm: CM }] }), t)).verdict).toEqual({ kind: 'stored', idx: 3, cm: CM });
+  });
   test('not used before the payload deadline: pending; after it: dead; a transaction still running: executed', async () => {
     expect((await settle(io({ ts: 999_999 }), t0)).verdict).toEqual({ kind: 'pending', untilMs: 1_000_000 });
     expect((await settle(io({ ts: 1_000_001 }), t0)).verdict).toEqual({ kind: 'dead' });
