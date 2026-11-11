@@ -1,0 +1,7 @@
+$ tsx src/verify.ts --keys --network testnet --contract rc3.tender-c201d6.testnet
+Tender verify · keys · rc3.tender-c201d6.testnet · testnet · block 277258394 (2026-11-11T19:29:10Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · domain 2 key = repo constant
+key log (contract state): 1 request
+  sale 0   2026-11-11T19:24:45Z   ok      block 277257949
+NearBlocks: receipts rc3.tender-c201d6.testnet → v1.signer-prod.testnet.request_app_private_key = 1 (match)

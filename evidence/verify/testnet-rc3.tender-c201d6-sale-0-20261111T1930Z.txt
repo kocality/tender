@@ -1,0 +1,37 @@
+$ tsx src/verify.ts --network testnet --contract rc3.tender-c201d6.testnet --sale 0 --rebuild --evidence evidence/testnet.json
+Tender verify · sale 0 · rc3.tender-c201d6.testnet · testnet · block 277258527 (2026-11-11T19:30:30Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+rebuilding ab48e6690048 in Docker (linux/amd64; ~10 min on Apple Silicon) in /var/folders/26/cz3h061n0kx2672z5kzc0df80000gn/T/tender-rebuild-ab48e669-foijP7
+     -                  Size: 281.9 KB (281895 bytes)
+     - SHA-256 checksum hex : 9285e1873b70e3f99cb6e7118f5468a136e288081d5fb884a773e6ab7cf65650
+     - SHA-256 checksum bs58: ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y
+Here is the console command if you ever need to re-run it again:
+cargo near build reproducible-wasm --out-dir /var/folders/26/cz3h061n0kx2672z5kzc0df80000gn/T/tender-rebuild-ab48e669-foijP7/out
+PASS #1 mpc-key — domain 2 key bls12381g2:xeYho…R4kj = repo constant = live v1.signer-prod.testnet = contract config
+PASS #2 mpc-network — v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · key epoch 27, participant ids issued 27 (next_id): resharing does not revoke old shares, so the threshold counts former share holders too · TEE accounts 18 · allowed images 1
+PASS #3 code-hash — ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y = sha256(contract/res/tender.wasm) https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #4 no-access-keys — rc3.tender-c201d6.testnet has no access keys: nobody can sign for it or redeploy it https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #5 wasm-imports — 30 imports, none can add a key, deploy code or delete the account
+PASS #6 reproducible-build — Docker rebuild of ab48e6690048 → ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y = on-chain code_hash
+PASS #7 init-before-sale — init block 277256919 (2026-11-11T19:14:52Z) < sale created block 277256999 (2026-11-11T19:15:41Z)
+PASS #8 sale-identity — path tender/0/a3d59076a15e8167db110db2f0206263 · app_id(rc3.tender-c201d6.testnet, path) = 1eeaa5e008774afca8f9e893648cc6dbb9ad62300eb16a7cf6dfaaec938c7b6b
+PASS #9 bid-count — 2 bids (max 8) from 2 bidders · escrow 4.00 USDC
+PASS #10 key-after-close — key at 2026-11-11T19:24:49Z (block 277257956) ≥ close 2026-11-11T19:24:35Z · bids before close, key requested after close, reveal deadline = key + max(reveal_secs, 24 h) https://testnet.nearblocks.io/blocks/277257956
+PASS #11 key-pairing — checkKey true: e(S, G2) = e(H(pk ‖ app_id), mpk), mode generator https://testnet.nearblocks.io/blocks/277257956
+PASS #12 ciphertexts-decrypt — 2/2 decrypt
+PASS #13 plaintext-matches-commitment — 2/2 match
+PASS #14 reveal-states — 2 Revealed, 0 Penalized, 0 Sealed; every revealable bid (decrypts, matches its commitment, 1 ≤ q ≤ B) is Revealed
+PASS #15 clearing-price — P* = 3.90 USDC/nep141:wnear.tender-09bdfe.testnet (recomputed = get_result) https://testnet.nearblocks.io/txns/GZcQEyGcjWKXrxJQN4ops2UwjKa1xiGx4L2DgwWwKNR6
+PASS #16 allocations — 2 bids: alloc, spend, refund, penalty and penalty share = recomputed (1 winner) · seller 0.39 USDC
+PASS #17 conservation — USDC in 4.00 = refunds + seller 0.39 + penalty pool 0.00; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller · bids from sub-accounts of the seller tender-09bdfe.testnet (only it can create them): #0 bidder1.tender-09bdfe.testnet, #1 bidder2.tender-09bdfe.testnet
+PASS #18 uniform-price — every winner pays one price 3.90 USDC/nep141:wnear.tender-09bdfe.testnet ≤ its bid; full winners pay q, marginal ones ceil(alloc·P*/scale); losers get 0
+PASS #19 escrow-balance — 1 sale(s): nep141:usdc.tender-09bdfe.testnet 0 ≥ owed 0 · nep141:wnear.tender-09bdfe.testnet 0 ≥ owed 0 https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #20 payouts — 3/3 payouts ok (bids + seller)
+PASS #21 key-ledger — 1 request for this sale (Ok) = key_requests; 1 in the contract's key log
+PASS #22 nearblocks-receipts — NearBlocks: 1 rc3.tender-c201d6.testnet → v1.signer-prod.testnet.request_app_private_key receipts = key log 1
+n/a #23 cancelled-sealed — state Finalized
+n/a #24 oneclick-status — 1Click runs on mainnet only
+PASS #25 archival-tx — 8/8 recorded transactions found with the recorded outcome
+PASS #26 upstream-code — intents-09bdfe.testnet code_hash BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk = the tested intents 0.4.5 wasm · v1.signer-prod.testnet 3.18.0 = tested version
+PASS #27 token-decimals — ft_metadata: wnear.tender-09bdfe.testnet 24 decimals = sale decimals 24 · quote token 6 decimals
+25/25 checks passed (0 warnings)

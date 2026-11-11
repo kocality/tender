@@ -174,5 +174,27 @@
       "evidence/rpc/FeHJEpWCmynFuQ6cizgUJTWisLm6WJ3jraEMuizLM3hE.json",
       "evidence/rpc/6UerNgoyYR6wv3F51bmZhfC2L6fNaLQyZVC7xodQdgBY.json"
     ]
+  },
+  {
+    "gate": "RC3-testnet",
+    "date_utc": "2026-11-11T19:33:28.377Z",
+    "result": "PASS",
+    "chosen_path": "generator",
+    "tx_hashes": [
+      "BMET8KxuhmuMTxHoFz22dTodBznBpSATkuDKKne6AFY5"
+    ],
+    "blocks": {
+      "request": 277257950,
+      "response": 277257955
+    },
+    "notes": "RC3 wasm 9285e187…5650 (code_hash ArxvskvN…XrH9y) born keyless as rc3.tender-c201d6.testnet in generator mode (tx 6oWauj6o…), intents copy intents-09bdfe.testnet (intents 0.4.5 wasm), MPC v1.signer-prod.testnet 3.18.0. Sale 0 (rows in evidence/testnet.json): (a) open got the real generator-mode CKD key and on_key's pairing check against the pinned key accepted it (key_log 0 Ok, contract blocks 277257949 -> 277257956), 2/2 bids decrypt and match before reveal; (b) the same sealed bid sent a second time by bidder2 was refunded dup_bid (tx Akpa82uN…, have 1, idx 1); (c) bidder1's stored nep413 bid re-signed with the same nonce and a later deadline was refused by the intents contract with 'nonce was already used' (tx ADToD4ai…); (d) reveal 2/2, finalize P* 3.90, payouts 3/3; pnpm verify --sale 0: 23/24 (1 warning: #6 no --rebuild), with --rebuild --evidence evidence/testnet.json 25/25 (0 warnings); verify --keys 1 request = NearBlocks 1",
+    "evidence_files": [
+      "evidence/verify/testnet-rc3.tender-c201d6-keys-20261111T1929Z.txt",
+      "evidence/verify/testnet-rc3.tender-c201d6-sale-0-20261111T1925Z-prereveal.txt",
+      "evidence/verify/testnet-rc3.tender-c201d6-sale-0-20261111T1930Z.txt",
+      "evidence/verify/testnet-rc3.tender-c201d6-sale-0-20261111T1933Z-plain.txt",
+      "evidence/testnet.json",
+      "evidence/rpc/BMET8KxuhmuMTxHoFz22dTodBznBpSATkuDKKne6AFY5.json"
+    ]
   }
 ]
