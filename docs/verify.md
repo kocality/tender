@@ -7,8 +7,8 @@
 | Flag | Default | Use |
 |---|---|---|
 | `--network mainnet\|testnet` | `mainnet` | which chain to read |
-| `--contract <id>` | `v1.tenderseal.near` on mainnet; required on testnet | another copy, e.g. `rc2.tender-339e4b.testnet` |
-| `--rpc <url>`, `--archival-rpc <url>` | public FastNEAR, then NEAR RPC | when a public RPC rate-limits you |
+| `--contract <id>` | `v1.tenderseal.near` on mainnet; required on testnet | another copy, e.g. `rc3.tender-c201d6.testnet` |
+| `--rpc <url>`, `--archival-rpc <url>` | mainnet: `free.rpc.fastnear.com`, `near.drpc.org`, `rpc.shitzuapes.xyz`; testnet: `test.rpc.fastnear.com`, `near-testnet.drpc.org`, `testnet-rpc.intea.rs`; archival: FastNEAR, then NEAR's archival RPC. A URL from the environment (`NEAR_RPC_URL`, `NEAR_TESTNET_RPC_URL`) goes first; an HTTP 429 moves to the next URL at once | `--rpc` uses only that URL |
 | `--rebuild` | off | check #6 runs the Docker reproducible build (Docker and cargo-near) |
 | `--wasm <file>` | `contract/res/tender.wasm` | the wasm checks #3 and #5 compare with |
 | `--evidence <file>` | `evidence/mainnet.json` | the transaction rows checks #24 and #25 read |
@@ -25,7 +25,7 @@
 | 6 | `reproducible-build` | a Docker rebuild of the embedded source commit gives the on-chain code_hash | WARN without `--rebuild`; FAIL on mismatch |
 | 7 | `init-before-sale` | the contract was initialised before the sale was created | FAIL otherwise |
 | 8 | `sale-identity` | the sale path has the form `tender/<sale>/<32 hex>` and gives this `app_id` | FAIL otherwise |
-| 9 | `bid-count` | bid list, bidder count and escrow total agree with the sale record | FAIL on a mismatch |
+| 9 | `bid-count` | bid list, bidder count and escrow total agree with the sale record, and no bidder has one sealed bid stored twice | FAIL on a mismatch or a twice-stored bid |
 | 10 | `key-after-close` | bids before close, key requested after close, reveal deadline and cancel time as the contract defines them | FAIL on any timing error |
 | 11 | `key-pairing` | the stored key pairs with `H(pk ‖ app_id)` under the MPC key (checkKey) | FAIL otherwise |
 | 12 | `ciphertexts-decrypt` | each stored ciphertext is decrypted with the sale key; the ones that do not decrypt are listed | WARN if a Revealed bid does not decrypt |
@@ -37,11 +37,11 @@
 | 18 | `uniform-price` | every winner pays one price ≤ its bid; losers pay 0 | FAIL otherwise |
 | 19 | `escrow-balance` | the contract's Intents balances cover what every sale still owes | FAIL on a deficit |
 | 20 | `payouts` | every payout of a settled sale was sent and confirmed | FAIL if pending; WARN while in flight |
-| 21 | `key-ledger` | the sale's key-ledger entries = its `key_requests` | FAIL on a mismatch |
+| 21 | `key-ledger` | the sale's key-ledger entries = its `key_requests`; an `Err` entry is an MPC error or a key `on_key` refused, and nothing was stored | FAIL on a mismatch |
 | 22 | `nearblocks-receipts` | NearBlocks request receipts = key-ledger length | WARN only |
 | 23 | `cancelled-sealed` | a Cancelled sale with 0 requests prints the "never requested" label | WARN if cancelled after a request |
 | 24 | `oneclick-status` | the sale's recorded 1Click deposits are `SUCCESS` (mainnet only) | WARN only |
-| 25 | `archival-tx` | every recorded transaction exists with its recorded outcome | WARN only |
+| 25 | `archival-tx` | every recorded transaction exists with its recorded outcome; a row with a `reason` needs a Tender refund with exactly that reason (e.g. `dup_bid`) | WARN only |
 | 26 | `upstream-code` | `intents.near` and `v1.signer` still run the tested versions | WARN only |
 | 27 | `token-decimals` | `ft_metadata` decimals of the sale token = the sale's declared decimals, and the quote token has 6 | FAIL on a mismatch; WARN if unreadable |
 
@@ -57,5 +57,5 @@ Prints the MPC version and live threshold, the key-ledger length, one line per s
 
 - `cargo test` downloads near-sandbox 2.14.0 and runs it with no checksum outside CI. CI pins the Linux-x86_64 tarball sha256 `a0ba004218b218bd74351795e7ce2eda4a2b6af5cd3e252bd5e8bfe3c8f2e691`. The Darwin-arm64 tarball we downloaded on 2026-11-11 has sha256 `ea53448ef97540c012e5c3d967c74d78292b0465a98cf7027811a936718fe232`; nothing pins it.
 - `.github/workflows/ci.yml` runs the jobs `rust`, `ts`, `oracle` and `secrets` on push; `repro` runs only on manual dispatch with a `ref`.
-- `node --test` suites outside the per-package counts: docs-checks 31 (+3 opt-in: `COUNTS=1`, `LIVE=1`), ci-config 11 (lockfile, actions pinned by SHA, tool downloads checked by sha256, `engineStrict`, `.env.example`), check-imports 10, m3-reveal-items 1, testnet-rehearsal 2.
+- `node --test` suites outside the per-package counts: docs-checks 62 (+4 opt-in: `COUNTS=1`, `LIVE=1`), ci-config 11 (lockfile, actions pinned by SHA, tool downloads checked by sha256, `engineStrict`, `.env.example`), check-imports 11, m3-reveal-items 1, testnet-rehearsal 4.
 - The CKD test vectors file (sha256 `a6305d0f…`) is byte-identical to 3.17.0 in near/mpc 3.18.0.

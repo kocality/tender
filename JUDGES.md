@@ -15,12 +15,14 @@ The steps: [README › Try it](README.md#try-it-free-no-wallet).
 | One uniform, recomputable price | step 13; checks #15 `clearing-price` to #18 `uniform-price` | `contract/src/clearing.rs`, `packages/clearing` | M16 |
 | The penalty never goes to the seller's account ([rule](docs/protocol.md#clearing-and-penalty)) | step 15; check #17 `conservation` (and #16 `allocations`) | `contract/src/clearing.rs` | M31 |
 | A failed sale's key is never requested | step 14; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | M05 |
+| A sale goes Keyed only with a key that passes the pairing check against the pinned MPC key | step 10; checks #11 `key-pairing`, #21 `key-ledger` | `contract/src/seal.rs`; sandbox `x12f01_changed_key_refunds_in_full` | T7, M13 |
+| One sealed bid is stored at most once per account in a sale, and of the copies our app, `pnpm seal:bid` or our bid script sign before close, intents.near runs at most one | step 10; checks #9 `bid-count`, #25 `archival-tx` | `contract/src/intents.rs`, `packages/intents/src/nonce.ts` | T10, T11 |
 | Bids from four chains with the bidder's own wallet | pending; testnet so far: row T2 | `packages/intents` | S5, M07-M12 |
 | Payouts are sent and confirmed | check #20 `payouts` | `contract/src/lib.rs` `finalize` | M16, M17 |
 
 ## Chain record
 
-Raw RPC responses: `evidence/rpc/` (snapshot, not live). Machine-readable rows: `evidence/mainnet.json`, `evidence/spikes.json`.
+Raw RPC responses: `evidence/rpc/` (snapshot, not live). Machine-readable rows: `evidence/mainnet.json`, `evidence/spikes.json`, `evidence/testnet.json`.
 
 ### Mainnet: Tender
 
@@ -70,13 +72,13 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 | ID | What | Tx |
 |---|---|---|
 | S1 | CKD in identity mode from a NEAR account, checkKey true | [8F5AFdFs…](https://nearblocks.io/txns/8F5AFdFsUSC8BfzRMRZgV4XwvcCW7AuB4tidipC2wbNn) |
-| S1 | CKD in generator mode (record only) | [6xyJWF2E…](https://nearblocks.io/txns/6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc) |
-| S2 | a ciphertext made before the request decrypts with the live CKD key | [E9dH2buE…](https://nearblocks.io/txns/E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b) |
+| S1 | CKD in generator mode from a NEAR account, checkKey true | [6xyJWF2E…](https://nearblocks.io/txns/6xyJWF2E5VWnicHivqKAWfXffaTmPXiMUWmXARuDDjgc) |
+| S2 | a ciphertext made before the request decrypts with the live CKD key (identity mode; generator mode: step 10, check #12 `ciphertexts-decrypt`) | [E9dH2buE…](https://nearblocks.io/txns/E9dH2buEaK5bT5UdjwKsK3BJZBAYV1dnv7LNHZCBCr6b) |
 | S3b | Intents transfer with notification reaches a contract's `mt_on_transfer` | [GY56NdTc…](https://nearblocks.io/txns/GY56NdTcE5ZSVXN1C5yjQMUqAnKtudL4MLYM1UUNfaYr) |
 | S3b | late bid refunded | [BUSHLFW9…](https://nearblocks.io/txns/BUSHLFW9ARQKgkjP6bSswtLVRT1rarbADCRSLM5s5Ya9) |
 | S5 | 3 USDC Base → Intents through 1Click | [FeHJEpWC…](https://nearblocks.io/txns/FeHJEpWCmynFuQ6cizgUJTWisLm6WJ3jraEMuizLM3hE) |
 | S5 | 1 USDC Intents → Base, MetaMask erc191 signature | [6UerNgoy…](https://nearblocks.io/txns/6UerNgoyYR6wv3F51bmZhfC2L6fNaLQyZVC7xodQdgBY) |
-| S6-ckd | contract-initiated CKD; a wrong `app_id` is rejected | [EFtUJfnV…](https://nearblocks.io/txns/EFtUJfnVANFgbv1Mkp9y3o7yxt3Xy82d6Z96DXfBNzNP) |
+| S6-ckd | contract-initiated CKD; a wrong `app_id` is rejected (identity mode; contract-initiated CKD in generator mode: T7) | [EFtUJfnV…](https://nearblocks.io/txns/EFtUJfnVANFgbv1Mkp9y3o7yxt3Xy82d6Z96DXfBNzNP) |
 | S8 | `bidder.tenderseal.near` registers its nep413 key in `intents.near` | [Fd48NjqC…](https://nearblocks.io/txns/Fd48NjqCwgUPRPcMbYmHSTxXpnUXVueN9KhLF2mQoySt) |
 | S9 | wNEAR → JAMBO swap through 1Click (the sale 2 supply) | [4PmogP1j…](https://nearblocks.io/txns/4PmogP1jrzmBnyftVA9oC7Bvt1B66BtWg4s1deP2po6Q) |
 
@@ -86,13 +88,15 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 |---|---|---|
 | T1 | full rehearsal on 2026-11-10 on `v1.tender-09bdfe.testnet` with `v1.signer-prod.testnet` 3.18.0: a real CKD key 8 blocks after the request (block 277053281 → 277053289), P* 3.90, payouts 3/3 (`evidence/verify/testnet-v1.tender-09bdfe-*`). That copy runs an earlier, non-reproducible build, so against today's wasm `pnpm verify --network testnet --contract v1.tender-09bdfe.testnet --sale 0` prints `FAIL` on #3 `code-hash` and `22/24 checks passed (1 warning)` (2026-11-11) | birth [26np72KT…](https://testnet.nearblocks.io/txns/26np72KTmzC9z8HX743hRAcXFGXx2ohxRWyzutwYF4sK) · create [CT7GSr6x…](https://testnet.nearblocks.io/txns/CT7GSr6xCYAzm37J3fGAu7m7ceUqGefseoyfoMwt8sFF) · bid [5fdPPfk5…](https://testnet.nearblocks.io/txns/5fdPPfk5cEUg3x2aidUCZnsaE6VacJ9cztCMEgg7REsF) · bid [Ermgeczd…](https://testnet.nearblocks.io/txns/ErmgeczD8gfuRsCwDbiup6rcPZ3U3fEcuH13Vnk1T7vS) · open [4e74FNST…](https://testnet.nearblocks.io/txns/4e74FNSTRsqeckYYq8PJZmcX85DSkJeMPkjaChW48rwD) · reveal [BX2Z39mT…](https://testnet.nearblocks.io/txns/BX2Z39mTbTwcP1sinA4c63SQsuuvwAYc4pNDTKuaavPg) · finalize [FnypREk9…](https://testnet.nearblocks.io/txns/FnypREk9epKaXRaGMB8dY94rNL5PrK3PULYUduEwULui) |
 | T2 | multichain-signed bids: testnet sales 4 and 6 on the T1 copy each hold a `raw_ed25519` bid (origin `sol`) and an `erc191` bid (origin `base`), relayed through `execute_intents`, later `Revealed` and paid. The signers are Node stand-ins with test keys, not real wallets | sale 4: [Gy9byvHc…](https://testnet.nearblocks.io/txns/Gy9byvHc1BEq468EzFuW4yiXE5pyhTEtTwhHuYcxjJpG) (`raw_ed25519`) · [A9AMis5a…](https://testnet.nearblocks.io/txns/A9AMis5aFz3GyiihRU4W8EEkW1wRRoNLkVafA6kNkdX1) (`erc191`); sale 6: [9eHYFAZd…](https://testnet.nearblocks.io/txns/9eHYFAZdu1JZvxLGnbsBLf4jot5sFKBFEBLo5djN5jgX) (`raw_ed25519`) · [5ZghewJ7…](https://testnet.nearblocks.io/txns/5ZghewJ73mNexVGpGpzfK9vHHNfThkz6j4EdCB2o55zv) (`erc191`) |
-| T3 | RC2 copy `rc2.tender-339e4b.testnet` born from the RC2 wasm, no `AddKey` | [NaApxsZu…](https://testnet.nearblocks.io/txns/NaApxsZuyGVZEsfSYsJmVUcAUpxPp2D7sLsVLfqzdPe) |
-| T4 | RC2 copy: sale 0 create | pending |
-| T5 | RC2 copy: sale 0 bid | pending |
-| T6 | RC2 copy: sale 0 bid | pending |
-| T7 | RC2 copy: sale 0 `open` | pending |
-| T8 | RC2 copy: sale 0 `reveal` | pending |
-| T9 | RC2 copy: sale 0 `finalize` | pending |
+| T3 | RC3 copy `rc3.tender-c201d6.testnet` born from the step 9 wasm in `generator` mode, no `AddKey` | [6oWauj6o…](https://testnet.nearblocks.io/txns/6oWauj6ozFjXRGsAd8SQ8gFkYrR6vRrLuXXsT9de11JR) |
+| T4 | RC3 copy: sale 0 create | [EgyGevcq…](https://testnet.nearblocks.io/txns/EgyGevcqN2dHzF11QYvWRQAweydwd1xk3jgAdNY8boEv) |
+| T5 | RC3 copy: sale 0 bid, nep413 through `execute_intents`, stored sealed | [2eedD5QK…](https://testnet.nearblocks.io/txns/2eedD5QK5U1cdBQacriVSCpBSRd2XZCq7oCgrYgX8B1q) |
+| T6 | RC3 copy: sale 0 bid through `mt_transfer_call`, stored sealed | [DK1C5fYz…](https://testnet.nearblocks.io/txns/DK1C5fYzRwsY8ZLcYTAc1v4u9pAMXQoZzaSPzat6R4ND) |
+| T7 | RC3 copy: sale 0 `open`; the key from `v1.signer-prod.testnet` passes `on_key`'s check, key log entry 0 `Ok` | [BMET8Kxu…](https://testnet.nearblocks.io/txns/BMET8KxuhmuMTxHoFz22dTodBznBpSATkuDKKne6AFY5) |
+| T8 | RC3 copy: sale 0 `reveal`, 2 bids | [EXA3vs4o…](https://testnet.nearblocks.io/txns/EXA3vs4oPwtzcwrBGwpBNppcEkiCGC8qs3w2nfsF5DFk) |
+| T9 | RC3 copy: sale 0 `finalize`, P* 3.90, payouts 3/3 | [GZcQEyGc…](https://testnet.nearblocks.io/txns/GZcQEyGcjWKXrxJQN4ops2UwjKa1xiGx4L2DgwWwKNR6) |
+| T10 | RC3 copy: the T6 bidder sends the same sealed bid again by direct `mt_transfer_call`, which carries no Intents nonce, so the contract decides: refunded in full, reason `dup_bid`; the sale still holds 2 bids | [Akpa82uN…](https://testnet.nearblocks.io/txns/Akpa82uN2up2GsRYMX158nRVXcjeheJPRhXuxAqq8NjJ) |
+| T11 | RC3 copy: the T5 bid signed again with the same nonce and a later deadline; the Intents contract refuses it: nonce already used. Testnet has no `intents.near`: this is the project's copy `intents-09bdfe.testnet`, which runs the same intents 0.4.5 wasm (check #26 `upstream-code`) | [ADToD4ai…](https://testnet.nearblocks.io/txns/ADToD4aijCVcaxs6JXHqpfz5afJm3N6VNwgfDd7G3Zr9) |
 
 ### Off-chain
 

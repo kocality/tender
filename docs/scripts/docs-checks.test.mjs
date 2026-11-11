@@ -66,6 +66,16 @@ const rules = [
     'see the install finish with only the CLI and its libraries, plus the TypeScript runner (tsx, vitest).', 'only the CLI'],
   ['CI-03 testnet run is against an earlier build', 'Testnet: 21/22 checks passed (1 warning).',
     'Testnet: 21/22 checks passed (1 warning) against the earlier build.', '21/22'],
+  // DOUBLE-PLAN "Never say": a confirmed second bid is allowed, the relayer only saves gas, another device can fund
+  // twice, and a pending payout is never resent.
+  ['DOUBLE double bids are allowed after a confirmation', 'With Tender, double bids are impossible.',
+    'A second copy of one sealed bid is refunded in full.', 'impossible'],
+  ['DOUBLE the relayer does not decide', 'The relayer prevents duplicates.',
+    'The relayer skips a bid the chain already shows stored; the contract and intents.near decide.', 'relayer prevents'],
+  ['DOUBLE another device can fund again', 'You can never pay 1Click twice.',
+    'Another browser or device can pay 1Click again during an unclear outcome; the money stays yours.', '1Click twice'],
+  ['DOUBLE a pending payout is never resent', 'A stuck payout is retried by the keeper.',
+    'A pending payout is never resent; verify lists it.', 'retried'],
 ];
 for (const [name, bad, good, frag] of rules) {
   test(`lint rule: ${name}`, () => {
@@ -225,6 +235,196 @@ test('CLM-11: JUDGES row T2 cites the multichain-signed bids on sales 4 and 6', 
   assert.match(row, /erc191/);
 });
 
+// ---- the RC3 contract and the docs that describe it ----------------------------------------------------------------
+const readmeStep = (n) => readme().split('\n').find((l) => l.startsWith(`${n}. `)) ?? '';
+const judgesRow = (id) => judges().split('\n').find((l) => l.startsWith(`| ${id} |`)) ?? '';
+
+test('RC3-01: README testnet steps, JUDGES T3 and evidence/testnet.json name one copy that runs the step 9 wasm', () => {
+  const wasm = JSON.parse(read(repo, 'evidence/wasm.json'));
+  const rows = JSON.parse(read(repo, 'evidence/testnet.json'));
+  const birth = rows.find((r) => r.step === 'birth');
+  assert.ok(birth, 'evidence/testnet.json has a birth row');
+  for (const n of [5, 6, 10]) assert.ok(readmeStep(n).includes(birth.contract), `README step ${n} names ${birth.contract}`);
+  assert.ok(readmeStep(5).includes(`"code_hash":"${wasm.code_hash_b58}"`), 'README step 5 shows the step 9 wasm code hash');
+  assert.ok(judgesRow('T3').includes(birth.tx_hash), 'JUDGES T3 cites the birth');
+  for (const r of rows) assert.ok(judges().includes(r.tx_hash), `JUDGES cites ${r.step} ${r.tx_hash}`);
+});
+
+test('RPC-01: no doc names the deprecated near.org RPC, and docs/verify.md names the CLI defaults', () => {
+  for (const p of ['README.md', 'JUDGES.md', 'docs/verify.md', 'docs/protocol.md']) {
+    assert.doesNotMatch(read(p.startsWith('docs/') ? repo : docs, p), /https:\/\/rpc\.(mainnet|testnet)\.near\.org/, p);
+  }
+  const config = read(repo, 'cli/src/lib/config.ts');
+  const hosts = [...config.matchAll(/^\s*rpc: \[([^\]]+)\]/gm)].flatMap((m) => [...m[1].matchAll(/https:\/\/([^'/]+)/g)].map((h) => h[1]));
+  assert.ok(hosts.length >= 6, `CLI RPC lists: ${hosts}`);
+  for (const h of hosts) assert.ok(read(repo, 'docs/verify.md').includes(h), `docs/verify.md names ${h}`);
+});
+
+test('CRYPTO-07: README and docs/protocol.md name the app key mode sales/v1-init.json sets', () => {
+  const mode = JSON.parse(read(repo, 'sales/v1-init.json')).app_pk_mode;
+  const mpcRow = readme().split('\n').find((l) => l.startsWith('| MPC Confidential Key Derivation |')) ?? '';
+  assert.ok(mpcRow.includes(`\`${mode}\` mode`), `README MPC row: ${mpcRow}`);
+  assert.ok(read(repo, 'docs/protocol.md').includes(`\`sales/v1-init.json\` sets \`${mode}\``), 'protocol.md App key mode');
+});
+
+test('DOUBLE-01: README says what a repeated bid does and what stays possible, with reasons the contract has', () => {
+  const text = readme();
+  const intents = read(repo, 'contract/src/intents.rs');
+  for (const r of ['dup_bid', 'bid_seq']) {
+    assert.ok(text.includes(`\`${r}\``), `README names ${r}`);
+    assert.ok(intents.includes(`refund_bid("${r}"`), `contract refunds ${r}`);
+  }
+  const confirm = read(repo, 'app/src/pages/Bid.tsx').match(/This will be an additional bid\./)?.[0];
+  assert.ok(confirm && read(repo, 'docs/protocol.md').includes(confirm), 'protocol.md quotes the named confirmation for a deliberate second bid');
+  assert.match(text, /another browser or device/i, 'what stays possible');
+});
+
+test('KEY-01: README states the on_key key check, and protocol.md gives on_key the contract ON_KEY_GAS', () => {
+  assert.match(readme(), /MPC key pinned/, 'README names the key check against the MPC key pinned at birth');
+  const tgas = read(repo, 'contract/src/seal.rs').match(/ON_KEY_GAS: Gas = Gas::from_tgas\((\d+)\)/)?.[1];
+  assert.ok(tgas);
+  assert.match(read(repo, 'docs/protocol.md'), new RegExp(`\`on_key\` gets ${tgas} Tgas`));
+});
+
+test('X12A-04: docs/protocol.md quotes the withdraw page\'s own "not a wallet" message', () => {
+  const msg = read(repo, 'app/src/lib/withdrawRoutes.ts').match(/const NOT_A_WALLET = '([^.]+\.)/)?.[1];
+  assert.ok(msg, 'NOT_A_WALLET in withdrawRoutes.ts');
+  assert.ok(read(repo, 'docs/protocol.md').includes(msg), `protocol.md quotes: ${msg}`);
+});
+
+// ---- one home per fact; the double-bid and key-check claims say exactly what the rows show ------------------------------
+const protocol = () => read(repo, 'docs/protocol.md');
+const prose = (text) => text.replace(/```mermaid[\s\S]*?```/g, ''); // a diagram may show what a sentence says
+const docText = { 'README.md': () => prose(readme()), 'JUDGES.md': judges, 'docs/protocol.md': protocol, 'docs/verify.md': () => read(repo, 'docs/verify.md') };
+const homes = [
+  ['the RC3 testnet copy runs generator (home: JUDGES T3)', /(rc3\.tender|testnet copy|RC3 copy).*generator/i,
+    { 'README.md': 0, 'JUDGES.md': 1, 'docs/protocol.md': 0 }],
+  ['the app key mode v1 uses (home: protocol App key mode)', /`sales\/v1-init\.json` sets|mode v1 uses|v1 does not use/,
+    { 'README.md': 0, 'JUDGES.md': 0, 'docs/protocol.md': 1 }],
+  ['the 24 h cancel rule (home: protocol Sale states and Key request)', /24 h/, { 'README.md': 0 }],
+  ['what dup_bid and bid_seq compare (home: protocol Repeated bids)', /already has stored|prepared before/,
+    { 'README.md': 0, 'JUDGES.md': 0, 'docs/protocol.md': 1 }],
+  ['the app\'s additional-bid confirmation (home: protocol)', /This will be an additional bid/,
+    { 'README.md': 0, 'JUDGES.md': 0, 'docs/protocol.md': 1 }],
+  ['the on_key key check in README (home: row 5)', /pairing check|answer checked/, { 'README.md': 1 }],
+  ['one Intents nonce for every copy of a sealed bid (home: protocol Repeated bids)', /(same|one) (NEAR )?Intents nonce/,
+    { 'README.md': 0, 'docs/protocol.md': 1 }],
+  ['what an MPC key change does (home: protocol Changed MPC key)', /no v1 sale|fails the check in/, { 'README.md': 0 }],
+  ['open can be retried after a failed answer (home: protocol Failed answer)', /`open` can be retried|call `open` again/,
+    { 'docs/protocol.md': 1 }],
+  ['what /relay answers (home: relayer/README.md)', /\b(409|202)\b/, { 'docs/protocol.md': 0 }],
+  ['which file holds the testnet rows (home: evidence/README.md)', /evidence\/testnet\.json/, { 'docs/verify.md': 0 }],
+];
+for (const [fact, re, limits] of homes) {
+  test(`ONE-HOME: ${fact}`, () => {
+    for (const [file, max] of Object.entries(limits)) {
+      const lines = docText[file]().split('\n').filter((l) => re.test(l));
+      assert.ok(lines.length <= max, `${file} states it ${lines.length} times (at most ${max}):\n${lines.join('\n')}`);
+    }
+  });
+}
+
+test('DOUBLE-02: a run-once claim names our signers, and a stored-once claim names the sale', () => {
+  // The contract never checks the nonce: a copy re-signed elsewhere with a new nonce runs and is refunded dup_bid.
+  for (const [file, text] of [['README.md', readme()], ['JUDGES.md', judges()]]) {
+    for (const l of text.split('\n').filter((x) => /at most once|at most one of them|cannot run|runs at most/.test(x))) {
+      assert.match(l, /our app/i, `${file}: ${l}`);
+    }
+  }
+  const row = judges().split('\n').find((l) => l.startsWith('| One sealed bid is stored at most once')) ?? '';
+  assert.match(row, /per account in a sale/, row);
+  // The app pins a new Intents salt, and so a new nonce, when the salt was invalidated before the first send.
+  if (read(repo, 'app/src/pages/Bid.tsx').includes("sim.kind === 'invalid_salt'")) {
+    assert.match(protocol(), /new nonce only when the Intents salt was invalidated before the bid was first sent/, 'protocol.md names the salt exception');
+  }
+});
+
+test('DOUBLE-03: the README Double bids limit lists only what rows 3-4 do not stop, in words the README defines', () => {
+  const bullet = readme().split('\n').find((l) => l.startsWith('- **Double bids.**')) ?? '';
+  assert.ok(bullet, 'README Limits has a Double bids bullet');
+  assert.doesNotMatch(bullet, /never runs/, 'restates rows 3-4 (and reads as "neither runs nor is refunded")');
+  assert.ok(bullet.includes('(docs/protocol.md#bids-the-contract-refunds)'), 'links the app behaviour in protocol.md');
+  assert.doesNotMatch(readme(), /`seq`/, 'README never introduces the `seq` field');
+});
+
+test('KEY-02: the key-check claim row names the sandbox test in which on_key refuses a wrong key', () => {
+  const row = judges().split('\n').find((l) => l.includes('pairing check against the pinned MPC key')) ?? '';
+  const sandbox = read(repo, 'contract/tests/sandbox.rs');
+  const named = [...row.matchAll(/`(\w+)`/g)].map((m) => m[1]).filter((n) => sandbox.includes(`async fn ${n}(`));
+  assert.equal(named.length, 1, `claim row: ${row}`);
+  const body = sandbox.slice(sandbox.indexOf(`async fn ${named[0]}(`)).split('\n#[tokio::test]')[0];
+  assert.match(body, /key does not match mpc_public_key/, `${named[0]} asserts the refusal`);
+});
+
+test('KEY-03: every JUDGES row marked identity mode names a generator-mode proof of what that row shows', () => {
+  const marked = judges().split('\n').filter((l) => /\(identity mode/.test(l));
+  assert.ok(marked.length > 0);
+  for (const l of marked) {
+    const id = l.match(/generator mode: (T\d+)/)?.[1];
+    assert.ok(id ? judgesRow(id) : /generator mode: step 10, check #12/.test(l), l);
+  }
+  // T8 is the reveal, which checks commitments, not decryption; the decrypt proof is step 10's check #12.
+  assert.match(judgesRow('S2'), /generator mode: step 10, check #12 `ciphertexts-decrypt`/, judgesRow('S2'));
+  const out = readdirSync(join(repo, 'evidence/verify')).filter((f) => f.startsWith('testnet-rc3.')).map((f) => read(repo, `evidence/verify/${f}`))
+    .find((t) => t.includes(readmeStep(10).match(/see `([^`]+)`/)[1]));
+  assert.match(out ?? '', /PASS #12 ciphertexts-decrypt — 2\/2 decrypt/, 'a saved step 10 output shows check #12 decrypting');
+  // T7 records only a key accepted; no generator-mode wrong-app_id rejection is on chain.
+  assert.match(judgesRow('S6-ckd'), /contract-initiated CKD in generator mode: T7/, judgesRow('S6-ckd'));
+  assert.doesNotMatch(judgesRow('T7'), /reject|wrong/, judgesRow('T7'));
+});
+
+test('DOCS-NIT: no internal ticket IDs in the judge docs; step 10 says what T3-T11 cover; JUDGES lists every tx-row file', () => {
+  for (const [file, f] of Object.entries(docText)) assert.doesNotMatch(f(), /\b(CRYPTO|X12[A-Z]|OPS|CLM)-\d+/, file);
+  assert.match(readmeStep(10), /That copy and its sale: \[rows T3-T11\]/, readmeStep(10));
+  const line = judges().split('\n').find((l) => l.startsWith('Raw RPC responses')) ?? '';
+  const files = readdirSync(join(repo, 'evidence')).filter((f) => f.endsWith('.json') && /"tx_hash(es)?"/.test(read(repo, `evidence/${f}`)));
+  assert.ok(files.length >= 3, `${files}`);
+  for (const f of files) assert.ok(line.includes(`\`evidence/${f}\``), `JUDGES names evidence/${f}`);
+});
+
+test('WITHDRAW-01: no doc says withdrawals go to wallets only; the page refuses a fixed list', () => {
+  for (const [file, f] of Object.entries(docText)) {
+    assert.doesNotMatch(f(), /wallet address only|only to a wallet|refuses an address that is not a wallet/i, file);
+  }
+  const row9 = readme().split('\n').find((l) => l.startsWith('| 9 |')) ?? '';
+  assert.match(row9, /refuses known non-wallet addresses/, row9);
+  assert.match(protocol(), /Any other address passes/, 'protocol.md says what still passes');
+});
+
+test('DOUBLE-04: the run-once claim covers only paths that sign one nonce, and T10 says the contract decided', () => {
+  const claim = judges().split('\n').find((l) => l.startsWith('| One sealed bid is stored at most once')) ?? '';
+  assert.doesNotMatch(claim, /\bscripts\b|\bCLI\b/, `claim names the signing paths: ${claim}`);
+  assert.match(claim, /before close/, claim);
+  for (const [file, text] of [['README.md', readme()], ['JUDGES.md', judges()], ['docs/protocol.md', protocol()]]) {
+    assert.doesNotMatch(text, /(app|CLI),? (CLI )?and (the )?scripts/, file);
+  }
+  // The bid script signs a random nonce with --late, and the rehearsal bids by direct mt_transfer_call.
+  if (/closeNs === undefined\s*\?\s*buildVersionedNonce/.test(read(repo, 'relayer/scripts/bid-nep413.ts'))) {
+    assert.match(protocol(), /`bid-nep413\.ts --late`, a random nonce/, 'protocol.md names the --late exception');
+  }
+  if (/mt_transfer_call/.test(read(repo, 'contract/scripts/testnet-rehearsal.sh'))) {
+    assert.match(protocol(), /direct `mt_transfer_call` \(`contract\/scripts\/testnet-rehearsal\.sh`/, 'protocol.md names the direct-transfer exception');
+  }
+  assert.match(protocol(), /once one has run, a second signature of it fails as `nonce_used`/);
+  const t10 = JSON.parse(read(repo, 'evidence/testnet.json')).find((r) => r.reason === 'dup_bid');
+  assert.ok(t10 && judgesRow('T10').includes(t10.tx_hash));
+  assert.match(judgesRow('T10'), /direct `mt_transfer_call`, which carries no Intents nonce, so the contract decides/, judgesRow('T10'));
+});
+
+test('README-READ: step 10 says its sale 0 is not the twin; README defines what it names', () => {
+  const t9 = judgesRow('T9').match(/P\* (\d+\.\d+)/)?.[1];
+  assert.ok(t9 && readmeStep(10).includes(`clears at ${t9}, not the story's twin`), readmeStep(10));
+  assert.doesNotMatch(readme(), /at birth/, '"birth" is never defined for a judge');
+  const bullet = readme().split('\n').find((l) => l.startsWith('- **Double bids.**')) ?? '';
+  assert.doesNotMatch(bullet, /bid count/, 'the README never defines a bid count');
+  assert.match(bullet, /one of the two bids is refunded \(`bid_seq`\)/, 'the first copy can be the one refunded');
+});
+
+test('ONE-HOME: the contract skips pending payouts, stated once across protocol.md and relayer/README.md', () => {
+  const lines = [protocol(), read(repo, 'relayer/README.md')].flatMap((t) => t.split('\n')).filter((l) => /`pending`/.test(l) && /twice/.test(l));
+  assert.equal(lines.length, 1, lines.join('\n'));
+});
+
 // ---- documented command output --------------------------------------------------------------------------------------
 const hasPnpm = spawnSync('pnpm', ['-v'], { encoding: 'utf8' }).status === 0;
 function stepLine(text, cmd) {
@@ -260,6 +460,23 @@ test('CI-02: README test counts equal a clean run (COUNTS=1)', { skip: process.e
     const r = spawnSync('pnpm', ['test'], { cwd: join(repo, dir), encoding: 'utf8', env: { ...process.env, LIVE: '' } });
     const got = Number((r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').match(/Tests\s+(?:\d+ failed \| )?(\d+) passed/)?.[1]);
     assert.equal(claimed, got, `${name}: README ${claimed}, run ${got}`);
+  }
+});
+
+test('CI-02: docs/verify.md node --test counts equal a run (COUNTS=1)', { skip: process.env.COUNTS !== '1' }, () => {
+  const line = read(repo, 'docs/verify.md').split('\n').find((l) => l.includes('`node --test` suites')) ?? '';
+  const files = {
+    'docs-checks': 'docs/scripts/docs-checks.test.mjs', 'ci-config': '.github/workflows/ci-config.test.mjs',
+    'check-imports': 'contract/scripts/check-imports.test.mjs', 'm3-reveal-items': 'contract/scripts/m3-reveal-items.test.mjs',
+    'testnet-rehearsal': 'contract/scripts/testnet-rehearsal.test.mjs',
+  };
+  for (const [name, file] of Object.entries(files)) {
+    const claimed = Number(line.match(new RegExp(`${name} (\\d+)`))?.[1]);
+    // COUNTS and LIVE off: the opt-in checks are counted apart ("+3 opt-in"), and this one must not run itself again.
+    const { NODE_TEST_CONTEXT, ...env } = process.env; // set by the outer runner; the inner one would then report in its binary format
+    const r = spawnSync('node', ['--test', file], { cwd: repo, encoding: 'utf8', env: { ...env, COUNTS: '', LIVE: '' } });
+    const got = Number(r.stdout.replace(/\x1b\[[0-9;]*m/g, '').match(/^ℹ pass (\d+)/m)?.[1]);
+    assert.equal(claimed, got, `${name}: docs/verify.md ${claimed}, run ${got}`);
   }
 });
 

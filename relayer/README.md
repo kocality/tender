@@ -19,4 +19,4 @@ The two 409s only save relayer gas. The contract (`dup_bid`, `bid_seq`) and inte
 ## Keeper rules
 
 - During live sales a human starts the keeper with `gh workflow run keeper`, not from a laptop: two keepers at once are guarded by the workflow concurrency group and the contract state, a third one from a laptop is not.
-- Never resend a payout because an item looks stuck. A payout whose callback ran out of gas stays `pending`; the contract skips `pending` items and never pays them twice. `pnpm verify --sale N` lists each one.
+- Never resend a payout because an item looks stuck, even one that stays `pending` ([why](../docs/protocol.md#off-chain-services)).

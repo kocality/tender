@@ -15,7 +15,7 @@ flowchart TB
 
 [The story](#the-story) runs one sale down each branch.
 
-**Status, 2026-11-11 UTC.** Runs today: steps 1-9 below ([`git clone` once the repo is public](JUDGES.md#off-chain)) and [a full testnet sale with a real MPC key](JUDGES.md#testnet). Not live yet: the mainnet contract `v1.tenderseal.near`, the [hosted app and demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
+**Status, 2026-11-12 UTC.** Runs today: steps 1-10 below ([`git clone` once the repo is public](JUDGES.md#off-chain)) and [a full testnet sale of the step 9 build with a real MPC key](JUDGES.md#testnet). Not live yet: the mainnet contract `v1.tenderseal.near`, the [hosted app and demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
 
 ## The story
 
@@ -87,7 +87,8 @@ sequenceDiagram
   Y->>C: open sale 1, after close
   Note over C: 21 USDC ≥ 5<br/>6 bidders ≥ 3<br/>ledger entry first:<br/>key_requests = 1
   C->>M: asks for the sale key
-  M-->>C: key stored on chain, readable by anyone
+  M-->>C: the sale key
+  Note over C: checks it against the MPC key<br/>pinned when the contract was created,<br/>then stores it on chain,<br/>readable by anyone
   Note over Y,K: anyone decrypts all 6 bids and checks each commitment
   K->>C: reveals 6 bids, commitments 6/6
   K->>C: finalize: one price, P* = 3.60 USDC/NEAR
@@ -156,19 +157,19 @@ Node 18 does not work, nor Node 20: the install stops with `ERR_PNPM_UNSUPPORTED
 2. (offline) `pnpm demo:local` - see `P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6` and `done in` under a second: [the story's sale](#the-story), sealed, opened and cleared on your machine. If you run only one step, run this one.
 3. (offline) `pnpm vectors` - see `4 passed (4)`: the near/mpc CKD test vectors.
 4. (offline) `node contract/scripts/check-imports.mjs contract/res/tender.wasm` - see `PASS 30 imports`: none can add a key, deploy code or delete the account.
-5. (network: testnet RPC) `curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc2.tender-339e4b.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"7Wr8DDsDA9XYJMw48HwDg4Y5vbWLwd38EN2A9trAezDv"` (the RC2 wasm this copy runs; step 9's RC3 wasm has code hash `ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y` and no testnet copy yet) and `"keys":[]`.
-6. (network: testnet RPC) `pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --keys` - see `key log (contract state): 0 requests` and `= 0 (match)`.
+5. (network: testnet RPC) `curl -s https://test.rpc.fastnear.com -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc3.tender-c201d6.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y"` (the testnet copy of step 9's wasm) and `"keys":[]`.
+6. (network: testnet RPC) `pnpm verify --network testnet --contract rc3.tender-c201d6.testnet --keys` - see `key log (contract state): 1 request` and `= 1 (match)`.
 7. (network on a fresh machine) `pnpm install && pnpm -r test`, now for the whole workspace - see every package pass with the counts in the [Tests row](#build-and-test-evidence).
 8. (Rust; downloads near-sandbox) `bash contract/scripts/build-wasms.sh && (cd contract && cargo test)` - see the unit, sandbox and S3a tests pass with the counts in the Tests row.
 9. (Docker, about 3 min plus a one-time image pull, full git history) `git checkout ab48e6690048e9b506c51c3667f852457758a706 && (cd contract && cargo near build reproducible-wasm && shasum -a 256 target/near/tender.wasm)` - see `9285e1873b70e3f99cb6e7118f5468a136e288081d5fb884a773e6ab7cf65650`, the value `contract/res/tender.wasm.sha256` holds on `main` and the hash CI printed for this commit ([JUDGES row P3](JUDGES.md#off-chain)). Build exactly this commit: the NEP-330 metadata embeds the commit, so any later commit gives a different hash. On arm64 Macs, Docker's linux/amd64 platform warning is expected.
+10. (network: testnet RPC) `pnpm verify --network testnet --contract rc3.tender-c201d6.testnet --sale 0 --evidence evidence/testnet.json` - see `24/25 checks passed (1 warning)`: the warning is `#6`, which passes with `--rebuild`. That copy and its sale: [rows T3-T11](JUDGES.md#testnet); this sale 0 is a 2-bid sale that opens, reveals and clears at 3.90, not the story's twin.
 
-<details><summary>Steps 10-18: on chain, once the rows they need exist</summary>
+<details><summary>Steps 11-18: on chain, once the rows they need exist</summary>
 
-Step 10 needs testnet rows T4-T9; steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-18 also need the hosted app. Until then, step 10 prints `sale 0 not found` and steps 11-15 stop with `UNKNOWN_ACCOUNT`.
+Steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-18 also need the hosted app. Until then, steps 11-15 stop with `UNKNOWN_ACCOUNT`.
 
 | # | Do | See |
 |---|---|---|
-| 10 | `git show 0e5a603:contract/res/tender.wasm > rc2.wasm && pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --sale 0 --wasm rc2.wasm` | no `FAIL` line; `#3 code-hash` PASS against the RC2 wasm |
 | 11 | `pnpm verify --keys` | every key `v1.tenderseal.near` ever requested, one line per sale |
 | 12 | `pnpm seal:try --sale 2` | before `2026-11-17T12:00:00Z`: `sealed: no key has been requested for sale 2 (key_requests = 0)`; after close: `key released at block …` |
 | 13 | `pnpm verify --sale 1` | no `FAIL` line; `#15 clearing-price` `P* = 3.60 USDC/NEAR` |
@@ -203,18 +204,18 @@ Edge numbers are the table rows; rows 2 and 4 happen inside the wallet and the c
 |---|---|---|
 | 1 | **Deposit.** USDC goes into the bidder's own Intents account, directly or through a 1Click deposit address. The app has no send code: you send from your own wallet. | the bidder's Intents account |
 | 2 | **Seal.** In the browser or the CLI: Boneh-Franklin IBE to `pk ‖ app_id(v1.tenderseal.near, path)`, bound by a sha256 commitment. | unchanged |
-| 3 | **Bid.** Signed with erc191, raw_ed25519 or nep413; carries the commitment too. | the contract's Intents account |
-| 4 | **Store or refund.** `mt_on_transfer` stores the bid or [refunds it](docs/protocol.md#bids-the-contract-refunds). | the contract, or back to the bidder |
-| 5 | **Open.** After close anyone can call `open`; the contract records `key_requests += 1` before the MPC call. | the contract |
+| 3 | **Bid.** Signed with erc191, raw_ed25519 or nep413; carries the commitment and a NEAR Intents nonce ([which nonce](docs/protocol.md#bids-the-contract-refunds)). | the contract's Intents account |
+| 4 | **Store or refund.** `mt_on_transfer` stores the bid or [refunds it](docs/protocol.md#bids-the-contract-refunds) in full, e.g. a repeated bid (`dup_bid`, `bid_seq`). | the contract, or back to the bidder |
+| 5 | **Open.** After close anyone can call `open`; the contract records `key_requests += 1` before the MPC call, and `on_key` stores the key only if it passes a pairing check against the MPC key pinned when the contract was created. | the contract |
 | 6 | **Reveal.** Anyone can call `reveal` with the decrypted bids; our keeper does this. Bidders can also [self-reveal](docs/protocol.md#reveal). | the contract |
 | 7 | **Finalize.** Integer-only clearing, paid out with `mt_batch_transfer`. An unrevealed bid can lose 10% of its escrow, kept in the contract, paid to no one. | the bidders' and seller's Intents accounts ([penalty pool](docs/protocol.md#clearing-and-penalty)) |
 | 8 | **Cancel.** `cancel` ([rule](docs/protocol.md#sale-states)). | back in the bidders' Intents accounts |
-| 9 | **Withdraw.** Back to an origin chain through a 1Click quote; recorded: [S5](JUDGES.md#mainnet-spikes-before-the-contract). | the bidder's wallet |
+| 9 | **Withdraw.** Back to an origin chain through a 1Click quote; the page refuses known non-wallet addresses ([rule](docs/protocol.md#off-chain-services)); recorded: [S5](JUDGES.md#mainnet-spikes-before-the-contract). | the bidder's wallet |
 
 ```mermaid
 stateDiagram-v2
   [*] --> Open: create
-  Open --> Open: key error, retry open
+  Open --> Open: key error or key fails the check, retry open
   Open --> Keyed: key stored
   Keyed --> Keyed: reveal, in the window
   Keyed --> Finalized: finalize, window over or all revealed
@@ -229,7 +230,7 @@ Sale 1 in the story runs Open → Keyed → Finalized; its twin, sale 0, runs Op
 
 | Technology | What Tender uses | Code |
 |---|---|---|
-| MPC Confidential Key Derivation | `v1.signer` 3.18.0 on 2026-11-10, domain 2 (BLS12-381), `request_app_private_key` in `identity` mode ([call](docs/protocol.md#key-request)) | `contract/src/seal.rs` |
+| MPC Confidential Key Derivation | `v1.signer` 3.18.0 on 2026-11-10, domain 2 (BLS12-381), `request_app_private_key` in `generator` mode, the BLS12-381 host functions ([call](docs/protocol.md#key-request)) | `contract/src/seal.rs` |
 | NEAR Intents (`intents.near` 0.4.5) | `Transfer` with notification → `mt_on_transfer` (NEP-245), `simulate_intents` / `execute_intents`, `mt_batch_transfer` | `contract/src/intents.rs`, `packages/intents` |
 | 1Click API | deposit addresses and withdraw quotes | `app/src/lib/oneclick.ts` |
 | NEP-141 tokens | wNEAR `wrap.near`, NEAR-native USDC, JAMBO `jambo-1679.meme-cooking.near` | `sales/` |
@@ -276,7 +277,7 @@ This is row 2 of the table below; the proof is the JUDGES claim row [Only `v1.te
 | The MPC threshold above | bids unreadable before release | bids are read early, and nothing on chain shows it; escrow stays in the contract |
 | `app_id` is derived from the calling account. `v1.tenderseal.near` is created keyless, with no upgrade method. Every sale path carries a random seed generated after the contract existed. | the only-requester rule (diagram above) | someone else could request it and read the bids early |
 | Contract `open` and the reproducible build | the [open-conditions rule](JUDGES.md#claims-and-where-to-check-them) | a sale could be decrypted without meeting its conditions |
-| NEAR MPC liveness | the key arrives | the sale can be cancelled (row 8 above) |
+| NEAR MPC liveness, and its domain-2 key staying the one pinned when the contract was created | a key that decrypts the bids arrives | no key is stored; the sale can be cancelled (row 8 above) |
 | Someone revealing within the window | bids get revealed | an unrevealed bid can pay the [row 7 penalty](#how-it-works) |
 | `intents.near` signature checks | bidder identity and amounts | bids or transfers could be forged |
 | `intents.near` admin roles | the penalty pool and escrow stay where the contract put them | they could force-move any Intents balance, the pool included |
@@ -284,7 +285,7 @@ This is row 2 of the table below; the proof is the JUDGES claim row [Only `v1.te
 | Our hosted JavaScript bundle | encryption in your browser | a malicious bundle could leak your price before sealing; seal locally with `pnpm seal:bid` |
 | Nobody: `execute_intents` is permissionless | relaying | if our relayer refuses you, relay elsewhere ([what our relayer keeps](docs/protocol.md#off-chain-services)) |
 
-<details><summary>Limits: what an attacker can still do, and what we do not claim (10)</summary>
+<details><summary>Limits: what an attacker can still do, and what we do not claim (11)</summary>
 
 Mechanics: [docs/protocol.md](docs/protocol.md).
 
@@ -294,6 +295,7 @@ Mechanics: [docs/protocol.md](docs/protocol.md).
 - **"Never requested" is not "sealed for good".** It means the contract never asked for the key. The ciphertexts stay on chain, so the MPC-threshold row above still covers them, cancelled sales included, and a future compromise of NEAR's domain-2 master key would decrypt every stored bid. [A sale cancelled after a request](docs/protocol.md#key-request) is an exception.
 - **MPC key change** before a sale opens: [what then](docs/protocol.md#key-request).
 - **Refunded bids stay readable.** A refunded bid is not stored, but its ciphertext stays in public transaction history and decrypts if that sale's key is released. Our CLI and app [narrow this](docs/protocol.md#bids-the-contract-refunds); other signers are not covered.
+- **Double bids.** [Rows 3 and 4](#how-it-works) leave three cases open. A deliberate second bid, which the app confirms first ([how](docs/protocol.md#bids-the-contract-refunds)). A second 1Click deposit from another browser or device while a sent bid's outcome is unclear (up to 10 minutes): one of the two bids is refunded (`bid_seq`), the deposit stays in your Intents account, and you lose 1Click's fee. Two different bids from software that does not number its bids for the `bid_seq` check.
 - **Shill bids.** A seller's shill bids cannot be prevented, only seen after release; use the reserve price.
 - **Bid limits.** At most 64 bids per sale, 1 USDC minimum each, so refunded below-reserve bids can crowd a sale out.
 - **Price ceiling.** A token with 9 or fewer decimals has a [price ceiling](docs/protocol.md#clearing-and-penalty); wNEAR (24 decimals) and JAMBO (18) have none in practice.
@@ -316,7 +318,7 @@ Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | What | Result |
 |---|---|
-| Tests | clearing 13, intents 63, seal 37, relayer 418, app 436, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Clean clone at `ab48e66` (step 9's commit), 2026-11-11 UTC |
+| Tests | clearing 13, intents 63, seal 37, relayer 421, app 439, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. `main` at `271ebcd`, 2026-11-12 UTC; the contract and its tests are unchanged since step 9's commit |
 | Wasm RC3 | the release candidate from the step 9 commit: 281,895 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
 | Entry points | integrators: `packages/seal/src/index.ts` (workspace package, not on npm); evidence file formats: `evidence/README.md` |
 

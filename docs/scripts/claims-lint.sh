@@ -71,6 +71,12 @@ forbidden=(
   'finish with only the CLI@@TypeScript runner'
   # The testnet copy runs an earlier, non-reproducible build, so check #3 differs from the current wasm.
   '21/22 checks passed@@earlier'
+  # Double bids: a confirmed second bid is allowed, the relayer only saves gas, another device can pay 1Click again,
+  # and a pending payout is never resent.
+  '(double|duplicate|repeated|second) bids? (is|are) impossible|impossible to bid twice@@'
+  'relayer prevents (duplicates|double)@@'
+  'never pay 1Click twice@@'
+  'payouts? (is|are|gets?) retried@@'
 )
 
 for f in "${files[@]}"; do
