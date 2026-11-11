@@ -594,7 +594,15 @@ export function Wizard({
       if (!sim.ok) {
         // After a send, "not enough balance", "expired", "nonce used" can each mean an earlier signature ran: the chain decides.
         if (routeFailure(sim.kind, sentBefore) === 'settle') await askChain(sim.kind, sim.message, mp.standard);
-        else route(recoveryFor(sim.kind, sim.message, mp.standard));
+        else {
+          // Nothing was sent and no payload with an invalidated salt can ever run: pin the current salt so "Sign again" is not the same failure.
+          if (sim.kind === 'invalid_salt' && ticketRef.current) {
+            const s = await currentSalt(rpc, config.intentsContractId).catch(() => null);
+            if (g !== flow.current) return;
+            if (s && s !== ticketRef.current.intentsSalt) update({ intentsSalt: s });
+          }
+          route(recoveryFor(sim.kind, sim.message, mp.standard));
+        }
         return;
       }
       // From here the payload may land whatever the relayer answers: write that down before it leaves the page.
@@ -883,14 +891,23 @@ export function Wizard({
           </h2>
           {plan.pasted ? (
             <p className="result ok">Using your pasted sealed bid. The browser never saw its price.</p>
-          ) : (
+          ) : plan.secret ? (
             <button type="button" className="primary" onClick={doSeal} disabled={busy !== null || !live || !gate.seal}>
               {busy === 'seal' ? 'Sealing…' : 'Seal in this browser'}
             </button>
+          ) : (
+            <p className="result ok">Using the bid you sealed earlier in this browser.</p>
           )}
           {plan.pasted ? (
             <div style={{ marginTop: 8 }}>
               <button type="button" className="primary" onClick={continueToSign} disabled={!live || !gate.seal}>
+                Continue to signing
+              </button>
+            </div>
+          ) : !plan.secret && sealed && ticket ? (
+            // A restored bid (no price in this page) keeps its sealed bid and ticket: back to Sign, same nonce.
+            <div style={{ marginTop: 8 }}>
+              <button type="button" className="primary" onClick={() => setStep('sign')} disabled={!live || !gate.sign}>
                 Continue to signing
               </button>
             </div>

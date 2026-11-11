@@ -22,12 +22,13 @@ const m = vi.hoisted(() => ({
   readBids: vi.fn(),
   readForSign: vi.fn(),
   settle: vi.fn(),
+  salt: vi.fn(),
 }));
 vi.mock('@tender/intents', async (orig) => ({
   ...(await orig<typeof import('@tender/intents')>()),
   simulateIntents: m.simulate,
   mtBalanceOf: m.balance,
-  currentSalt: vi.fn(async () => '0a0b0c0d'),
+  currentSalt: m.salt,
 }));
 vi.mock('../lib/relay', async (orig) => ({ ...(await orig<typeof import('../lib/relay')>()), relay: m.relay }));
 vi.mock('../lib/oneclick', async (orig) => ({ ...(await orig<typeof import('../lib/oneclick')>()), quoteDeposit: m.quote, getStatus: vi.fn() }));
@@ -126,6 +127,7 @@ beforeEach(() => {
   m.readBids.mockReset().mockResolvedValue({ height: 1, tsMs: Date.now(), bids: [] });
   m.readForSign.mockReset().mockResolvedValue({ bids: [], used: false });
   m.settle.mockReset().mockResolvedValue(pending);
+  m.salt.mockReset().mockResolvedValue('0a0b0c0d');
   vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {} });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -364,6 +366,26 @@ describe('step 6: the saved ticket', () => {
     expect(mem.size).toBe(0);
     await click('Start over');
     expect(child(BidForm)).toBeDefined();
+  });
+  test('a restored unsent bid sent to Fund comes back to Sign: the page holds its sealed bid, not its price', async () => {
+    seed(ticket({ sent: false, payloadDeadlineMs: null }));
+    m.settle.mockResolvedValue({ verdict: { kind: 'dead' }, usedSeenMs: null });
+    await connect(signer());
+    m.simulate.mockResolvedValueOnce({ ok: false, kind: 'insufficient_balance', message: 'insufficient balance' });
+    await click('Sign with wallet'); // the balance reads funded, so Fund is skipped
+    expect(has('Seal in this browser')).toBe(false);
+    await click('Continue to signing');
+    await click('Sign with wallet');
+    expect(m.relay).toHaveBeenCalledTimes(1);
+  });
+  test('an Intents salt invalidated before the first send is pinned again, so "Sign again" does not repeat it', async () => {
+    m.simulate.mockResolvedValueOnce({ ok: false, kind: 'invalid_salt', message: 'invalid salt' });
+    m.salt.mockResolvedValueOnce('0a0b0c0d').mockResolvedValue('0e0f1011'); // pinned at seal, rotated by the Intents DAO before the simulation
+    await reachSign();
+    expect(has('Sign again')).toBe(true);
+    await click('Sign again');
+    expect(m.payload.mock.calls.map((c) => (c[0] as { saltHex: string }).saltHex)).toEqual(['0a0b0c0d', '0e0f1011']);
+    expect(m.relay).toHaveBeenCalledTimes(1);
   });
   test('a ticket of a sale with another creation time is not restored', async () => {
     seed(ticket({ saleCreatedNs: '1' }));
