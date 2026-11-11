@@ -8,7 +8,7 @@
 
 | Status | Body | Meaning |
 |---|---|---|
-| 200 | `{txHash}` | `execute_intents` succeeded. |
+| 200 | `{txHash, sender}` | `execute_intents` succeeded. `sender` is the signing account, so the transaction can be looked up. |
 | 202 execute_unknown | `{status, txHashes, sender, until, detail}` | The relayer signed and sent, but the answer was lost. The transaction may still land until `until` (the latest payload deadline). Look the hashes up (`sender` is the signing account); do not sign the payload again with a new nonce. |
 | 409 already_stored | `{sale, n}` | The chain already shows this signer's bid with the same commitment as bid `n`. Nothing was sent. |
 | 409 bid_seq | `{sale, have, seq}` | The signer already has more bids in the sale than the bid's `seq` says. Nothing was sent. |

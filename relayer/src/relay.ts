@@ -232,7 +232,7 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
 
         const out = await deps.execute(signed);
         log(`relay signers=${signers.join(",")} tx=${out.txHash || "none"} ok=${out.ok}`); // never the payload or signature
-        if (out.ok) return { status: 200, body: { txHash: out.txHash } };
+        if (out.ok) return { status: 200, body: { txHash: out.txHash, sender: deps.relayerId ?? null } };
         if (!out.txHash && out.sent?.length) {
           // Signed and handed to an RPC, the answer lost: it may still land until the payload deadline. Never "retry".
           const until = new Date(Math.max(...payloadDeadlines(signed))).toISOString();

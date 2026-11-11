@@ -105,11 +105,16 @@ describe("handler", () => {
     expect(await r.json()).toEqual({ error: "simulate_failed", detail: "insufficient balance or overflow" });
     expect(exec).not.toHaveBeenCalled();
   });
-  it("200 {txHash} and the payload reaches execute unchanged", async () => {
+  it("200 names the relayer account as sender, like the 202, so the app can read the Tender event of the tx", async () => {
+    const r = await createRelayHandler(cfg, { ...deps, relayerId: "relayer.tenderseal.near" })(post(body(raw())));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ txHash: "HASH1", sender: "relayer.tenderseal.near" });
+  });
+  it("200 {txHash, sender} and the payload reaches execute unchanged", async () => {
     const item = raw();
     const r = await make()(post(body(item)));
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ txHash: "HASH1" });
+    expect(await r.json()).toEqual({ txHash: "HASH1", sender: null });
     expect(exec).toHaveBeenCalledWith([item]);
     expect(sim).toHaveBeenCalledWith([item]);
   });
@@ -277,8 +282,8 @@ describe("idempotency (REL-02)", () => {
     release();
     const [ra, rc] = await Promise.all([a, c]);
     expect([ra.status, rc.status]).toEqual([200, 200]);
-    expect(await ra.json()).toEqual({ txHash: "HASH1" });
-    expect(await rc.json()).toEqual({ txHash: "HASH1" });
+    expect(await ra.json()).toEqual({ txHash: "HASH1", sender: null });
+    expect(await rc.json()).toEqual({ txHash: "HASH1", sender: null });
     expect(exec).toHaveBeenCalledTimes(1);
     expect(sim).toHaveBeenCalledTimes(1);
   });
