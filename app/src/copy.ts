@@ -46,3 +46,7 @@ export const TRY_RESULT = {
   otherAccount: 'the signature was made by a different account than the one shown (switch the wallet back to it, or reconnect)',
   funded: 'signature valid · this account holds funds; simulation only, nothing was sent',
 } as const;
+
+/** What an `Err` row of the key ledger can mean (the contract checks the MPC answer against its pinned key before it stores it). */
+export const KEY_ERR_RULE =
+  "Err: the MPC network answered with an error, or with a key the contract refused because it failed the pairing check against the pinned MPC key and the sale's app_id. Nothing was stored, the sale stays Open and open() may be asked again; if no key ever arrives, the sale is cancelled at close + 24 h and every bid is refunded in full.";

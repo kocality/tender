@@ -119,6 +119,18 @@ describe('key ledger view', () => {
     expect(html).not.toMatch(FORBIDDEN);
   });
 
+  test('an Err entry says what Err can mean, including a key the contract refused after the pairing check (X12F-01)', async () => {
+    stubNetwork(new Response(JSON.stringify(receipts), { status: 200 }));
+    const data = await loadKeys();
+    const none = renderToString(<KeysView data={data} />);
+    expect(none).not.toContain('pairing check');
+    const err = { ...data, rows: data.rows.map((r) => ({ ...r, entry: { ...r.entry, outcome: 'Err' as const } })) };
+    const html = renderToString(<KeysView data={err} />);
+    expect(html).toContain('pairing check');
+    expect(html).toContain('Nothing was stored');
+    expect(html).not.toMatch(FORBIDDEN);
+  });
+
   test('NearBlocks rate limit: warning shown, the contract ledger still renders', async () => {
     stubNetwork(new Response('rate limited', { status: 429 }));
     const html = renderToString(<KeysView data={await loadKeys()} />);

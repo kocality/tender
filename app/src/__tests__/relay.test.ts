@@ -31,6 +31,31 @@ describe('relay failures other than 429 (QA-04)', () => {
   });
 });
 
+describe('relay answers that are not "retry" (DOUBLE-PLAN step 3)', () => {
+  test('202 execute_unknown is an unclear outcome with the hashes, never a success and never "retry"', async () => {
+    answer(202, { status: 'execute_unknown', txHashes: ['H1', 'H2'], sender: 'relayer.near', until: '2026-11-13T02:10:00.000Z', detail: 'timeout' });
+    const err = await relay(signed, 'http://relay.invalid').catch((e: RelayError) => e);
+    expect(err).toBeInstanceOf(RelayError);
+    expect(err).toMatchObject({ kind: 'execute_unknown', unknown: { txHashes: ['H1', 'H2'], sender: 'relayer.near', untilMs: Date.parse('2026-11-13T02:10:00.000Z') } });
+  });
+  test('409 already_stored and 409 bid_seq keep their own kinds, with the relayer numbers', async () => {
+    answer(409, { error: 'already_stored', detail: 'stored as your bid #1', sale: '1', n: 1 });
+    await expect(relay(signed, 'http://relay.invalid')).rejects.toMatchObject({ kind: 'already_stored' });
+    answer(409, { error: 'bid_seq', detail: 'you already have 2', sale: '1', have: 2, seq: 1 });
+    await expect(relay(signed, 'http://relay.invalid')).rejects.toMatchObject({ kind: 'bid_seq' });
+  });
+  test('a 200 keeps the relayer account when it names it, so the page can read what the transaction logged', async () => {
+    answer(200, { txHash: 'H1', sender: 'relayer.near' });
+    expect(await relay(signed, 'http://relay.invalid')).toEqual({ txHash: 'H1', sender: 'relayer.near' });
+    answer(200, { txHash: 'H1' });
+    expect(await relay(signed, 'http://relay.invalid')).toEqual({ txHash: 'H1' });
+  });
+  test('a 503 that signed nothing is still the retry kind', async () => {
+    answer(503, { error: 'execute_unavailable', detail: 'could not send', retry: true });
+    await expect(relay(signed, 'http://relay.invalid')).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+});
+
 describe('confirming a stored bid (QA-08)', () => {
   const bid = { idx: 3, bidder: 'a.near', cm: 'ab'.repeat(32) } as unknown as Bid;
   const fast = { timeoutMs: 10, intervalMs: 1 };

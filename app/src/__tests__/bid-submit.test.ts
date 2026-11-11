@@ -37,7 +37,7 @@ describe('the sealed bid transfer', () => {
     expect(sealed.cm).toMatch(/^[0-9a-f]{64}$/);
 
     const payload = await buildBidPayload({
-      signerId: bidder, receiverId: contractId, quoteToken: USDC, amount: 3_000_000n, sale: '1', ct: sealed.ct, cm: sealed.cm, origin: 'sol', saltHex: '252812b3', nowMs: 1_800_000_000_000,
+      signerId: bidder, receiverId: contractId, quoteToken: USDC, amount: 3_000_000n, sale: '1', ct: sealed.ct, cm: sealed.cm, origin: 'sol', saltHex: '252812b3', nowMs: 1_800_000_000_000, closeNs: 1_800_003_600_000_000_000n,
     });
     const intent = payload.intents[0]!;
     expect(intent.receiver_id).toBe(contractId);
@@ -57,7 +57,7 @@ describe('the sealed bid transfer', () => {
     const { pk32, sign } = await ed25519Wallet();
     const bidder = solanaSignerId(pk32);
     const sealed = sealForSale({ contractId, sale: 1n, mpk, path, bidder, B: 3_000_000n, p: 3_600_000n, q: 2_000_000n });
-    const payload = await buildBidPayload({ signerId: bidder, receiverId: contractId, quoteToken: USDC, amount: 3_000_000n, sale: '1', ct: sealed.ct, cm: sealed.cm, origin: 'sol' });
+    const payload = await buildBidPayload({ signerId: bidder, receiverId: contractId, quoteToken: USDC, amount: 3_000_000n, sale: '1', ct: sealed.ct, cm: sealed.cm, origin: 'sol', closeNs: BigInt(Date.now() + 3_600_000) * 1_000_000n });
     const str = payloadString(payload);
     const mp = rawEd25519FromWallet(str, pk32, await sign(new TextEncoder().encode(str)));
     const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [mp]);

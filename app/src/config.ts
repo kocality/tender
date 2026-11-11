@@ -17,9 +17,13 @@ function list(v: unknown, fallback: string[]): string[] {
 const env = import.meta.env;
 
 const network: 'mainnet' | 'testnet' = env.VITE_NETWORK === 'testnet' ? 'testnet' : 'mainnet';
-const rpcUrl = str(env.VITE_NEAR_RPC_URL, 'https://free.rpc.fastnear.com');
-// No default fallback: rpc.mainnet.near.org is deprecated and answers HTTP 429. Set VITE_NEAR_RPC_FALLBACKS to a live provider.
-const rpcFallbacks = list(env.VITE_NEAR_RPC_FALLBACKS, []);
+// Three independent keyless providers per network (OPS-04); rpc.{mainnet,testnet}.near.org answer HTTP 429 and are not listed.
+const DEFAULT_RPCS = {
+  mainnet: ['https://free.rpc.fastnear.com', 'https://near.drpc.org', 'https://rpc.shitzuapes.xyz'],
+  testnet: ['https://test.rpc.fastnear.com', 'https://near-testnet.drpc.org', 'https://testnet-rpc.intea.rs'],
+};
+const rpcUrl = str(env.VITE_NEAR_RPC_URL, DEFAULT_RPCS[network][0]!);
+const rpcFallbacks = list(env.VITE_NEAR_RPC_FALLBACKS, DEFAULT_RPCS[network]);
 const tenderContractId = str(env.VITE_TENDER_CONTRACT_ID, 'v1.tenderseal.near');
 
 export interface AppConfig {

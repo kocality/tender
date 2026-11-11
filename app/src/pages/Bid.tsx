@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { fromBase64, mtBalanceOf, simulateIntents, toHex, type MultiPayload } from '@tender/intents';
+import { currentSalt, fromBase64, mtBalanceOf, simulateIntents, toHex, type MultiPayload } from '@tender/intents';
 import { BidForm, type BidFormValues } from '../components/BidForm';
 import { Countdown } from '../components/Countdown';
 import { CopyButton } from '../components/CopyButton';
@@ -38,8 +38,10 @@ import { addIntentsKey } from '../lib/near-tx';
 import { getStatus, isTerminal, quoteDeposit, submitDeposit, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
 import type { PastedBid } from '../lib/pasteSealed';
 import { clearQuote, loadQuote, quoteKey, reusableQuote, saveQuote, shouldWarnOnUnload } from '../lib/quoteStore';
-import { RelayError, confirmBid, relay } from '../lib/relay';
+import { RelayError, relay, type RelayKind } from '../lib/relay';
 import { sealWithConfig } from '../lib/sealBid';
+import { chainIO, isFinal, offers, pendingText, preSign, readBids, readForSign, refundedText, routeFailure, settle as settleChain, type BidRow, type Settled } from '../lib/settle';
+import { claimTicket, clearTicket, loadTicket, saveTicket, type Ticket } from '../lib/ticket';
 import { usePolling } from '../lib/usePolling';
 import { getConfig, type Bid, type Sale } from '../lib/views';
 import type { IntentSigner } from '../wallets/types';
@@ -50,6 +52,8 @@ interface Plan {
   /** Wizard bids carry p and q until they are sealed; a pasted bid is already sealed. */
   secret: { p: bigint; q: bigint } | null;
   pasted: PastedBid | null;
+  /** How many bids this account had in the sale when the plan began; fixed for the whole plan (fund, re-seal, re-sign). */
+  seq: number;
 }
 
 interface Sealed {
@@ -57,6 +61,11 @@ interface Sealed {
   cm: string;
   origin: 'base' | 'arb' | 'sol' | 'near';
 }
+
+/** HH:MM UTC of an instant. */
+const hhmm = (ms: number): string => new Date(ms).toISOString().slice(11, 16) + ' UTC';
+
+const ALL = { sign: true, fund: true, seal: true, another: true };
 
 export function Bid({ id, fundOnly }: { id: string; fundOnly: boolean }) {
   const { nowNs, synced } = useChainClock();
@@ -135,13 +144,27 @@ export function Wizard({
   const [recovery, setRecovery] = useState<Recovery | null>(null);
   const [signed, setSigned] = useState<MultiPayload | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [stored, setStored] = useState<Bid | null | 'unknown' | undefined>(undefined);
+  const [stored, setStored] = useState<Pick<Bid, 'idx' | 'cm'> | null | 'unknown' | undefined>(undefined);
+  /** The saved ticket of the live sealed bid (DOUBLE-PLAN step 6) and what the chain said about it last. */
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [verdict, setVerdict] = useState<Settled | null>(null);
+  /** The account already has bids: the named confirmation that precedes a deliberate additional bid. */
+  const [extra, setExtra] = useState<{ plan: Plan; mine: BidRow[] } | null>(null);
+  /** The chain read before Fund failed: nothing was quoted; "Check again" repeats it. */
+  const [again, setAgain] = useState<{ plan: Plan; confirmed: number | null } | null>(null);
+  /** More bids of this account are stored than the plan's seq: they are named and the user chooses. */
+  const [stale, setStale] = useState<number[] | null>(null);
+  const [remembers, setRemembers] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
   const quoting = useRef(false);
   const terminal = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const firstStep = useRef(true);
   /** Bumped by every reset: an answer that arrives for an earlier account or bid is dropped. */
   const flow = useRef(0);
+  const ticketRef = useRef<Ticket | null>(null);
+  /** The deadline (ms) of the payload the wallet just signed. */
+  const deadlineRef = useRef<number>(0);
 
   const rpc = config.rpcUrls;
   const quoteToken = sale.quoteToken;
@@ -151,6 +174,11 @@ export function Wizard({
   const live = block === null;
   const liveRef = useRef(live);
   liveRef.current = live;
+  // What the chain allows next. Once a payload of the plan was sent (or the chain was asked about it), only the same-nonce Sign and
+  // "Check the chain" are open until the verdict is final; a first send that has not happened yet gates nothing.
+  const gate = verdict ? offers(verdict) : ticket?.sent ? offers({ kind: 'unknown' }) : ALL;
+  const gateRef = useRef(gate);
+  gateRef.current = gate;
 
   const readBalance = useCallback(async (who: string): Promise<bigint> => {
     const b = await mtBalanceOf(rpc, config.intentsContractId, who, quoteToken);
@@ -194,7 +222,8 @@ export function Wizard({
   };
 
   /** After the form (or a pasted bid): skip the deposit when the Intents account already holds the escrow. */
-  const enterFund = async (s: IntentSigner, p: Plan) => {
+  const enterFund = async (s: IntentSigner, p: Plan, reopened = false) => {
+    if (!reopened && !gateRef.current.fund) return;
     const g = flow.current;
     setBusy('balance');
     setProblem(null);
@@ -220,6 +249,7 @@ export function Wizard({
     flow.current += 1;
     quoting.current = false;
     terminal.current = false;
+    ticketRef.current = null;
     setPlan(null);
     setSealed(null);
     setBalance(null);
@@ -231,18 +261,176 @@ export function Wizard({
     setSigned(null);
     setTxHash(null);
     setStored(undefined);
+    setTicket(null);
+    setVerdict(null);
+    setExtra(null);
+    setAgain(null);
+    setStale(null);
+    setNotice(null);
+  };
+
+  const ticketKeyFor = (s: IntentSigner) => ({ network: config.network, contract: config.tenderContractId, sale: id, saleCreatedNs: String(sale.createdNs), signer: s.signerId });
+
+  /** Changes the live ticket (memory and the browser's storage). Blocked storage only means the page will not remember it. */
+  const update = (patch: Partial<Ticket>): Ticket => {
+    const t = { ...ticketRef.current!, ...patch };
+    ticketRef.current = t;
+    setTicket(t);
+    if (!saveTicket(t)) setRemembers(false);
+    return t;
+  };
+
+  /** What the chain said: a final verdict closes the ticket; an unclear one keeps the gate shut. */
+  const showVerdict = (v: Settled, t: Ticket) => {
+    setVerdict(v);
+    if (v.kind === 'stored') {
+      clearTicket(t);
+      setStored({ idx: v.idx, cm: v.cm });
+      setProblem(null);
+      setRecovery(null);
+      setStale(null);
+      setStep('done');
+    } else if (v.kind === 'refunded') {
+      clearTicket(t);
+      setStored(null);
+      setProblem(null);
+      setRecovery(null);
+      setStep('done');
+    } else if (v.kind === 'dead') {
+      clearTicket(t);
+      setStep('sign');
+    }
+  };
+
+  /** The one resolver: ask the chain what became of the live bid. `quiet` is the background poll (no busy flag). */
+  const runSettle = async (quiet = false): Promise<void> => {
+    const t = ticketRef.current;
+    if (!t) return;
+    const g = flow.current;
+    if (!quiet) setBusy('confirm');
+    try {
+      const r = await settleChain(chainIO(t), t);
+      if (g !== flow.current) return;
+      showVerdict(r.verdict, r.usedSeenMs !== t.usedSeenMs ? update({ usedSeenMs: r.usedSeenMs }) : t);
+    } finally {
+      if (!quiet && g === flow.current) setBusy(null);
+    }
+  };
+
+  /** A saved bid of this account in this sale: back to its Sign step, and the chain is asked before anything else is offered. */
+  const restore = (t: Ticket, why?: string) => {
+    ticketRef.current = t;
+    setTicket(t);
+    setPlan({ B: BigInt(t.B), secret: null, pasted: null, seq: t.seq });
+    setSealed({ ct: t.ct, cm: t.cms[t.cms.length - 1]!, origin: t.origin });
+    setVerdict(null);
+    setStale(null);
+    setNotice(why ?? 'Found a bid you sealed earlier in this browser. The page is asking the chain what became of it before it offers anything else.');
+    setStep('sign');
+    void runSettle();
+  };
+
+  /** Writes the ticket of a freshly sealed bid. `false` when another tab already holds a live bid for this sale and account: that one is shown. */
+  const openTicket = (a: { cm: string; ct: string; B: bigint; origin: Sealed['origin']; intentsSalt: string; seq: number }): boolean => {
+    const base = ticketRef.current;
+    const t: Ticket = {
+      v: 1,
+      ...ticketKeyFor(signer!),
+      cms: base ? [...base.cms.filter((c) => c !== a.cm), a.cm] : [a.cm],
+      ct: a.ct,
+      B: String(a.B),
+      origin: a.origin,
+      intentsSalt: a.intentsSalt,
+      seq: a.seq,
+      closeNs: String(sale.closeNs),
+      sent: false,
+      payloadDeadlineMs: null,
+      txHashes: [],
+      relayer: null,
+      usedSeenMs: null,
+    };
+    const c = claimTicket(t, base !== null);
+    setRemembers(c.saved);
+    if (c.restored) {
+      restore(c.ticket, 'Another tab of this browser already holds a bid for this sale. It is shown here instead of a second one.');
+      return false;
+    }
+    ticketRef.current = c.ticket;
+    setTicket(c.ticket);
+    setVerdict(null);
+    return true;
   };
 
   // A new connection is a new account: nothing signed, quoted or recovered for the old one may be relayed or paid for it.
   const onConnect = (s: IntentSigner) => {
     resetFlow();
     setSigner(s);
-    setStep('bid');
+    const saved = loadTicket(ticketKeyFor(s));
+    if (saved && saved.closeNs === String(sale.closeNs)) restore(saved);
+    else setStep('bid');
   };
 
   const placeAnother = () => {
+    if (ticketRef.current) clearTicket(ticketRef.current);
     resetFlow();
     setStep('bid');
+  };
+
+  /**
+   * The chain read that precedes every quote and deposit: a saved bid is restored, an account that already has bids gets a named
+   * confirmation, and a read that fails asks for nothing. `confirmed` is the bid count the user confirmed.
+   */
+  const precheck = async (s: IntentSigner, p: Plan, confirmed: number | null) => {
+    const g = flow.current;
+    setBusy('check');
+    setProblem(null);
+    setExtra(null);
+    setAgain(null);
+    let handedOver = false;
+    try {
+      const saved = loadTicket(ticketKeyFor(s));
+      if (saved && saved.closeNs === String(sale.closeNs)) {
+        handedOver = true; // the resolver owns the busy flag from here
+        restore(saved);
+        return;
+      }
+      const r = await readBids(id);
+      if (g !== flow.current) return;
+      if (!r) {
+        setProblem('The chain could not be read, so no deposit address or signature was requested. Check again.');
+        setAgain({ plan: p, confirmed });
+        return;
+      }
+      const mine = r.bids.filter((b) => b.bidder === s.signerId);
+      if (p.pasted) {
+        const dup = mine.find((b) => b.cm === p.pasted!.cm);
+        if (dup) {
+          setProblem(`This sealed bid is already stored as #${dup.idx}. Pasting it again would escrow it twice.`);
+          return;
+        }
+        if (p.pasted.seq !== mine.length) {
+          setProblem(
+            `This file was sealed when you had ${p.pasted.seq} bid${p.pasted.seq === 1 ? '' : 's'} in this sale; you have ${mine.length} now, so the contract would refund it. Re-run \`pnpm seal:bid\` and paste its new output.`,
+          );
+          return;
+        }
+        setPlan(p);
+        setSealed({ ct: p.pasted.ct, cm: p.pasted.cm, origin: p.pasted.origin ?? s.origin });
+        await enterFund(s, p);
+        return;
+      }
+      if (mine.length > 0 && confirmed !== mine.length) {
+        setExtra({ plan: p, mine });
+        return;
+      }
+      const next = { ...p, seq: mine.length };
+      setPlan(next);
+      await enterFund(s, next);
+    } catch (e) {
+      if (g === flow.current) fail(e);
+    } finally {
+      if (!handedOver && g === flow.current) setBusy(null);
+    }
   };
 
   const onForm = (v: BidFormValues) => {
@@ -252,9 +440,7 @@ export function Wizard({
       setProblem(why);
       return;
     }
-    const p: Plan = { B: v.B, secret: { p: v.p, q: v.q }, pasted: null };
-    setPlan(p);
-    void enterFund(signer, p);
+    void precheck(signer, { B: v.B, secret: { p: v.p, q: v.q }, pasted: null, seq: 0 }, null);
   };
 
   const onPasted = (bid: PastedBid) => {
@@ -269,10 +455,7 @@ export function Wizard({
       setProblem(`This sealed bid is already stored as #${dup.idx}. Pasting it again would escrow it twice.`);
       return;
     }
-    const p: Plan = { B: bid.escrow, secret: null, pasted: bid };
-    setPlan(p);
-    setSealed({ ct: bid.ct, cm: bid.cm, origin: bid.origin ?? signer.origin });
-    void enterFund(signer, p);
+    void precheck(signer, { B: bid.escrow, secret: null, pasted: bid, seq: bid.seq }, null);
   };
 
   // While funding: follow the 1Click swap and the Intents balance every 5 s. This only reads; no signature is requested here.
@@ -305,6 +488,27 @@ export function Wizard({
     };
   }, [step, signer, plan, depositAddress, fundOnly, readBalance, qKey]);
 
+  // A bid that may still land is asked about every 5 s until the chain gives a final answer; this only reads.
+  const watching = signer !== null && ticket !== null && (ticket.sent || verdict !== null) && !(verdict && isFinal(verdict)) && (step === 'sign' || step === 'relay');
+  useEffect(() => {
+    if (!watching) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') void runSettle(true);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [watching, ticket?.cms.length]);
+
+  // Another tab of this browser may open or finish a bid for this sale and account.
+  useEffect(() => {
+    if (!signer) return;
+    const onStorage = () => {
+      const saved = loadTicket(ticketKeyFor(signer));
+      if (saved && !ticketRef.current && step === 'bid' && saved.closeNs === String(sale.closeNs)) restore(saved);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [signer, step, sale.closeNs]);
+
   // Reload, back button or closing the tab loses the funding view and any signature request that is open.
   useEffect(() => {
     if (!shouldWarnOnUnload(step, quote !== null, busy)) return;
@@ -333,6 +537,8 @@ export function Wizard({
     setProblem(null);
     try {
       const cfg = await getConfig();
+      // The Intents salt is pinned now: every signature of this sealed bid must repeat the nonce, and the nonce contains the salt.
+      const intentsSalt = await currentSalt(rpc, config.intentsContractId);
       const out = sealWithConfig({
         contractId: config.tenderContractId,
         sale: BigInt(id),
@@ -343,6 +549,7 @@ export function Wizard({
         p: plan.secret.p,
         q: plan.secret.q,
       });
+      if (!openTicket({ cm: out.cm, ct: out.ct, B: plan.B, origin: signer.origin, intentsSalt, seq: plan.seq })) return;
       setSealed({ ct: out.ct, cm: out.cm, origin: signer.origin });
       setStep('sign');
     } catch (e) {
@@ -352,6 +559,13 @@ export function Wizard({
     }
   };
 
+  /** The pasted bid is sealed already: its ticket is written when the user moves on to signing. */
+  const continueToSign = () => {
+    if (!signer || !plan?.pasted) return;
+    const b = plan.pasted;
+    if (openTicket({ cm: b.cm, ct: b.ct, B: b.escrow, origin: b.origin ?? signer.origin, intentsSalt: b.intentsSalt, seq: b.seq })) setStep('sign');
+  };
+
   const route = (r: Recovery) => {
     setRecovery(r);
     setProblem(r.message);
@@ -359,55 +573,48 @@ export function Wizard({
     setStep(stepAfterRelayFailure(r));
   };
 
+  /** Anything unclear after a send: show the one-sentence reason, keep a retry for an unreachable relayer, and let the chain decide. */
+  const askChain = async (kind: RelayKind, message: string, standard: MultiPayload['standard']) => {
+    const rec = recoveryFor(kind, message, standard);
+    setRecovery(rec.to === 'retry' ? rec : null);
+    setProblem(rec.message);
+    setStep('sign');
+    await runSettle();
+  };
+
   const doPreflightAndRelay = async (mp: MultiPayload) => {
     const g = flow.current;
+    const sentBefore = ticketRef.current?.sent === true;
     setBusy('relay');
     setProblem(null);
     setRecovery(null);
     try {
       const sim = await simulateIntents(rpc, config.intentsContractId, [mp]);
       if (g !== flow.current) return;
-      // A used nonce means this signed payload already ran (an earlier relay landed although its answer was lost):
-      // look for the stored bid, never offer a second signature for the same sealed bid.
-      if (!sim.ok && sim.kind !== 'nonce_used') {
-        route(recoveryFor(sim.kind, sim.message, mp.standard));
+      if (!sim.ok) {
+        // After a send, "not enough balance", "expired", "nonce used" can each mean an earlier signature ran: the chain decides.
+        if (routeFailure(sim.kind, sentBefore) === 'settle') await askChain(sim.kind, sim.message, mp.standard);
+        else route(recoveryFor(sim.kind, sim.message, mp.standard));
         return;
       }
+      // From here the payload may land whatever the relayer answers: write that down before it leaves the page.
+      if (ticketRef.current) update({ sent: true, payloadDeadlineMs: Math.max(ticketRef.current.payloadDeadlineMs ?? 0, deadlineRef.current) });
       setStep('relay');
-      if (sim.ok) {
-        const h = await relay([mp]).then(
-          (r) => r.txHash,
-          (e: unknown) => {
-            if (e instanceof RelayError && e.kind === 'nonce_used') return null;
-            throw e;
-          },
-        );
-        if (g !== flow.current) return;
-        if (h) setTxHash(h);
-      }
-      clearQuote(qKey);
-      setBusy('confirm');
-      const found = signer && sealed ? await confirmBid({ sale: id, bidder: signer.signerId, cm: sealed.cm }) : null;
+      const { txHash: h, sender } = await relay([mp]);
       if (g !== flow.current) return;
-      setStored(found);
-      setStep('done');
+      setTxHash(h);
+      if (ticketRef.current) update({ txHashes: [...new Set([...ticketRef.current.txHashes, h])], relayer: sender ?? ticketRef.current.relayer });
+      clearQuote(qKey);
+      await runSettle();
     } catch (e) {
       if (g !== flow.current) return;
       if (e instanceof RelayError) {
-        // The relay's answer can be lost after the transaction ran (timeout, dropped connection): look for the bid before offering anything.
-        if ((e.kind === 'unavailable' || e.kind === 'other') && signer && sealed) {
-          setBusy('confirm');
-          const found = await confirmBid({ sale: id, bidder: signer.signerId, cm: sealed.cm, timeoutMs: 15_000 });
-          if (g !== flow.current) return;
-          if (found && found !== 'unknown') {
-            if (e.txHash) setTxHash(e.txHash);
-            clearQuote(qKey);
-            setStored(found);
-            setStep('done');
-            return;
-          }
+        if (e.unknown && ticketRef.current) {
+          update({ txHashes: [...new Set([...ticketRef.current.txHashes, ...e.unknown.txHashes])], relayer: e.unknown.sender ?? ticketRef.current.relayer });
         }
-        route(recoveryFor(e.kind, e.message, mp.standard));
+        if (e.txHash) setTxHash(e.txHash);
+        if (routeFailure(e.kind, true) === 'settle') await askChain(e.kind, e.message, mp.standard);
+        else route(recoveryFor(e.kind, e.message, mp.standard));
       } else {
         fail(e);
         setStep('sign');
@@ -419,7 +626,8 @@ export function Wizard({
 
   // Runs only from the click on "Sign": a signature request is never started by an effect.
   const doSign = async () => {
-    if (!signer || !plan || !sealed) return;
+    const t0 = ticketRef.current;
+    if (!signer || !plan || !sealed || !t0) return;
     if (block) {
       setProblem(block);
       return;
@@ -430,10 +638,32 @@ export function Wizard({
       return;
     }
     const g = flow.current;
-    setBusy('sign');
+    setBusy('check');
     setProblem(null);
     setRecovery(null);
+    setStale(null);
     try {
+      // The chain is read at one block just before the wallet prompt: a stored copy, a used nonce or a newer bid changes what is offered.
+      const pre = preSign(await readForSign(t0), t0);
+      if (g !== flow.current) return;
+      if ('stored' in pre) {
+        showVerdict({ kind: 'stored', idx: pre.stored, cm: pre.cm }, t0);
+        return;
+      }
+      if ('settle' in pre) {
+        await runSettle();
+        return;
+      }
+      if ('stale' in pre) {
+        setStale(pre.stale);
+        return;
+      }
+      if ('retry' in pre && !pre.signAnyway) {
+        setProblem('The chain could not be read, so no signature was requested. Try again in a moment.');
+        return;
+      }
+      setBusy('sign');
+      const t = ticketRef.current ?? t0;
       const payload = await buildBidPayload({
         signerId: signer.signerId,
         receiverId: config.tenderContractId,
@@ -444,7 +674,11 @@ export function Wizard({
         cm: sealed.cm,
         origin: sealed.origin,
         closeNs: sale.closeNs,
+        seq: t.seq,
+        saltHex: t.intentsSalt,
       });
+      const dl = Date.parse(payload.deadline);
+      deadlineRef.current = Number.isNaN(dl) ? Date.now() + 600_000 : dl;
       const mp = await signer.sign(payload);
       if (g !== flow.current) return;
       setSigned(mp);
@@ -452,8 +686,17 @@ export function Wizard({
     } catch (e) {
       if (g !== flow.current) return;
       fail(e);
-      setBusy(null);
+    } finally {
+      if (g === flow.current) setBusy(null);
     }
+  };
+
+  /** "Make this an additional bid": the account's newer bids are accepted as it is and the plan's seq moves to their count. */
+  const makeAdditional = () => {
+    if (!stale || !ticketRef.current) return;
+    update({ seq: stale.length });
+    setPlan((p) => (p ? { ...p, seq: stale.length } : p));
+    void doSign();
   };
 
   const doRegisterKey = async () => {
@@ -469,14 +712,21 @@ export function Wizard({
     }
   };
 
-  const recheck = async () => {
-    if (!signer || !sealed) return;
-    const g = flow.current;
-    setBusy('confirm');
-    const found = await confirmBid({ sale: id, bidder: signer.signerId, cm: sealed.cm, timeoutMs: 15_000 });
-    if (g !== flow.current) return;
-    setStored(found);
-    setBusy(null);
+  /** Seal the same price again (the contract refunded the first copy): a new commitment, the same plan and seq. */
+  const sealAgain = () => {
+    const t = ticketRef.current;
+    if (t) {
+      // The refunded bid's nonce is spent; the new commitment starts unsent. Its ticket is written when it is sealed.
+      const fresh = { ...t, sent: false, payloadDeadlineMs: null, txHashes: [], relayer: null, usedSeenMs: null };
+      ticketRef.current = fresh;
+      setTicket(fresh);
+    }
+    setStored(undefined);
+    setVerdict(null);
+    setProblem(null);
+    setSigned(null);
+    setTxHash(null);
+    if (signer && plan) void enterFund(signer, plan, true);
   };
 
   const onSubmitTx = async (h: string) => {
@@ -542,6 +792,28 @@ export function Wizard({
           ) : (
             <PasteSealedBid saleId={id} signerId={signer.signerId} disabled={busy !== null} onSubmit={onPasted} />
           )}
+          {extra ? (
+            <div className="result warn" role="status" style={{ marginTop: 8 }}>
+              <p style={{ marginTop: 0 }}>
+                You already have {extra.mine.map((b) => `bid #${b.idx}${b.escrow !== undefined ? `, escrow ${formatUsdc(b.escrow)} USDC` : ''}`).join('; ')} in this sale.
+                {' '}This will be an additional bid.
+              </p>
+              <button type="button" className="primary" disabled={busy !== null} onClick={() => signer && void precheck(signer, extra.plan, extra.mine.length)}>
+                Place an additional bid
+              </button>{' '}
+              <button type="button" disabled={busy !== null} onClick={() => setExtra(null)}>
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {again ? (
+            <div style={{ marginTop: 8 }}>
+              <button type="button" disabled={busy !== null} onClick={() => signer && void precheck(signer, again.plan, again.confirmed)}>
+                Check again
+              </button>
+            </div>
+          ) : null}
+          {busy === 'check' ? <p className="muted">Reading the chain…</p> : null}
           {problemFor('bid')}
         </section>
       ) : null}
@@ -612,13 +884,13 @@ export function Wizard({
           {plan.pasted ? (
             <p className="result ok">Using your pasted sealed bid. The browser never saw its price.</p>
           ) : (
-            <button type="button" className="primary" onClick={doSeal} disabled={busy !== null || !live}>
+            <button type="button" className="primary" onClick={doSeal} disabled={busy !== null || !live || !gate.seal}>
               {busy === 'seal' ? 'Sealing…' : 'Seal in this browser'}
             </button>
           )}
           {plan.pasted ? (
             <div style={{ marginTop: 8 }}>
-              <button type="button" className="primary" onClick={() => setStep('sign')} disabled={!live}>
+              <button type="button" className="primary" onClick={continueToSign} disabled={!live || !gate.seal}>
                 Continue to signing
               </button>
             </div>
@@ -641,10 +913,45 @@ export function Wizard({
             One Intents <code>Transfer</code> of {formatUsdc(plan.B)} USDC to <span className="mono">{config.tenderContractId}</span> carrying your sealed
             bid. It expires in 10 minutes, or a minute before the sale closes if that is sooner; sign and send right away.
           </p>
-          {step === 'sign' ? (
-            <button type="button" className="primary" onClick={doSign} disabled={busy !== null || !live}>
+          {notice ? <p className="note">{notice}</p> : null}
+          {verdict && verdict.kind !== 'stored' && verdict.kind !== 'refunded' ? <p className="note">{pendingText(verdict, hhmm)}</p> : null}
+          {ticket && !remembers ? (
+            <p className="note">
+              This browser will not keep this bid (storage is blocked or this is a private window). If you reload, check the sale&apos;s bid list on the twin view before you fund or sign again.
+            </p>
+          ) : null}
+          {stale ? (
+            <div className="result warn" role="status" style={{ marginBottom: 8 }}>
+              <p style={{ marginTop: 0 }}>
+                Your account now has {stale.map((i) => `bid #${i}`).join(', ')} in this sale, stored after this bid was prepared, so the contract would refund this one. Keep
+                what is stored, or make this an additional bid on purpose.
+              </p>
+              <button type="button" onClick={placeAnother}>
+                Keep {stale.map((i) => `#${i}`).join(', ')}
+              </button>{' '}
+              <button type="button" className="primary" onClick={makeAdditional} disabled={busy !== null}>
+                Make this an additional bid
+              </button>
+            </div>
+          ) : null}
+          {step === 'sign' && !stale ? (
+            <button type="button" className="primary" onClick={doSign} disabled={busy !== null || !live || !gate.sign}>
               {busy === 'sign' ? 'Waiting for wallet…' : recovery?.to === 'sign_again' ? 'Sign again' : 'Sign with wallet'}
             </button>
+          ) : null}
+          {verdict?.kind === 'dead' ? (
+            <div style={{ marginTop: 8 }}>
+              <button type="button" onClick={placeAnother} disabled={busy !== null}>
+                Start over
+              </button>
+            </div>
+          ) : null}
+          {ticket && verdict && !isFinal(verdict) ? (
+            <div style={{ marginTop: 8 }}>
+              <button type="button" onClick={() => void runSettle()} disabled={busy !== null}>
+                Check the chain
+              </button>
+            </div>
           ) : null}
           {recovery?.to === 'register_key' && signed && canRegisterKey(signed, signer.signerId) ? (
             <div style={{ marginTop: 8 }}>
@@ -661,7 +968,8 @@ export function Wizard({
             </div>
           ) : null}
           {busy === 'relay' ? <p className="muted">Checking with simulate_intents, then relaying…</p> : null}
-          {busy === 'confirm' ? <p className="muted">Relayed. Waiting for the contract to confirm the bid (up to 90 seconds)…</p> : null}
+          {busy === 'check' && step === 'sign' ? <p className="muted">Reading the chain before the wallet prompt…</p> : null}
+          {busy === 'confirm' ? <p className="muted">Asking the chain what became of the bid…</p> : null}
           {step !== 'done' ? closedNote : null}
           {clockNote}
           {problemFor('sign')}
@@ -685,25 +993,41 @@ export function Wizard({
                 On-chain commitment <span className="mono">{stored.cm}</span>
               </p>
             </>
-          ) : stored === 'unknown' ? (
-            <>
-              <p className="result warn" role="alert">
-                Could not confirm: the RPC did not answer. Your bid may be stored, so check the ciphertext wall before bidding again.
-              </p>
-              <button type="button" onClick={() => void recheck()} disabled={busy !== null}>
-                Check again
-              </button>
-            </>
           ) : (
             <p className="result bad" role="alert">
-              Not stored: the bid did not appear on chain within 90 seconds, so the contract most likely refunded the transfer (see tx logs){txHash ? <> · <TxLink hash={txHash} /></> : null}. {NOT_STORED_CAUSES}
+              {verdict?.kind === 'refunded' && refundedText(verdict.why, verdict.other) ? (
+                refundedText(verdict.why, verdict.other)
+              ) : (
+                <>
+                  Not stored:{' '}
+                  {verdict?.kind === 'refunded' && verdict.why !== 'other' && verdict.why !== 'unlogged'
+                    ? `the contract refunded this bid (reason ${verdict.why})`
+                    : 'the bid did not appear on chain within 90 seconds of its nonce being used, so the contract most likely refunded the transfer (see tx logs)'}
+                  {txHash ? <> · <TxLink hash={txHash} /></> : null}. {NOT_STORED_CAUSES}
+                </>
+              )}
             </p>
           )}
           <p className="small muted">Anyone can relay a signed payload from their own account; the relayer cannot change it.</p>
           <div style={{ marginTop: 8 }}>
-            <button type="button" onClick={placeAnother} disabled={busy !== null}>
-              Place another bid
-            </button>
+            {stored && stored !== 'unknown' ? (
+              <button type="button" onClick={placeAnother} disabled={busy !== null || !gate.another}>
+                Place another bid
+              </button>
+            ) : (
+              <>
+                {plan?.secret && gate.seal && !(verdict?.kind === 'refunded' && verdict.why === 'bid_seq') ? (
+                  <>
+                    <button type="button" className="primary" onClick={sealAgain} disabled={busy !== null || !live}>
+                      Seal again
+                    </button>{' '}
+                  </>
+                ) : null}
+                <button type="button" onClick={placeAnother} disabled={busy !== null}>
+                  Start over
+                </button>
+              </>
+            )}
           </div>
           {problemFor('result')}
         </section>

@@ -11,7 +11,7 @@ vi.mock('react', async (orig) => {
 });
 
 const USDC = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
-const m = vi.hoisted(() => ({ simulate: vi.fn(), relay: vi.fn(), quote: vi.fn() }));
+const m = vi.hoisted(() => ({ simulate: vi.fn(), relay: vi.fn(), quote: vi.fn(), verdict: vi.fn(), follow: vi.fn() }));
 vi.mock('@tender/intents', async (orig) => ({
   ...(await orig<typeof import('@tender/intents')>()),
   simulateIntents: m.simulate,
@@ -23,13 +23,15 @@ vi.mock('../lib/bidPayload', () => ({ liveQuoteToken: vi.fn(async () => USDC) })
 vi.mock('../lib/chainClock', () => ({ useChainOffset: () => null }));
 vi.mock('../lib/withdrawFlow', async (orig) => ({
   ...(await orig<typeof import('../lib/withdrawFlow')>()),
-  buildWithdrawPayload: vi.fn(async () => ({ signer_id: 'x' })),
-  followWithdraw: vi.fn(async () => ({ status: 'SUCCESS' })),
+  buildWithdrawPayload: vi.fn(async () => ({ signer_id: 'x', nonce: 'bm9uY2U=', deadline: new Date(Date.now() + 600_000).toISOString() })),
+  followWithdraw: m.follow,
+  settleWithdraw: m.verdict,
 }));
 vi.mock('../components/WalletPicker', () => ({ WalletPicker: () => null }));
 
 import { AmountField } from '../components/AmountField';
 import { WalletPicker } from '../components/WalletPicker';
+import { RelayError } from '../lib/relay';
 import { Withdraw } from '../pages/Withdraw';
 import type { IntentSigner } from '../wallets/types';
 
@@ -65,6 +67,8 @@ beforeEach(() => {
   m.simulate.mockReset().mockResolvedValue({ ok: true, report: {} });
   m.relay.mockReset().mockResolvedValue({ txHash: 'H1' });
   m.quote.mockReset().mockResolvedValue({ quote: { depositAddress: 'dep-1', amountIn: '5000000', amountOut: '4990000', minAmountOut: '4950000' } });
+  m.verdict.mockReset().mockResolvedValue({ kind: 'pending', untilMs: Date.now() + 600_000 });
+  m.follow.mockReset().mockResolvedValue({ status: 'SUCCESS' });
   vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {} });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -86,5 +90,50 @@ describe('withdraw dead ends (QA-12)', () => {
     await connect(signer('0x0000000000000000000000000000000000000002'));
     expect(amountField().disabled).toBe(false);
     expect(has('Get quote')).toBe(true);
+  });
+});
+
+describe('a signed withdrawal is never signed or quoted again before the chain decides (DOUBLE-PLAN step 7, row 22)', () => {
+  const reachUnclear = async () => {
+    m.relay.mockRejectedValue(new RelayError('The relayer is not reachable.', 'unavailable'));
+    await connect(signer());
+    await click('Get quote');
+    await click('Sign & withdraw');
+  };
+  test('an unreachable relayer after the signature: the chain is asked, the withdrawal may still land, no new withdrawal is offered', async () => {
+    await reachUnclear();
+    expect(m.verdict).toHaveBeenCalledTimes(1);
+    expect(has('New withdrawal')).toBe(false);
+    expect(has('Check the chain')).toBe(true);
+    expect(has('Try the relayer again')).toBe(true);
+    expect(has('Sign again')).toBe(false);
+    expect(amountField().disabled).toBe(true);
+  });
+  test('the chain shows the withdrawal ran: 1Click is followed, no Sign again', async () => {
+    m.verdict.mockResolvedValue({ kind: 'ran' });
+    await reachUnclear();
+    expect(m.follow).toHaveBeenCalledTimes(1);
+    expect(has('Sign again')).toBe(false);
+  });
+  test('deadline_expired after a send goes to the resolver, not to "Sign again"', async () => {
+    await reachUnclear();
+    m.verdict.mockClear();
+    m.verdict.mockResolvedValue({ kind: 'ran' });
+    m.relay.mockRejectedValue(new RelayError('deadline has expired', 'deadline_expired'));
+    await click('Try the relayer again');
+    expect(m.verdict).toHaveBeenCalledTimes(1);
+    expect(has('Sign again')).toBe(false);
+  });
+  test('the signature can never run any more (dead): Sign again and a new withdrawal are offered', async () => {
+    m.verdict.mockResolvedValue({ kind: 'dead' });
+    await reachUnclear();
+    expect(has('Sign again')).toBe(true);
+    expect(amountField().disabled).toBe(false);
+  });
+  test('a failed chain read leaves it undecided: only Check the chain and the same payload', async () => {
+    m.verdict.mockResolvedValue({ kind: 'unknown' });
+    await reachUnclear();
+    expect(has('New withdrawal')).toBe(false);
+    expect(has('Check the chain')).toBe(true);
   });
 });

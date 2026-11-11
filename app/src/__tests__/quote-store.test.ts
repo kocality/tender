@@ -18,9 +18,21 @@ const quote = (over: Partial<QuoteResponse['quote']> = {}): QuoteResponse => ({
   quote: { depositAddress: 'abc123', amountIn: '3080000', minAmountOut: '3000000', amountOut: '3000000', deadline: '2026-11-16T12:00:00Z', ...over },
 });
 
+describe('tabs share one deposit address (DOUBLE-PLAN step 7, row 9)', () => {
+  test('a quote saved in one tab is found by another tab: it lives in localStorage, not in the tab session', () => {
+    const shared = memoryStorage();
+    vi.stubGlobal('localStorage', shared);
+    vi.stubGlobal('sessionStorage', memoryStorage()); // another tab has its own, empty, session storage
+    const key = quoteKey('mainnet', '2', 'bidder.near', 'base');
+    saveQuote(key, quote());
+    expect(loadQuote(key)?.quote.depositAddress).toBe('abc123');
+    expect(shared.getItem(key)).not.toBeNull();
+  });
+});
+
 describe('a reload during funding keeps the deposit address (QA-10)', () => {
   test('the stored quote comes back after a remount and is reused instead of asking 1Click again', () => {
-    vi.stubGlobal('sessionStorage', memoryStorage());
+    vi.stubGlobal('localStorage', memoryStorage());
     const key = quoteKey('mainnet', '2', 'bidder.near', 'base');
     saveQuote(key, quote());
     const back = reusableQuote(loadQuote(key), 3_080_000n, NOW);
@@ -33,7 +45,7 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
     expect(reusableQuote(null, 1n, NOW)).toBeNull();
   });
   test('a quote whose swap ended is cleared and never paid into again', () => {
-    vi.stubGlobal('sessionStorage', memoryStorage());
+    vi.stubGlobal('localStorage', memoryStorage());
     const key = quoteKey('mainnet', '2', 'bidder.near', 'base');
     saveQuote(key, quote());
     clearQuote(key);
@@ -43,7 +55,7 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
     expect(new Set([quoteKey('mainnet', '2', 'a', 'base'), quoteKey('testnet', '2', 'a', 'base'), quoteKey('mainnet', '3', 'a', 'base'), quoteKey('mainnet', '2', 'b', 'base'), quoteKey('mainnet', '2', 'a', 'arbitrum')]).size).toBe(5);
   });
   test('a Base quote is never offered to the same EVM address funding from Arbitrum', () => {
-    vi.stubGlobal('sessionStorage', memoryStorage());
+    vi.stubGlobal('localStorage', memoryStorage());
     const signer = '0x' + 'ab'.repeat(20);
     saveQuote(quoteKey('mainnet', '2', signer, 'base'), quote());
     expect(reusableQuote(loadQuote(quoteKey('mainnet', '2', signer, 'arbitrum')), 3_080_000n, NOW)).toBeNull();
@@ -51,13 +63,13 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
   });
   test('only the quote is stored: no price, size, salt or ciphertext field exists in it', () => {
     const store = memoryStorage();
-    vi.stubGlobal('sessionStorage', store);
+    vi.stubGlobal('localStorage', store);
     saveQuote('k', quote());
     const written = store.setItem.mock.calls.map((c) => c[1]).join('');
     expect(written).not.toMatch(/"(ct|cm|salt|p|q)"/);
   });
   test('blocked or throwing storage never breaks the page', () => {
-    vi.stubGlobal('sessionStorage', {
+    vi.stubGlobal('localStorage', {
       setItem: () => {
         throw new Error('quota');
       },

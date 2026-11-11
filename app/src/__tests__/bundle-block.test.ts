@@ -49,20 +49,21 @@ describe('payload deadlines follow the chain clock (QA-15)', () => {
     setChainOffset(11 * 60_000); // measured: chain is 11 minutes ahead
     expect(chainNowMs()).toBe(chain);
     const deadlineOf = (p: { deadline: string }) => Date.parse(p.deadline);
-    const bid = await buildBidPayload({ signerId: 'a.near', receiverId: 'v1.tenderseal.near', quoteToken: 'nep141:x', amount: 1n, sale: '1', ct: 'c', cm: 'd', saltHex: '252812b3' });
+    const closeNs = BigInt(chain + 3_600_000) * 1_000_000n;
+    const bid = await buildBidPayload({ signerId: 'a.near', receiverId: 'v1.tenderseal.near', quoteToken: 'nep141:x', amount: 1n, sale: '1', ct: 'c', cm: 'dd'.repeat(32), saltHex: '252812b3', closeNs });
     const reveal = await buildSelfReveal({ signerId: 'a.near', contract: 'v1.tenderseal.near', quoteToken: 'nep141:x', sale: '1', items: [], saltHex: '252812b3' });
     const withdraw = await buildWithdrawPayload({ signerId: 'a.near', depositAddress: 'abc', tokenId: 'nep141:x', amountIn: 1n, saltHex: '252812b3' });
-    for (const p of [bid, reveal, withdraw]) {
-      expect(Math.abs(deadlineOf(p) - (chain + ten))).toBeLessThan(1000);
-      expect(Number(decodeVersionedNonce(p.nonce).deadlineNs / 1_000_000n)).toBe(deadlineOf(p));
-    }
+    for (const p of [bid, reveal, withdraw]) expect(Math.abs(deadlineOf(p) - (chain + ten))).toBeLessThan(1000);
+    // reveal and withdraw nonces end with their payload; a bid's nonce ends a minute before close, whatever the payload deadline is (one nonce per sealed bid)
+    for (const p of [reveal]) expect(Number(decodeVersionedNonce(p.nonce).deadlineNs / 1_000_000n)).toBe(deadlineOf(p));
+    expect(Number(decodeVersionedNonce(bid.nonce).deadlineNs / 1_000_000n)).toBe(chain + 3_600_000 - 60_000);
   });
 });
 
 describe('a bid payload never outlives the sale (X12P-02)', () => {
   const now = Date.parse('2026-11-13T02:00:00Z');
   const bid = (closeInMs: number) =>
-    buildBidPayload({ signerId: 'a.near', receiverId: 'v1.tenderseal.near', quoteToken: 'nep141:x', amount: 1n, sale: '1', ct: 'c', cm: 'd', saltHex: '252812b3', nowMs: now, closeNs: BigInt(now + closeInMs) * 1_000_000n });
+    buildBidPayload({ signerId: 'a.near', receiverId: 'v1.tenderseal.near', quoteToken: 'nep141:x', amount: 1n, sale: '1', ct: 'c', cm: 'dd'.repeat(32), saltHex: '252812b3', nowMs: now, closeNs: BigInt(now + closeInMs) * 1_000_000n });
   test('close in 3 minutes: the deadline is close - 60 s, not now + 10 minutes', async () => {
     const p = await bid(180_000);
     expect(Date.parse(p.deadline)).toBe(now + 120_000);

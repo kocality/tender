@@ -2,13 +2,16 @@ import {
   buildPayload,
   buildVersionedNonce,
   currentSalt,
+  isNonceUsed,
   makeDeadline,
   transferIntent,
+  withdrawNonce,
   type DefusePayload,
 } from '@tender/intents';
 import { config } from '../config';
 import { chainNowMs } from './chainClock';
 import { parseUnits } from './amounts';
+import { finalBlock } from './settle';
 import { OneClickError, getStatus, isTerminal, type QuoteResponse, type StatusResponse } from './oneclick';
 import { recipientError, type DestChain, type WithdrawSource } from './withdrawRoutes';
 
@@ -56,22 +59,31 @@ export function quoteProblem(quote: QuoteResponse, balance: bigint, nowMs: numbe
 /**
  * The one Intents Transfer that pays a withdrawal quote: exactly `quote.amountIn` of the source token to the quote's
  * `depositAddress` (an Intents account id). No `msg`, so no notification call and no `min_gas`. Salt is read live.
+ * With the quote's deadline the nonce is tied to the quote (`withdrawNonce`): every signature of the same quote repeats it, so
+ * intents.near runs at most one of them, and the payload never outlives the quote. Without a deadline the nonce is random.
  */
 export async function buildWithdrawPayload(o: {
   signerId: string;
   depositAddress: string;
   tokenId: string;
   amountIn: bigint;
+  /** The quote's deadline (ms). */
+  quoteDeadlineMs?: number;
   saltHex?: string;
   nowMs?: number;
 }): Promise<DefusePayload> {
   const saltHex = o.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
-  const { deadlineMs, deadlineIso } = makeDeadline(o.nowMs ?? chainNowMs());
+  const nowMs = o.nowMs ?? chainNowMs();
+  if (o.quoteDeadlineMs !== undefined && o.quoteDeadlineMs <= nowMs) throw new Error('This quote has expired. Get a new one.');
+  const { deadlineMs, deadlineIso } = makeDeadline(nowMs, 600_000, o.quoteDeadlineMs);
   return buildPayload({
     signerId: o.signerId,
     verifyingContract: config.intentsContractId,
     deadlineIso,
-    nonce: buildVersionedNonce({ saltHex, deadlineMs }),
+    nonce:
+      o.quoteDeadlineMs === undefined
+        ? buildVersionedNonce({ saltHex, deadlineMs })
+        : withdrawNonce({ saltHex, deadlineMs: o.quoteDeadlineMs, signer: o.signerId, depositAddress: o.depositAddress, tokenId: o.tokenId, amount: o.amountIn }),
     intents: [transferIntent({ receiverId: o.depositAddress, tokenId: o.tokenId, amount: o.amountIn })],
   });
 }
@@ -136,4 +148,27 @@ export async function followWithdraw(o: {
     await sleep(intervalMs);
   }
   throw new Error('1Click did not finish in 10 minutes. The withdrawal may still complete; check the deposit address status.');
+}
+
+export type WithdrawVerdict = { kind: 'ran' } | { kind: 'pending'; untilMs: number } | { kind: 'dead' } | { kind: 'unknown' };
+
+/**
+ * What the chain says about a signed withdrawal. `used` is whether intents.near has run its nonce (`null` when the read failed),
+ * `nowMs` is chain time. Only `dead` frees "Get a new quote": a payload that can still land would pay the old deposit address.
+ */
+export function withdrawVerdict(o: { used: boolean | null; nowMs: number; deadlineMs: number }): WithdrawVerdict {
+  if (o.used === null) return { kind: 'unknown' };
+  if (o.used) return { kind: 'ran' };
+  return o.nowMs <= o.deadlineMs ? { kind: 'pending', untilMs: o.deadlineMs } : { kind: 'dead' };
+}
+
+/** One read at one final block of the signed withdrawal's nonce, then the verdict. */
+export async function settleWithdraw(o: { signerId: string; nonceB64: string; deadlineMs: number }): Promise<WithdrawVerdict> {
+  try {
+    const b = await finalBlock();
+    const used = await isNonceUsed(config.rpcUrls, config.intentsContractId, o.signerId, o.nonceB64, { blockId: b.height });
+    return withdrawVerdict({ used, nowMs: b.tsMs, deadlineMs: o.deadlineMs });
+  } catch {
+    return { kind: 'unknown' };
+  }
 }

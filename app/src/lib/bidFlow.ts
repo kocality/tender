@@ -1,7 +1,8 @@
-import type { IntentsErrorKind, MultiPayload } from '@tender/intents';
+import type { MultiPayload } from '@tender/intents';
 import { parseUnits, priceToP } from './amounts';
 import { config } from '../config';
 import { humanError } from './errors';
+import type { RelayKind } from './relay';
 import { depositAmountFor } from './oneclick';
 import type { Bid, Sale } from './views';
 
@@ -134,12 +135,14 @@ export type Recovery =
   | { to: 'fund'; message: string }
   | { to: 'register_key'; message: string }
   | { to: 'sign_again'; message: string }
+  /** The chain decides (the resolver): the payload ran, may still run, or was refused for a reason only the chain shows. */
+  | { to: 'settle'; message: string }
   | { to: 'retry'; message: string }
   | { to: 'fail'; message: string };
 
 /** Where a failed pre-flight simulation or a refused relay sends the user. The message is the one-sentence `humanError` text. */
 export function recoveryFor(
-  kind: IntentsErrorKind | 'busy' | 'unconfigured' | 'unavailable',
+  kind: RelayKind,
   detail: string,
   standard?: MultiPayload['standard'],
 ): Recovery {
@@ -158,6 +161,11 @@ export function recoveryFor(
     case 'deadline_gt_nonce':
     case 'nonce_expired':
       return { to: 'sign_again', message };
+    case 'nonce_used':
+    case 'execute_unknown':
+    case 'already_stored':
+    case 'bid_seq':
+      return { to: 'settle', message };
     case 'busy':
     case 'unavailable':
     case 'unconfigured':
@@ -193,7 +201,7 @@ export function bidsOf(bids: { bidder: string }[], signerId: string): number {
 }
 
 /** What a screen reader hears when the wizard moves on or finishes (one always-mounted status region says it). */
-export function announcementFor(step: Step, busy: string | null, stored: Bid | null | 'unknown' | undefined): string {
+export function announcementFor(step: Step, busy: string | null, stored: Pick<Bid, 'idx'> | null | 'unknown' | undefined): string {
   if (busy === 'relay') return 'Checking the signed bid, then relaying it.';
   if (busy === 'confirm') return 'Relayed. Waiting for the contract to confirm the bid.';
   if (step === 'done') {

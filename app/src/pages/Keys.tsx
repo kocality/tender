@@ -1,7 +1,7 @@
 import { Loading, ReadError } from '../components/Feedback';
 import { TxLink } from '../components/TxLink';
 import { config } from '../config';
-import { cancelledLabel } from '../copy';
+import { KEY_ERR_RULE, cancelledLabel } from '../copy';
 import { formatNsUtc } from '../lib/format';
 import { receiptCheck } from '../lib/ledger';
 import type { KeysData } from '../lib/loaders';
@@ -80,6 +80,7 @@ export function KeysView({ data }: { data: KeysData }) {
           </tbody>
         </table>
       </div>
+      {data.rows.some((r) => r.entry.outcome === 'Err') ? <p className="small">{KEY_ERR_RULE}</p> : null}
       <h2>Per sale</h2>
       <ul>
         {data.sales.map((s) => (

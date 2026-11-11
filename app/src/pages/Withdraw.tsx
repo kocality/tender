@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { mtBatchBalanceOf, simulateIntents, type MultiPayload } from '@tender/intents';
 import { AmountField } from '../components/AmountField';
 import { CopyButton } from '../components/CopyButton';
@@ -13,8 +13,19 @@ import { humanError, humanStatus } from '../lib/errors';
 import { formatUnits } from '../lib/format';
 import { addIntentsKey } from '../lib/near-tx';
 import { quoteWithdraw, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
-import { RelayError, relay } from '../lib/relay';
-import { buildWithdrawPayload, followWithdraw, quoteProblem, txHashes, validateWithdraw, withdrawEvidence, withdrawMessages } from '../lib/withdrawFlow';
+import { RelayError, relay, type RelayKind } from '../lib/relay';
+import { routeFailure } from '../lib/settle';
+import {
+  buildWithdrawPayload,
+  followWithdraw,
+  quoteProblem,
+  settleWithdraw,
+  txHashes,
+  validateWithdraw,
+  withdrawEvidence,
+  withdrawMessages,
+  type WithdrawVerdict,
+} from '../lib/withdrawFlow';
 import {
   WITHDRAW_TARGETS,
   defaultRecipient,
@@ -41,6 +52,12 @@ export function Withdraw() {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<Recovery | null>(null);
+  /** What the chain said about the signed payload, once a send was attempted. While it may still land, nothing new is offered. */
+  const [verdict, setVerdict] = useState<WithdrawVerdict | null>(null);
+  /** A payload of this quote left the page (or was handed to the relayer): every later failure goes to the chain first. */
+  const sent = useRef(false);
+  /** Nonce and deadline of the signed payload, enough to ask intents.near whether it ran. */
+  const meta = useRef<{ nonceB64: string; deadlineMs: number } | null>(null);
 
   const source = sources.find((s) => s.tokenId === tokenId) ?? null;
   const target = WITHDRAW_TARGETS.find((t) => t.id === targetId)!;
@@ -51,6 +68,9 @@ export function Withdraw() {
   const fail = (e: unknown) => setProblem(humanError(e));
 
   const forgetQuote = () => {
+    sent.current = false;
+    meta.current = null;
+    setVerdict(null);
     setQuote(null);
     setProblem(null);
     setRecovery(null);
@@ -132,27 +152,65 @@ export function Withdraw() {
     setProblem(r.to === 'fund' ? 'Your Intents balance is below the quoted amount. Get a new quote.' : r.message);
   };
 
+  const follow = async () => {
+    if (!depositAddress) return;
+    setBusy('follow');
+    const final = await followWithdraw({ depositAddress, onStatus: setStatus });
+    setStatus(final);
+    void refreshBalances();
+  };
+
+  /** The one resolver of the page: did intents.near run the signed payload? It runs ahead of every "Sign again" and "Get a new quote". */
+  const resolve = async () => {
+    if (!signer || !meta.current) return;
+    setBusy('confirm');
+    const v = await settleWithdraw({ signerId: signer.signerId, ...meta.current });
+    setVerdict(v);
+    if (v.kind === 'ran') {
+      setProblem(null);
+      setRecovery(null);
+      await follow(); // the funds moved: follow 1Click, never sign or quote again
+    } else if (v.kind === 'dead') {
+      setSigned(null);
+      setRecovery({ to: 'sign_again', message: 'The signature expired without running, so nothing was sent. Sign again (same quote, same nonce), or change the form for a new quote.' });
+      setProblem('The signature expired without running, so nothing was sent. Sign again (same quote, same nonce), or change the form for a new quote.');
+    } else {
+      // pending or unknown: the same signed payload may still be sent (it repeats the nonce); a new quote or a second signature may not.
+      setRecovery((r) => (r?.to === 'retry' ? r : { to: 'retry', message: 'The withdrawal may still land. Check the chain, or try the relayer again with the same signed payload.' }));
+    }
+  };
+
+  /** Anything unclear once a payload was sent: say what happened in one sentence and let the chain decide. */
+  const askChain = async (kind: RelayKind, message: string, standard: MultiPayload['standard']) => {
+    const rec = recoveryFor(kind, message, standard);
+    setRecovery(rec.to === 'retry' ? rec : null);
+    setProblem(rec.message);
+    await resolve();
+  };
+
   /** Simulate for free, relay, then follow 1Click to its final status. Nothing here asks the wallet for a signature. */
   const sendAndFollow = async (mp: MultiPayload) => {
     if (!depositAddress) return;
+    const sentBefore = sent.current;
     setBusy('relay');
     setProblem(null);
     setRecovery(null);
     try {
       const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [mp]);
       if (!sim.ok) {
-        route(recoveryFor(sim.kind, sim.message, mp.standard));
+        if (routeFailure(sim.kind, sentBefore) === 'settle') await askChain(sim.kind, sim.message, mp.standard);
+        else route(recoveryFor(sim.kind, sim.message, mp.standard));
         return;
       }
+      sent.current = true; // from here the payload may land whatever the relayer answers
       const { txHash } = await relay([mp]);
       setRelayTx(txHash);
-      setBusy('follow');
-      const final = await followWithdraw({ depositAddress, onStatus: setStatus });
-      setStatus(final);
-      void refreshBalances();
+      await follow();
     } catch (e) {
-      if (e instanceof RelayError) route(recoveryFor(e.kind, e.message, mp.standard));
-      else fail(e);
+      if (e instanceof RelayError) {
+        if (routeFailure(e.kind, true) === 'settle') await askChain(e.kind, e.message, mp.standard);
+        else route(recoveryFor(e.kind, e.message, mp.standard));
+      } else fail(e);
     } finally {
       setBusy(null);
     }
@@ -170,12 +228,15 @@ export function Withdraw() {
     setProblem(null);
     setRecovery(null);
     try {
+      const quoteDeadline = quote.quote.deadline ? Date.parse(quote.quote.deadline) : Number.NaN;
       const payload = await buildWithdrawPayload({
         signerId: signer.signerId,
         depositAddress,
         tokenId: source.tokenId,
         amountIn: BigInt(quote.quote.amountIn),
+        quoteDeadlineMs: Number.isNaN(quoteDeadline) ? undefined : quoteDeadline,
       });
+      meta.current = { nonceB64: payload.nonce, deadlineMs: Date.parse(payload.deadline) };
       const mp = await signer.sign(payload);
       setSigned(mp);
       await sendAndFollow(mp);
@@ -344,6 +405,18 @@ export function Withdraw() {
               </button>
             </div>
           ) : null}
+          {verdict && (verdict.kind === 'pending' || verdict.kind === 'unknown') ? (
+            <div style={{ marginTop: 8 }}>
+              <p className="small muted">
+                {verdict.kind === 'pending'
+                  ? `The signed withdrawal may still land until ${new Date(verdict.untilMs).toISOString().slice(11, 16)} UTC. A new quote or a second signature stays off until the chain says what became of it.`
+                  : 'The chain could not be read, so nothing is known about the signed withdrawal yet.'}
+              </p>
+              <button type="button" onClick={() => void resolve().finally(() => setBusy(null))} disabled={busy !== null}>
+                Check the chain
+              </button>
+            </div>
+          ) : null}
           {busy === 'relay' ? <p className="muted">Checking with simulate_intents, then relaying…</p> : null}
         </section>
       ) : null}
@@ -394,7 +467,7 @@ export function Withdraw() {
               {status.swapDetails?.refundReason ? ` (${status.swapDetails.refundReason})` : ''} The amount returns to your NEAR Intents account.
             </p>
           ) : null}
-          {busy === null ? (
+          {busy === null && !(verdict && (verdict.kind === 'pending' || verdict.kind === 'unknown')) ? (
             <div style={{ marginTop: 8 }}>
               <button type="button" onClick={startOver}>
                 New withdrawal

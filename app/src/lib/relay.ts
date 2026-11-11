@@ -2,11 +2,16 @@ import { classifyIntentsError, type IntentsErrorKind, type MultiPayload } from '
 import { config } from '../config';
 import { getAllBids, type Bid } from './views';
 
+/** Everything a failed relay can mean. `execute_unknown`: signed and sent, answer lost, it may still land. `already_stored` / `bid_seq`: the relayer refused before sending, on what the chain already shows. */
+export type RelayKind = IntentsErrorKind | 'busy' | 'unconfigured' | 'unavailable' | 'execute_unknown' | 'already_stored' | 'bid_seq';
+
 export class RelayError extends Error {
   constructor(
     message: string,
-    readonly kind: IntentsErrorKind | 'busy' | 'unconfigured' | 'unavailable',
+    readonly kind: RelayKind,
     readonly txHash?: string,
+    /** `execute_unknown` only: every transaction the relayer sent, the account that signed them and the last instant they can land (payload deadline, ms). */
+    readonly unknown?: { txHashes: string[]; sender: string | null; untilMs: number | null },
   ) {
     super(message);
     this.name = 'RelayError';
@@ -17,7 +22,7 @@ export class RelayError extends Error {
  * Hand signed payloads to the relayer, which simulates and then calls execute_intents. A 400 `simulate_failed` carries
  * the Intents panic text in `detail`; it is classified here so the wizard can route the user.
  */
-export async function relay(signed: MultiPayload[], url: string = config.relayerUrl): Promise<{ txHash: string }> {
+export async function relay(signed: MultiPayload[], url: string = config.relayerUrl): Promise<{ txHash: string; sender?: string }> {
   if (!url) throw new RelayError('No relayer is configured (VITE_RELAYER_URL). Run `pnpm relay:local` or relay the signed payload yourself.', 'unconfigured');
   let res: Response;
   try {
@@ -25,8 +30,18 @@ export async function relay(signed: MultiPayload[], url: string = config.relayer
   } catch {
     throw new RelayError('The relayer is not reachable. Run `pnpm relay:local` or relay the signed payload yourself.', 'unavailable');
   }
-  const body = (await res.json().catch(() => ({}))) as { txHash?: string; error?: string; detail?: string };
-  if (res.ok && body.txHash) return { txHash: body.txHash };
+  const body = (await res.json().catch(() => ({}))) as { txHash?: string; txHashes?: string[]; sender?: string | null; until?: string; status?: string; error?: string; detail?: string };
+  // 202: the transaction was signed and handed to an RPC, the answer was lost. It is not a success and it is not "retry".
+  if (res.status === 202 || body.status === 'execute_unknown' || body.error === 'execute_unknown') {
+    const until = body.until ? Date.parse(body.until) : Number.NaN;
+    throw new RelayError(body.detail ?? 'The relayer sent the transaction but lost the answer.', 'execute_unknown', body.txHash, {
+      txHashes: body.txHashes ?? (body.txHash ? [body.txHash] : []),
+      sender: body.sender ?? null,
+      untilMs: Number.isNaN(until) ? null : until,
+    });
+  }
+  if (res.ok && body.txHash) return { txHash: body.txHash, ...(body.sender ? { sender: body.sender } : {}) };
+  if (res.status === 409 && (body.error === 'already_stored' || body.error === 'bid_seq')) throw new RelayError(body.detail ?? body.error, body.error);
   if (res.status === 429) throw new RelayError('Relayer busy, retry in 30 s', 'busy');
   const detail = body.detail ?? body.error ?? `relayer answered ${res.status}`;
   if (res.status === 400 && body.error === 'simulate_failed') throw new RelayError(detail, classifyIntentsError(detail));

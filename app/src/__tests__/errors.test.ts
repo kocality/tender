@@ -18,7 +18,7 @@ const INTENTS_KINDS = [
   'invalid_salt',
   'wrong_verifying_contract',
 ] as const;
-const RELAY_KINDS = ['busy', 'unconfigured', 'unavailable'] as const;
+const RELAY_KINDS = ['busy', 'unconfigured', 'unavailable', 'execute_unknown', 'already_stored', 'bid_seq'] as const;
 const ONECLICK_STATUSES = ['KNOWN_DEPOSIT_TX', 'PENDING_DEPOSIT', 'INCOMPLETE_DEPOSIT', 'PROCESSING', 'SUCCESS', 'REFUNDED', 'FAILED'] as const;
 
 describe('humanError tables', () => {
@@ -32,6 +32,12 @@ describe('humanError tables', () => {
       seen.add(text);
     }
     expect(seen.size).toBe(INTENTS_KINDS.length + RELAY_KINDS.length);
+  });
+
+  test('a used nonce never tells the user to sign a new payload (the same sealed bid is already running or stored)', () => {
+    expect(humanError('nonce_used')).not.toMatch(/sign a new/i);
+    expect(humanError('nonce_used')).toMatch(/checks? the chain/i);
+    for (const k of ['execute_unknown', 'already_stored', 'bid_seq'] as const) expect(recoveryFor(k, 'x').to, k).toBe('settle');
   });
 
   test("kind 'other' shows the raw detail, and a generic line when there is none", () => {
@@ -91,7 +97,7 @@ describe('other failures', () => {
 
   test('recoveryFor keeps its routes and uses the same sentences', () => {
     expect(recoveryFor('insufficient_balance', 'insufficient balance or overflow')).toEqual({ to: 'fund', message: humanError('insufficient_balance') });
-    expect(recoveryFor('nonce_used', 'nonce was already used')).toEqual({ to: 'fail', message: humanError('nonce_used') });
+    expect(recoveryFor('nonce_used', 'nonce was already used')).toEqual({ to: 'settle', message: humanError('nonce_used') });
     expect(recoveryFor('deadline_expired', 'deadline has expired').to).toBe('sign_again');
   });
 });

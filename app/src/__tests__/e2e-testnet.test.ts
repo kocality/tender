@@ -161,7 +161,7 @@ describe.skipIf(!RUN)('testnet end to end', () => {
       note(`${s.name}: signer ${w.signerId} · funded ${bal} micro-USDC · fund txs ${fund.join(',')}`);
 
       const sealed = sealForSale({ contractId: config.tenderContractId, sale: BigInt(saleId), mpk: cfg.mpcPublicKey, path: sale!.path, bidder: w.signerId, B: v.B, p: v.p, q: v.q });
-      const payload = await buildBidPayload({ signerId: w.signerId, receiverId: config.tenderContractId, quoteToken, amount: v.B, sale: saleId, ct: sealed.ct, cm: sealed.cm, origin: s.origin });
+      const payload = await buildBidPayload({ signerId: w.signerId, receiverId: config.tenderContractId, quoteToken, amount: v.B, sale: saleId, ct: sealed.ct, cm: sealed.cm, origin: s.origin, closeNs: sale!.closeNs });
       const mp = await w.sign(payloadString(payload));
       const sim = await simulateIntents(config.rpcUrls, config.intentsContractId, [mp]);
       expect(sim.ok, JSON.stringify(sim)).toBe(true);

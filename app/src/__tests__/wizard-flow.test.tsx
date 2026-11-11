@@ -18,14 +18,24 @@ const m = vi.hoisted(() => ({
   relay: vi.fn(),
   quote: vi.fn(),
   balance: vi.fn(),
-  confirm: vi.fn(),
+  readBids: vi.fn(),
+  readForSign: vi.fn(),
+  settle: vi.fn(),
 }));
 vi.mock('@tender/intents', async (orig) => ({
   ...(await orig<typeof import('@tender/intents')>()),
   simulateIntents: m.simulate,
   mtBalanceOf: m.balance,
 }));
-vi.mock('../lib/relay', async (orig) => ({ ...(await orig<typeof import('../lib/relay')>()), relay: m.relay, confirmBid: m.confirm }));
+vi.mock('../lib/relay', async (orig) => ({ ...(await orig<typeof import('../lib/relay')>()), relay: m.relay }));
+// The chain reads of the resolver (DOUBLE-PLAN step 4): wizard-double.test.tsx covers them in depth, here they answer what each test needs.
+vi.mock('../lib/settle', async (orig) => ({
+  ...(await orig<typeof import('../lib/settle')>()),
+  readBids: m.readBids,
+  readForSign: m.readForSign,
+  settle: m.settle,
+  chainIO: vi.fn(() => ({})),
+}));
 vi.mock('../lib/oneclick', async (orig) => ({ ...(await orig<typeof import('../lib/oneclick')>()), quoteDeposit: m.quote, getStatus: vi.fn() }));
 vi.mock('../lib/bidPayload', () => ({ buildBidPayload: vi.fn(async () => ({ signer_id: 'x' })) }));
 vi.mock('../lib/views', async (orig) => ({
@@ -47,6 +57,8 @@ const NS = 1_000_000_000n;
 const NOW = 1_800_000_000n * NS;
 const sale = { ...parseSale(sale1), state: 'Open' as const, key: null, bids: 0, bidders: 0, escrowTotal: 0n, maxBids: 16, closeNs: NOW + 3600n * NS };
 const bids = bids1.map(parseBid);
+const STORED = { verdict: { kind: 'stored', idx: 4, cm: 'ab' }, usedSeenMs: null };
+const PENDING = { verdict: { kind: 'pending', untilMs: Date.now() + 600_000 }, usedSeenMs: null };
 
 const signer = (id: string): IntentSigner => ({
   kind: 'evm',
@@ -94,7 +106,9 @@ beforeEach(() => {
   m.balance.mockReset().mockResolvedValue(10_000_000n); // already funded: the wizard goes to Seal
   m.relay.mockReset().mockRejectedValue(new RelayError('The relayer is not reachable.', 'unavailable'));
   m.quote.mockReset();
-  m.confirm.mockReset().mockResolvedValue(null);
+  m.readBids.mockReset().mockResolvedValue({ height: 1, tsMs: 1, bids: [] });
+  m.readForSign.mockReset().mockResolvedValue({ bids: [], used: false });
+  m.settle.mockReset().mockResolvedValue(PENDING);
   vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {} });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -119,6 +133,7 @@ describe('relay failure leaves a way out (QA-04)', () => {
 describe('a used nonce means this signed bid already ran: no second signature for the same sealed bid', () => {
   test('the relayer answers nonce_used (an earlier relay landed): the wizard goes to the result, Sign is not offered', async () => {
     m.relay.mockRejectedValue(new RelayError('Smart contract panicked: nonce was already used', 'nonce_used'));
+    m.settle.mockResolvedValue(STORED); // the chain shows the bid
     await reachRelayFailure(signer('0xaaa'));
     expect(has('Sign with wallet')).toBe(false);
     expect(has('Sign again')).toBe(false);
@@ -126,6 +141,7 @@ describe('a used nonce means this signed bid already ran: no second signature fo
   });
   test('the pre-flight simulation sees the nonce used: the same, and nothing is relayed', async () => {
     m.simulate.mockResolvedValue({ ok: false, kind: 'nonce_used', message: 'nonce was already used' });
+    m.settle.mockResolvedValue(STORED);
     await reachRelayFailure(signer('0xaaa'));
     expect(has('Sign with wallet')).toBe(false);
     expect(has('Place another bid')).toBe(true);
@@ -136,6 +152,7 @@ describe('a used nonce means this signed bid already ran: no second signature fo
 describe('a bid that never appears says why it may have been refunded (SC-06, handoff refund reasons)', () => {
   test('Not stored names the usual causes, including seller_bid and msg_too_long, and where the refund lands', async () => {
     m.relay.mockResolvedValue({ txHash: 'H1' });
+    m.settle.mockResolvedValue({ verdict: { kind: 'refunded', why: 'other' }, usedSeenMs: null });
     await reachRelayFailure(signer('0xaaa'));
     const text = alertText();
     expect(text).toMatch(/^Not stored/);
@@ -151,9 +168,9 @@ describe('an unknown relay outcome is checked against the chain before anything 
     ['other', 'execute_failed: RPC timeout'],
   ] as const)('relay %s: the bid is on chain, so the wizard goes to the result and offers no second signature', async (kind, message) => {
     m.relay.mockRejectedValue(new RelayError(message, kind, 'H9'));
-    m.confirm.mockResolvedValue({ idx: 4, cm: 'ab' });
+    m.settle.mockResolvedValue(STORED);
     await reachRelayFailure(signer('0xaaa'));
-    expect(m.confirm).toHaveBeenCalledTimes(1);
+    expect(m.settle).toHaveBeenCalledTimes(1);
     expect(has('Sign with wallet')).toBe(false);
     expect(has('Try the relayer again')).toBe(false);
     expect(has('Place another bid')).toBe(true);
@@ -162,13 +179,13 @@ describe('an unknown relay outcome is checked against the chain before anything 
   test('the bid is not on chain: the usual recovery is offered after the check', async () => {
     m.relay.mockRejectedValue(new RelayError('The relayer is not reachable.', 'unavailable'));
     await reachRelayFailure(signer('0xaaa'));
-    expect(m.confirm).toHaveBeenCalledTimes(1);
+    expect(m.settle).toHaveBeenCalledTimes(1);
     expect(has('Try the relayer again')).toBe(true);
   });
   test('a relayer that says busy (429) never took the bid: no check, retry offered', async () => {
     m.relay.mockRejectedValue(new RelayError('Relayer busy, retry in 30 s', 'busy'));
     await reachRelayFailure(signer('0xaaa'));
-    expect(m.confirm).not.toHaveBeenCalled();
+    expect(m.settle).not.toHaveBeenCalled();
     expect(has('Try the relayer again')).toBe(true);
   });
 });
@@ -179,12 +196,12 @@ describe('a sealed bid that is already stored is not signed twice (X12-03 tabs)'
     props = { ...props, bids: [mine] };
     await connect(signer('0xaaa'));
     await click('Paste a sealed bid');
-    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: mine.cm, escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa' });
+    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: mine.cm, escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa', seq: 0, intentsSalt: '0a0b0c0d' });
     await settle();
     expect(alertText()).toContain(`already stored as #${mine.idx}`);
     expect(m.balance).not.toHaveBeenCalled();
     // the same commitment under another account is not this account's bid
-    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: 'cd'.repeat(32), escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa' });
+    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'x', cm: 'cd'.repeat(32), escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa', seq: 0, intentsSalt: '0a0b0c0d' });
     await settle();
     expect(m.balance).toHaveBeenCalled();
   });
@@ -203,6 +220,7 @@ describe('reconnecting starts over (QA-13)', () => {
   });
   test('a finished bid offers "Place another bid", which returns to the form', async () => {
     m.relay.mockResolvedValue({ txHash: 'H1' });
+    m.settle.mockResolvedValue(STORED);
     await reachRelayFailure(signer('0xaaa'));
     expect(has('Place another bid')).toBe(true);
     await click('Place another bid');
@@ -224,7 +242,7 @@ describe('a bid is only started while the sale can take it (QA-03, X12-02 time, 
     props = { ...props, sale: { ...sale, bids: 16 } };
     await connect(signer('0xaaa'));
     await click('Paste a sealed bid');
-    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'c', cm: 'd', escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa' });
+    child<{ onSubmit: (b: unknown) => void }>(PasteSealedBid)!.props.onSubmit({ ct: 'c', cm: 'd', escrow: 5_000_000n, origin: 'base', saltIgnored: false, signer: '0xaaa', seq: 0, intentsSalt: '0a0b0c0d' });
     await settle();
     expect(alertText()).toMatch(/maximum of 16/);
     expect(m.balance).not.toHaveBeenCalled();
@@ -241,6 +259,7 @@ describe('a bid is only started while the sale can take it (QA-03, X12-02 time, 
 describe('a sale that closes while the bid is under way (QA-03)', () => {
   test('the result of a finished bid stays on screen when the sale is opened; a fresh visit sees only the note', async () => {
     m.relay.mockResolvedValue({ txHash: 'H1' });
+    m.settle.mockResolvedValue(STORED);
     await reachRelayFailure(signer('0xaaa'));
     expect(has('Place another bid')).toBe(true);
     props = { ...props, sale: { ...sale, state: 'Keyed' } };
@@ -302,7 +321,7 @@ describe('the funding poll does not walk into a bid that cannot be sent (X12-04 
 describe('a reload during funding keeps the deposit address (QA-10)', () => {
   test('after a remount the stored quote is shown and 1Click is not asked for a second address', async () => {
     const mem = new Map<string, string>();
-    vi.stubGlobal('sessionStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
     m.balance.mockResolvedValue(0n);
     m.quote.mockResolvedValue({ quote: { depositAddress: 'dep-1', amountIn: '5110000', amountOut: '5000000', minAmountOut: '5000000', deadline: new Date(Date.now() + 3_600_000).toISOString() } });
     await connect(signer('0xaaa'));
@@ -317,7 +336,7 @@ describe('a reload during funding keeps the deposit address (QA-10)', () => {
   });
   test('a quote whose swap has ended is never paid into again: the next bid asks for a new address', async () => {
     const mem = new Map<string, string>();
-    vi.stubGlobal('sessionStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
     m.balance.mockResolvedValue(0n);
     m.quote.mockResolvedValue({ quote: { depositAddress: 'dep-1', amountIn: '5100000', amountOut: '5000000', minAmountOut: '5000000', deadline: new Date(Date.now() + 3_600_000).toISOString() } });
     await connect(signer('0xaaa'));

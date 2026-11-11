@@ -1,7 +1,7 @@
 import { fromBase64, toBase64 } from '@tender/intents';
 import { MIN_ESCROW } from './bidFlow';
 
-// A bid sealed offline with `pnpm seal:bid`, pasted as its stdout JSON. Only {sale, ct, cm, escrow, origin} are used.
+// A bid sealed offline with `pnpm seal:bid`, pasted as its stdout JSON. Only {sale, ct, cm, escrow, origin, seq, intents_salt} are used.
 
 export interface PastedBid {
   ct: string;
@@ -12,6 +12,10 @@ export interface PastedBid {
   saltIgnored: boolean;
   /** The signer the CLI sealed for (required: only paste output you produced yourself, for your own account). */
   signer: string;
+  /** The account's stored bids in the sale when the CLI sealed this bid (the contract refunds the bid if the count differs when it lands). */
+  seq: number;
+  /** The Intents salt the CLI pinned, so a paste, the printed payload and the team script all sign this bid with one nonce. */
+  intentsSalt: string;
 }
 
 /** The deployment this page talks to; the ciphertext only opens under the contract and network it was sealed for. */
@@ -56,6 +60,11 @@ export function parsePastedBid(text: string, saleId: string, target: PasteTarget
     };
   }
   if (typeof o.signer !== 'string' || o.signer === '') return { ok: false, error: 'Missing signer. Paste only the output of `pnpm seal:bid --signer <your account>` that you produced yourself.' };
+  // A file from the old seal:bid has neither: it would sign this bid with a random nonce, so pasting it and relaying the printed payload would escrow it twice.
+  const OLD = 'This file has no `seq` or `intents_salt`: it came from an older `pnpm seal:bid`. Please re-run `pnpm seal:bid` and paste its new output.';
+  if (o.seq === undefined || o.intents_salt === undefined) return { ok: false, error: OLD };
+  if (typeof o.seq !== 'number' || !Number.isInteger(o.seq) || o.seq < 0 || o.seq > 0xffff) return { ok: false, error: 'seq must be a whole number between 0 and 65535 (as printed by `pnpm seal:bid`).' };
+  if (typeof o.intents_salt !== 'string' || !/^[0-9a-f]{8}$/.test(o.intents_salt)) return { ok: false, error: 'intents_salt must be 8 lowercase hex characters (as printed by `pnpm seal:bid`).' };
   if (typeof o.ct !== 'string') return { ok: false, error: 'Missing ct.' };
   // The contract decodes with strict base64 (STANDARD, padded): text that decodes here but does not re-encode to itself would be refunded as bad_ct.
   let ctLen = -1;
@@ -80,7 +89,7 @@ export function parsePastedBid(text: string, saleId: string, target: PasteTarget
   const origin = ORIGINS.find((x) => x === o.origin);
   return {
     ok: true,
-    bid: { ct: o.ct, cm: o.cm, escrow, origin, saltIgnored: o.salt !== undefined, signer: o.signer },
+    bid: { ct: o.ct, cm: o.cm, escrow, origin, saltIgnored: o.salt !== undefined, signer: o.signer, seq: o.seq, intentsSalt: o.intents_salt },
   };
 }
 

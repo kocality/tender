@@ -1,5 +1,6 @@
 import {
   bidMsg,
+  bidNonce,
   buildPayload,
   buildVersionedNonce,
   currentSalt,
@@ -68,34 +69,37 @@ export interface BidPayloadInput {
   ct: string;
   cm: string;
   origin?: BidOrigin;
-  /** The sale's close time: the payload stops being valid CLOSE_MARGIN_NS before it, so a refused late bid never leaves a signed copy behind (X12P-02). */
-  closeNs?: bigint;
+  /** The sale's close time: the payload stops being valid CLOSE_MARGIN_NS before it, so a refused late bid never leaves a signed copy behind (X12P-02). It is also what the bid's nonce deadline is made of. */
+  closeNs: bigint;
+  /** How many bids this account had in the sale when this one was prepared; the contract refunds a stale `seq`. */
+  seq?: number;
+  /** The Intents salt pinned when the bid was sealed; a re-signature must repeat it to repeat the nonce. Read live only when none is pinned. */
   saltHex?: string;
   nowMs?: number;
 }
 
 /**
  * The one Intents Transfer that places a sealed bid: B of the quote token to the contract with `msg = {op: bid, ...}`.
- * The salt is read live right before signing (a stale one fails with `invalid salt`) and the deadline is
- * min(now + 10 minutes, close - 60 s).
+ * The nonce is a function of the sealed bid (`bidNonce`), so every signature of it repeats the nonce and intents.near runs at
+ * most one of them. The deadline is min(now + 10 minutes, close - 60 s), never after the nonce's.
  */
 export async function buildBidPayload(input: BidPayloadInput): Promise<DefusePayload> {
   const saltHex = input.saltHex ?? (await currentSalt(config.rpcUrls, config.intentsContractId));
   const nowMs = input.nowMs ?? chainNowMs();
-  const notAfterMs = input.closeNs === undefined ? Infinity : Number((input.closeNs - CLOSE_MARGIN_NS) / 1_000_000n);
+  const notAfterMs = Number((input.closeNs - CLOSE_MARGIN_NS) / 1_000_000n);
   const { deadlineMs, deadlineIso } = makeDeadline(nowMs, 600_000, notAfterMs);
   if (deadlineMs <= nowMs) throw new Error('This sale closes in under 60 seconds; a bid signed now would arrive after close and be refunded.');
   return buildPayload({
     signerId: input.signerId,
     verifyingContract: config.intentsContractId,
     deadlineIso,
-    nonce: buildVersionedNonce({ saltHex, deadlineMs }),
+    nonce: bidNonce({ saltHex, closeNs: input.closeNs, contract: input.receiverId, sale: input.sale, signer: input.signerId, cm: input.cm }),
     intents: [
       transferIntent({
         receiverId: input.receiverId,
         tokenId: input.quoteToken,
         amount: input.amount,
-        msg: bidMsg({ sale: input.sale, ct: input.ct, cm: input.cm, origin: input.origin }),
+        msg: bidMsg({ sale: input.sale, ct: input.ct, cm: input.cm, origin: input.origin, seq: input.seq }),
       }),
     ],
   });

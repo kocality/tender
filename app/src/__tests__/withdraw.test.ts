@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'vitest';
 import { b58encode, fromBase64, fromHex, payloadString, rawEd25519FromWallet, simulateIntents, solanaSignerId, utf8 } from '@tender/intents';
 import { config } from '../config';
-import { OneClickError, quoteWithdraw, withdrawQuoteBody, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
+import { ORIGIN_TOKEN_ADDRESS, OneClickError, quoteWithdraw, withdrawQuoteBody, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
 import { buildWithdrawPayload, followWithdraw, quoteProblem, txHashes, validateWithdraw, withdrawEvidence } from '../lib/withdrawFlow';
 import { WITHDRAW_TARGETS, defaultRecipient, destinationTxUrl, recipientError, withdrawSources } from '../lib/withdrawRoutes';
 
@@ -67,11 +67,43 @@ describe('recipient validation', () => {
     expect(recipientError('base', '')).not.toBeNull();
   });
   test('Solana addresses must be base58 of 32 bytes', () => {
-    expect(recipientError('sol', b58encode(new Uint8Array(32).fill(7)))).toBeNull();
+    expect(recipientError('sol', b58encode(new Uint8Array(32).fill(1)))).toBeNull();
     expect(recipientError('sol', b58encode(new Uint8Array(31).fill(7)))).not.toBeNull();
     expect(recipientError('sol', b58encode(new Uint8Array(33).fill(7)))).not.toBeNull();
     expect(recipientError('sol', '0OIl-not-base58')).not.toBeNull();
     expect(recipientError('sol', SIGNER)).not.toBeNull();
+  });
+  test('X12A-04: a Solana address off the curve (a PDA, token account owner or vault) is not a wallet and is refused', () => {
+    const pda = b58encode(new Uint8Array(32).fill(7)); // off the curve
+    expect(recipientError('sol', pda)).toMatch(/not a wallet address/);
+    expect(recipientError('sol', pda)).not.toMatch(/Not a Solana address/);
+  });
+  test('X12A-04: well-known Solana addresses that are on the curve but are not wallets are refused', () => {
+    for (const a of [
+      '11111111111111111111111111111111', // System Program
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC mint
+      'So11111111111111111111111111111111111111112', // wrapped SOL mint
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token program
+      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', // Token-2022 program
+      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', // associated token account program
+    ]) {
+      expect(recipientError('sol', a), a).toMatch(/not a wallet address/);
+    }
+  });
+  test('X12A-04: EVM zero, dead and the USDC contracts are refused, a normal address and a typo-free checksum are not', () => {
+    for (const a of [
+      '0x0000000000000000000000000000000000000000',
+      '0x000000000000000000000000000000000000dEaD',
+      '0x000000000000000000000000000000000000dead',
+      ORIGIN_TOKEN_ADDRESS.base,
+      ORIGIN_TOKEN_ADDRESS.base.toLowerCase(),
+      ORIGIN_TOKEN_ADDRESS.arb,
+    ]) {
+      expect(recipientError('base', a), a).toMatch(/not a wallet address/);
+      expect(recipientError('arb', a), a).toMatch(/not a wallet address/);
+    }
+    expect(recipientError('base', '0x000000000000000000000000000000000000dEaD')).not.toMatch(/checksum/);
+    expect(recipientError('base', '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A')).toBeNull();
   });
   test('default recipient is the wallet of the same chain family', () => {
     expect(defaultRecipient('base', { kind: 'evm', signerId: SIGNER })).toBe(SIGNER);

@@ -2,12 +2,13 @@ import type { Step } from './bidFlow';
 import type { QuoteResponse } from './oneclick';
 
 // A 1Click deposit address must survive a reload while the swap is still PROCESSING: a new tab state would request a
-// second address and the user would fund twice. The tab's session storage holds the quote only (address, amounts,
-// deadline): never a price, a size, a salt or a ciphertext. Every access is guarded (private mode, blocked storage).
+// second address and the user would fund twice. The browser's local storage (shared by its tabs, so a second tab reuses the
+// open address) holds the quote only (address, amounts, deadline): never a price, a size, a salt or a ciphertext. Every access is
+// guarded (private mode, blocked storage). Another device or browser still asks for its own address: that costs fees only.
 
 function store(): Storage | null {
   try {
-    return globalThis.sessionStorage ?? null;
+    return globalThis.localStorage ?? null;
   } catch {
     return null;
   }

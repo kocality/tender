@@ -6,7 +6,7 @@ import { buildPayload, buildVersionedNonce, bidMsg, nep413Message, payloadString
 const ct = toBase64(new Uint8Array(160).fill(7));
 const cm = 'ab'.repeat(32);
 const target = { contract: 'v1.tenderseal.near', network: 'mainnet' } as const;
-const valid = { sale: '1', contract: 'v1.tenderseal.near', network: 'mainnet', signer: '0xabc', ct, cm, escrow: '3000000', origin: 'base', msg: '{}', payload: null };
+const valid = { sale: '1', contract: 'v1.tenderseal.near', network: 'mainnet', signer: '0xabc', ct, cm, escrow: '3000000', origin: 'base', seq: 0, intents_salt: '252812b3', msg: '{}', payload: null };
 
 describe('parsePastedBid', () => {
   test('accepts the stdout JSON of seal:bid', () => {
@@ -16,7 +16,22 @@ describe('parsePastedBid', () => {
       expect(r.bid.escrow).toBe(3_000_000n);
       expect(r.bid.origin).toBe('base');
       expect(r.bid.saltIgnored).toBe(false);
+      expect(r.bid.seq).toBe(0);
+      expect(r.bid.intentsSalt).toBe('252812b3');
     }
+  });
+  test('a file from the old seal:bid (no seq or no intents_salt) is refused with the command to re-run (DOUBLE-PLAN step 5)', () => {
+    for (const drop of [{ seq: undefined }, { intents_salt: undefined }]) {
+      const r = parsePastedBid(JSON.stringify({ ...valid, ...drop }), '1', target);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toContain('re-run `pnpm seal:bid`');
+    }
+  });
+  test('seq must be a whole number 0..65535 and the Intents salt 8 lowercase hex', () => {
+    for (const bad of [{ seq: -1 }, { seq: 65536 }, { seq: 1.5 }, { seq: '0' }, { intents_salt: '252812' }, { intents_salt: '252812B3' }]) {
+      expect(parsePastedBid(JSON.stringify({ ...valid, ...bad }), '1', target).ok, JSON.stringify(bad)).toBe(false);
+    }
+    expect(parsePastedBid(JSON.stringify({ ...valid, seq: 65535 }), '1', target).ok).toBe(true);
   });
   test('a 159 byte ciphertext is rejected', () => {
     const r = parsePastedBid(JSON.stringify({ ...valid, ct: toBase64(new Uint8Array(159)) }), '1', target);
