@@ -8,6 +8,7 @@
 pub mod clearing;
 pub mod events;
 pub mod intents;
+pub mod keycheck;
 pub mod sale;
 pub mod seal;
 
@@ -222,6 +223,12 @@ impl Tender {
             mpc_public_key.starts_with("bls12381g2:"),
             "new: mpc_public_key must be bls12381g2:"
         );
+        // X12F-01: every key check runs against this key for life, so a mistyped key must
+        // fail the birth instead of every sale.
+        require!(
+            seal::mpc_key_ok(&mpc_public_key),
+            "new: mpc_public_key is not a valid G2 point"
+        );
         Self {
             mpc,
             intents,
@@ -296,12 +303,19 @@ impl Tender {
 
     /// C15: stores the key (state Keyed, reveal window starts) or records the failure so `open`
     /// can be retried. Never panics: a panic here would leave the request in flight until
-    /// IN_FLIGHT_TIMEOUT_SECS.
+    /// IN_FLIGHT_TIMEOUT_SECS. X12F-01: an answer that is not the key for the pinned
+    /// `mpc_public_key` and this sale's app_id is a failure too, so after a domain-2 key or
+    /// app_id derivation change the sale stays Open and cancel rule (b) refunds in full.
     #[private]
     pub fn on_key(&mut self, sale: U64, log_idx: U64) {
         let (id, log_idx) = (sale.0, log_idx.0);
         let raw = env::promise_result_checked(0, 512).ok();
         let (block, now) = (env::block_height(), env::block_timestamp());
+        let (mode, mpk, me) = (
+            self.app_pk_mode,
+            self.mpc_public_key.clone(),
+            env::current_account_id(),
+        );
         let Some(s) = self.sale_mut(id) else {
             env::log_str("on_key: sale not found");
             return;
@@ -310,7 +324,12 @@ impl Tender {
             env::log_str("on_key: stale callback");
             return;
         }
-        let key = raw.as_deref().and_then(seal::parse_ckd);
+        let parsed = raw.as_deref().and_then(seal::parse_ckd);
+        let got_answer = parsed.is_some();
+        let key = parsed.filter(|(y, c)| seal::key_matches(mode, y, c, &mpk, me.as_str(), &s.path));
+        if got_answer && key.is_none() {
+            env::log_str("on_key: key does not match mpc_public_key and app_id");
+        }
         let outcome = match key {
             Some((big_y, big_c)) => {
                 s.key = Some(Key {
@@ -1373,6 +1392,115 @@ mod tests {
         t.cancel(U64(0));
         let s = t.get_sale(U64(0)).unwrap();
         assert_eq!((s.state.as_str(), s.key_requests), ("Cancelled", 0));
+    }
+
+    /// Real mainnet v1.signer answer (evidence/spikes/s1-identity.json): a well-formed CKD key,
+    /// but for another account, path and domain-2 key than any Tender sale here.
+    const S1_ID: &str = r#"{"big_y":"bls12381g1:7agABzwCzSKHWqkGhQ5wYK1MHaDefJ4Fo4SKDK1VkNY4XowxRVdHpRbShAhwKChRbA","big_c":"bls12381g1:5mpVvTmcVhUiJGixSuCkGs55xYBQ71sDR5Fida1C7U28pizzdgDJFSMpFLtYvsNUnS"}"#;
+
+    fn key_answer(t: &mut Tender, account: &str, now: u64, raw: &str) {
+        let mut c = ctx(account, now);
+        c.current_account_id(account.parse().unwrap());
+        testing_env!(
+            c.build(),
+            test_vm_config(),
+            RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![PromiseResult::Successful(raw.as_bytes().to_vec())],
+        );
+        t.on_key(U64(0), U64(0));
+    }
+
+    /// X12F-01: an answer that parses but is not the key for the pinned mpc_public_key and
+    /// this sale's app_id (a changed domain-2 key or app_id derivation) is recorded as Err like
+    /// an MPC failure: the sale stays Open, open may be retried, and cancel rule (b) refunds
+    /// every bid in full at close + 24 h. Before the check the sale went Keyed with a key no
+    /// browser-sealed bid opens, cancel was refused and every unrevealed bid lost 10%.
+    #[test]
+    fn on_key_wrong_key_records_err_and_stays_open() {
+        let (mut t, close) = opened();
+        key_answer(&mut t, ME, close, S1_ID);
+        assert!(
+            get_logs().contains(&"on_key: key does not match mpc_public_key and app_id".into()),
+            "{:?}",
+            get_logs()
+        );
+        assert_eq!(key_error_log_idx(), Some("0".into()));
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!(
+            (s.state.as_str(), s.in_flight, s.key.is_none()),
+            ("Open", false, true)
+        );
+        assert_eq!(t.get_key_log(U64(0), 10)[0].outcome, "Err");
+        at(KEEPER, close + sale::MIN_REVEAL_SECS * NS_PER_SEC);
+        t.cancel(U64(0));
+        assert_eq!(t.get_sale(U64(0)).unwrap().state, "Cancelled");
+        assert!(
+            t.get_bids(U64(0), 0, 2)
+                .iter()
+                .all(|b| b.paid.usdc.0 == 3_000_000 && b.penalty.0 == 0)
+        );
+    }
+
+    /// X12F-01: the key a real Tender contract got from v1.signer-prod.testnet for a real sale
+    /// path (M3 rehearsal `v1.tender-09bdfe.testnet` sale 0, identity mode) passes the check.
+    #[test]
+    fn on_key_valid_key_goes_keyed() {
+        const M3: &str = "v1.tender-09bdfe.testnet";
+        let (mut t, close) = opened();
+        t.mpc_public_key = TESTNET_MPK.into();
+        t.sale_mut(0).unwrap().path = "tender/0/f774cf89643a17d7a89e520b5510ccd8".into();
+        let raw = r#"{"big_y":"bls12381g1:5t67chajyMfBKDbtDXLzJMTtSLg6fBNLyB43AykRPEqfFEnsuZ7i1CnnHTnpqgrTXZ","big_c":"bls12381g1:7iZwDu1FoMqYLgfhirjPr6FBZ1cWGeD98yriBgg3dLyoR48f13r5wTrW8X53764te5"}"#;
+        key_answer(&mut t, M3, close, raw);
+        let s = t.get_sale(U64(0)).unwrap();
+        assert_eq!((s.state.as_str(), s.in_flight), ("Keyed", false));
+        assert_eq!(t.get_key_log(U64(0), 10)[0].outcome, "Ok");
+    }
+
+    /// v1.signer-prod.testnet domain-2 public key (pinned by the M3 rehearsal contract).
+    const TESTNET_MPK: &str = "bls12381g2:xeYho48G2Sr9oJz4gw9sLGZGspeeKpHZvMDAwWvoNTRnVMFJH96GxX98TT2MRhTtsot1wcGR1Ti2Xh8PCsbYJ2enbLNdJXDvTYSK8aTE3nJ5NZXU7Kt1F6mFtReWs5pR4kj";
+
+    fn new_with_key(mpk: &str) -> Tender {
+        testing_env!(ctx(SELLER, NOW).build());
+        Tender::new(
+            "v1.signer".parse().unwrap(),
+            crate::sale::tests::INTENTS.parse().unwrap(),
+            2,
+            "generator".into(),
+            mpk.into(),
+            vec![USDC.into()],
+            vec![SELLER.parse().unwrap()],
+        )
+    }
+
+    /// Refuter addition to X12F-01: a mistyped key must fail the birth, not make every sale of
+    /// the locked contract fail its key check for life.
+    #[test]
+    #[should_panic(expected = "new: mpc_public_key is not a valid G2 point")]
+    fn new_refuses_short_mpc_public_key() {
+        new_with_key("bls12381g2:x");
+    }
+
+    #[test]
+    #[should_panic(expected = "new: mpc_public_key is not a valid G2 point")]
+    fn new_refuses_mpc_public_key_off_curve() {
+        let bad = near_sdk::bs58::encode([0x87u8; 96]).into_string();
+        new_with_key(&format!("bls12381g2:{bad}"));
+    }
+
+    #[test]
+    #[should_panic(expected = "new: mpc_public_key is not a valid G2 point")]
+    fn new_refuses_mpc_public_key_at_infinity() {
+        let mut inf = [0u8; 96];
+        inf[0] = 0xc0;
+        let inf = near_sdk::bs58::encode(inf).into_string();
+        new_with_key(&format!("bls12381g2:{inf}"));
+    }
+
+    #[test]
+    fn new_accepts_real_keys() {
+        new_with_key(TESTNET_MPK);
+        new_with_key(crate::seal::GENERATOR_PK2);
     }
 
     #[test]

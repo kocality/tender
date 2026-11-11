@@ -86,6 +86,26 @@ test('forbids_every_verify_import_family', () => {
   assert.deepEqual(out.unknown, []);
 });
 
+// X12F-01: on_key checks the MPC key with the sha3_256 and BLS12-381 host functions. Only these
+// six were added; the rest of the BLS family (multiexp, G2 sums, map to G2) stays unknown.
+test('allows_x12f01_key_check_host_functions', () => {
+  const names = [
+    'sha3_256',
+    'bls12381_p1_sum',
+    'bls12381_p1_decompress',
+    'bls12381_p2_decompress',
+    'bls12381_map_fp_to_g1',
+    'bls12381_pairing_check',
+  ];
+  const r = check(names);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /^PASS 6 imports/);
+  for (const n of ['bls12381_g1_multiexp', 'bls12381_p2_sum', 'bls12381_map_fp2_to_g2', 'sha3_512']) {
+    const u = check([n]);
+    assert.equal(u.code, 1, n);
+  }
+});
+
 test('rejects_unknown', () => {
   const r = check(['storage_read', 'ecrecover']);
   assert.equal(r.code, 1);

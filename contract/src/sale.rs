@@ -213,6 +213,10 @@ pub struct BidMsg {
     pub ct: String,
     pub cm: String,
     pub origin: Option<String>,
+    /// D-02: how many bids the sender already has in this sale, as the client saw it. When
+    /// present the bid is stored only if it is exact, so bids built from one view of the sale (a
+    /// retry, a re-seal after Fund, a second tab or device) store at most one.
+    pub seq: Option<u16>,
 }
 
 /// One opened bid (C16): `{"idx":0,"p":"3900000","q":"4000000","salt":"<32 lowercase hex>"}`.
@@ -439,7 +443,7 @@ pub(crate) mod tests {
             INTENTS.parse().unwrap(),
             2,
             "identity".into(),
-            "bls12381g2:x".into(),
+            crate::seal::GENERATOR_PK2.into(),
             vec![USDC.into()],
             vec![SELLER.parse().unwrap()],
         )
@@ -880,7 +884,9 @@ pub(crate) mod tests {
     fn bid_counts_distinct_bidders() {
         let mut t = with_sale(|_| {});
         assert_eq!(bid(&mut t, "alice.near", 1_000_000, &bid_msg(0)), vec![0]);
-        assert_eq!(bid(&mut t, "alice.near", 2_000_000, &bid_msg(0)), vec![0]);
+        let mut other = bid_msg(0);
+        other["cm"] = json!("cd".repeat(32));
+        assert_eq!(bid(&mut t, "alice.near", 2_000_000, &other), vec![0]);
         let s = t.sales.get(0).unwrap();
         assert_eq!((s.bids, s.bidders, s.escrow_total), (2, 1, 3_000_000));
         assert_eq!(bid(&mut t, "bob.near", 1_000_000, &bid_msg(0)), vec![0]);

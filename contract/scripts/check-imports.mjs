@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-// Classic host functions, all present at protocol 88 (nearcore 2.14.0).
+// Host functions, all present at protocol 88 (nearcore 2.14.0).
 const ALLOWED = new Set([
   'attached_deposit',
   'block_index',
@@ -42,6 +42,15 @@ const ALLOWED = new Set([
   'promise_return',
   'promise_result',
   'promise_results_count',
+  // X12F-01: on_key checks each MPC answer against the pinned domain-2 key (app_id with
+  // sha3_256, hash-to-G1, one pairing check). sha3_256 is a host function since protocol 87,
+  // the BLS12-381 ones since protocol 70 (NEP-488); none of them can touch code, keys or funds.
+  'sha3_256',
+  'bls12381_p1_sum',
+  'bls12381_p1_decompress',
+  'bls12381_p2_decompress',
+  'bls12381_map_fp_to_g1',
+  'bls12381_pairing_check',
 ]);
 
 // Never allowed: these can change the account's code, keys or existence (lock claim, K7).

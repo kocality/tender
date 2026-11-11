@@ -128,16 +128,12 @@ pub async fn sub(parent: &Account, name: &str, near: u128) -> anyhow::Result<Acc
         .into_result()?)
 }
 
-/// Deploys mock-mpc on `mpc.<root>` and loads the S1 response into it.
+/// Deploys mock-mpc on `mpc.<root>`. It answers with a real CKD for `MPC_PK` (master secret
+/// 1), so Tender's on-chain key check (X12F-01) passes; `set_response` overrides it.
 pub async fn deploy_mock_mpc(root: &Account) -> anyhow::Result<Contract> {
     let acc = sub(root, "mpc", 10).await?;
     let mpc = acc
         .deploy(&read_wasm(&mock_mpc_wasm_path()))
-        .await?
-        .into_result()?;
-    mpc.call("set_response")
-        .args_json(serde_json::json!({ "json": s1_response() }))
-        .transact()
         .await?
         .into_result()?;
     Ok(mpc)
@@ -406,8 +402,9 @@ pub async fn execute_intents(
 
 // ---- Tender deploy ----
 
-/// Testnet domain-2 key shape; the contract only stores it (no BLS on chain).
-pub const MPC_PK: &str = "bls12381g2:xeYho48G2Sr9oJz4gw9sLGZGspeeKpHZvMDAwWvoNTRnVMFJH96GxX98TT2MRhTtsot1wcGR1Ti2Xh8PCsbYJ2enbLNdJXDvTYSK8aTE3nJ5NZXU7Kt1F6mFtReWs5pR4kj";
+/// The mock MPC's domain-2 key: the G2 generator (master secret 1). `on_key` checks every
+/// answer against it (X12F-01).
+pub const MPC_PK: &str = tender::seal::GENERATOR_PK2;
 
 pub fn tender_id(w: &World) -> near_workspaces::AccountId {
     format!("v1.{}", w.seller.id()).parse().unwrap()

@@ -16,6 +16,39 @@ use crate::{
     TenderExt, events, storage_ok,
 };
 
+/// D4: a `dup_bid` / `bid_seq` refund that also names the refused bid's `cm`, the sender's
+/// stored bid count `have` and, for a duplicate, the stored copy's `idx` (null otherwise), so a
+/// client holding only the tx can tell what happened to its bid.
+fn refund_bid(
+    reason: &str,
+    sender: &AccountId,
+    token: &str,
+    amounts: &[U128],
+    cm: &str,
+    have: u16,
+    idx: Option<u16>,
+) -> Vec<U128> {
+    let amount = amounts
+        .iter()
+        .map(|a| a.0.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    events::emit(
+        "refund",
+        json!({
+            "reason": reason,
+            "sender_id": sender,
+            "token_id": token,
+            "amount": amount,
+            "op": "bid",
+            "cm": cm,
+            "have": have,
+            "idx": idx,
+        }),
+    );
+    amounts.to_vec()
+}
+
 fn refund(reason: &str, sender: &AccountId, token: &str, amounts: &[U128], op: &str) -> Vec<U128> {
     let amount = amounts
         .iter()
@@ -176,6 +209,22 @@ impl Tender {
             Ok(p) => p,
             Err(reason) => return refund(reason, sender, token, &amounts, "bid"),
         };
+        // D-01/D-02, before any state change: the same commitment from the same sender is one
+        // bid, and a bid that carries `seq` must match the sender's stored count. Only a sender
+        // who already bid in this sale is scanned (at most max_bids - 1 reads). Per sender, so
+        // nobody can block someone else's bid.
+        let (mine, dup) = if self.bidder_seen.contains(&(sale_id, sender.clone())) {
+            self.bids_of(sale_id, sender, &p.cm)
+        } else {
+            (0, None)
+        };
+        let cm_hex = hex_lower(&p.cm);
+        if let Some(i) = dup {
+            return refund_bid("dup_bid", sender, token, &amounts, &cm_hex, mine, Some(i));
+        }
+        if m.seq.is_some_and(|n| n != mine) {
+            return refund_bid("bid_seq", sender, token, &amounts, &cm_hex, mine, None);
+        }
         // F6: also room for this bid's reveal, on top of what open sales keep back.
         if !storage_ok(BID_STORAGE_BYTES + REVEAL_STORAGE_BYTES + self.reserved_bytes) {
             return refund("storage", sender, token, &amounts, "bid");
@@ -222,9 +271,29 @@ impl Tender {
                 "bidder": sender,
                 "escrow": amount.to_string(),
                 "origin": p.origin,
+                "cm": cm_hex,
+                "nth": mine,
             }),
         );
         vec![U128(0)]
+    }
+
+    /// D-01/D-02: how many bids `sender` has in sale `id`, and the index of the first one whose
+    /// commitment is `cm`.
+    fn bids_of(&self, id: u64, sender: &AccountId, cm: &[u8; 32]) -> (u16, Option<u16>) {
+        let n = self.sale(id).map_or(0, |s| s.bids);
+        let (mut mine, mut dup) = (0u16, None);
+        for i in 0..n {
+            if let Some(b) = self.bids.get(&(id, i))
+                && &b.bidder == sender
+            {
+                mine += 1;
+                if dup.is_none() && &b.cm == cm {
+                    dup = Some(i);
+                }
+            }
+        }
+        (mine, dup)
     }
 
     /// Sends the next `max` payout items of a Finalized or Cancelled sale that are neither paid
@@ -412,4 +481,340 @@ fn emit_payout(sale: u64, idx: u16, ok: bool, usdc: u128, tokens: u128) {
             "tokens": tokens.to_string(),
         }),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    //! D-01/D-02 (DOUBLE-PLAN D1 + D4): one sender's copy of a stored commitment, or a bid
+    //! whose `seq` is not the sender's stored count, is refunded in full and changes nothing.
+    use crate::Tender;
+    use crate::sale::tests::{NOW, USDC, ct_b64, ctx, transfer, with_sale};
+    use crate::sale::{self, Key, NS_PER_SEC, RevealItem, SaleState};
+    use crate::seal;
+    use near_sdk::json_types::U64;
+    use near_sdk::serde_json::{self, Value, json};
+    use near_sdk::test_utils::get_logs;
+    use near_sdk::testing_env;
+
+    const SALT: [u8; 16] = [0x11; 16];
+    const SALT_HEX: &str = "11111111111111111111111111111111";
+    const LATER: u64 = NOW + 3 * 3_600 * NS_PER_SEC;
+
+    fn cm(bidder: &str, b: u128, p: u64, salt: u8) -> String {
+        seal::hex_lower(&seal::commitment(0, bidder, b, p, 1_000_000, &[salt; 16]))
+    }
+
+    fn msg(cm: &str, seq: Option<u16>) -> String {
+        let mut m = json!({ "op": "bid", "sale": "0", "ct": ct_b64(160), "cm": cm });
+        if let Some(n) = seq {
+            m["seq"] = json!(n);
+        }
+        m.to_string()
+    }
+
+    fn send(t: &mut Tender, who: &str, b: u128, m: &str, k: u64) -> Vec<u128> {
+        transfer(t, who, USDC, b, m, NOW + k * NS_PER_SEC)
+    }
+
+    fn last(event: &str) -> Option<Value> {
+        get_logs().iter().rev().find_map(|l| {
+            let v: Value = serde_json::from_str(l.strip_prefix("EVENT_JSON:")?).ok()?;
+            (v["event"] == event).then(|| v["data"][0].clone())
+        })
+    }
+
+    fn reason() -> Option<String> {
+        last("refund").map(|e| e["reason"].as_str().unwrap_or("").to_string())
+    }
+
+    fn counts(t: &Tender) -> (u16, u16, u128) {
+        let s = t.get_sale(U64(0)).unwrap();
+        (s.bids, s.bidders, s.escrow_total.0)
+    }
+
+    /// Stands in for open + on_key: sale 0 Keyed, key at NOW + 2 h.
+    fn key(t: &mut Tender) {
+        let key_ns = NOW + 2 * 3_600 * NS_PER_SEC;
+        let s = t.sale_mut(0).unwrap();
+        s.key = Some(Key {
+            big_y: "y".into(),
+            big_c: "c".into(),
+            block: 100,
+            ns: key_ns,
+        });
+        s.reveal_deadline_ns = Some(sale::reveal_deadline(key_ns, s.reveal_secs));
+        sale::transition(s, SaleState::Keyed);
+    }
+
+    fn at(who: &str, now: u64) {
+        testing_env!(ctx(who, now).build());
+    }
+
+    fn sealed_bid(bidder: &str, b: u128, p: u64, q: u64) -> String {
+        let cm = seal::hex_lower(&seal::commitment(0, bidder, b, p, q, &SALT));
+        json!({ "op": "bid", "sale": "0", "ct": ct_b64(160), "cm": cm }).to_string()
+    }
+
+    fn one_bidder_sale() -> Tender {
+        with_sale(|m| {
+            m["min_bidders"] = json!(1);
+            m["min_escrow"] = json!("1000000");
+        })
+    }
+
+    /// d1 (X12-03 / R2): the same sealed bid sent twice (two signatures, two Intents nonces).
+    /// Before D1 both copies were stored, anyone could reveal the twin with the public opening
+    /// and the bidder bought and paid twice. Now the second copy is refunded `dup_bid` and the
+    /// bidder wins and pays once.
+    #[test]
+    fn d1_same_sealed_bid_twice_is_stored_once() {
+        let mut t = one_bidder_sale();
+        let m = sealed_bid("alice.near", 5_000_000, 3_500_000, 2_000_000);
+        assert_eq!(send(&mut t, "alice.near", 5_000_000, &m, 1), vec![0]);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &m, 2),
+            vec![5_000_000]
+        );
+        assert_eq!(reason().as_deref(), Some("dup_bid"));
+        assert_eq!(counts(&t), (1, 1, 5_000_000));
+
+        key(&mut t);
+        at("alice.near", LATER);
+        let item = RevealItem {
+            idx: 0,
+            p: U64(3_500_000),
+            q: U64(2_000_000),
+            salt: SALT_HEX.into(),
+        };
+        t.reveal(U64(0), vec![item]);
+        at("keeper.near", LATER);
+        t.finalize(U64(0), 8);
+        let b = t.get_bids(U64(0), 0, 64);
+        assert_eq!(b.len(), 1);
+        assert!(b[0].alloc.0 > 0);
+        assert_eq!(t.get_result(U64(0)).unwrap().sold.0, b[0].alloc.0);
+    }
+
+    /// d1b: before D1 the unrevealed twin of a revealed bid was Penalized (10% kept). Now there
+    /// is no twin: nothing is Penalized and the penalty pool stays 0.
+    #[test]
+    fn d1b_no_unrevealed_twin_to_penalize() {
+        let mut t = one_bidder_sale();
+        let m = sealed_bid("alice.near", 5_000_000, 3_500_000, 2_000_000);
+        send(&mut t, "alice.near", 5_000_000, &m, 1);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &m, 2),
+            vec![5_000_000]
+        );
+        key(&mut t);
+        at("alice.near", LATER);
+        let item = RevealItem {
+            idx: 0,
+            p: U64(3_500_000),
+            q: U64(2_000_000),
+            salt: SALT_HEX.into(),
+        };
+        t.reveal(U64(0), vec![item]);
+        let deadline = t.get_sale(U64(0)).unwrap().reveal_deadline_ns.unwrap().0;
+        at("keeper.near", deadline);
+        t.finalize(U64(0), 8);
+        let b = t.get_bids(U64(0), 0, 64);
+        assert!(
+            b.iter().all(|x| x.state != "Penalized"),
+            "no twin penalized"
+        );
+        assert_eq!(t.get_result(U64(0)).unwrap().penalty_pool.0, 0);
+    }
+
+    /// The same (sender, cm) twice, with or without seq: refunded `dup_bid`, nothing stored.
+    #[test]
+    fn i1_same_sender_same_cm_is_refunded() {
+        let mut t = with_sale(|_| {});
+        let c = cm("alice.near", 5_000_000, 3_500_000, 1);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&c, None), 1),
+            vec![0]
+        );
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&c, None), 2),
+            vec![5_000_000]
+        );
+        assert_eq!(reason().as_deref(), Some("dup_bid"));
+        assert_eq!(counts(&t), (1, 1, 5_000_000));
+    }
+
+    /// Two different commitments prepared from one view of the sale carry the same seq: the
+    /// second is refunded `bid_seq`.
+    #[test]
+    fn i2_same_seq_different_cm_is_refunded() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 5_000_000, 3_500_000, 1);
+        let b = cm("alice.near", 5_000_000, 3_600_000, 2);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&a, Some(0)), 1),
+            vec![0]
+        );
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&b, Some(0)), 2),
+            vec![5_000_000]
+        );
+        assert_eq!(reason().as_deref(), Some("bid_seq"));
+        assert_eq!(counts(&t), (1, 1, 5_000_000));
+    }
+
+    /// A deliberate second bid with seq = the stored count is stored; a seq from the future is
+    /// refunded too, so a gap cannot hide a race.
+    #[test]
+    fn i3_next_seq_is_a_second_real_bid() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 5_000_000, 3_500_000, 1);
+        let b = cm("alice.near", 5_000_000, 3_600_000, 2);
+        let c = cm("alice.near", 5_000_000, 3_700_000, 3);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&a, Some(0)), 1),
+            vec![0]
+        );
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&c, Some(2)), 2),
+            vec![5_000_000]
+        );
+        assert_eq!(reason().as_deref(), Some("bid_seq"));
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&b, Some(1)), 3),
+            vec![0]
+        );
+        assert_eq!(counts(&t), (2, 1, 10_000_000));
+    }
+
+    /// Per sender: another account's copy of a cm, and its own bids, never block a bid; a bid
+    /// refused for another reason does not use up a seq.
+    #[test]
+    fn i4_other_senders_do_not_block() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 5_000_000, 3_500_000, 1);
+        let m9 = cm("mallory.near", 2_000_000, 1, 9);
+        assert_eq!(
+            send(&mut t, "mallory.near", 5_000_000, &msg(&a, Some(0)), 1),
+            vec![0]
+        );
+        assert_eq!(
+            send(&mut t, "mallory.near", 2_000_000, &msg(&m9, Some(1)), 2),
+            vec![0]
+        );
+        assert_eq!(send(&mut t, "alice.near", 1, &msg(&a, Some(0)), 3), vec![1]);
+        assert_eq!(reason().as_deref(), Some("escrow_below_min"));
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&a, Some(0)), 4),
+            vec![0]
+        );
+        assert_eq!(counts(&t), (3, 2, 12_000_000));
+    }
+
+    /// A refused duplicate leaves no trace: no bidder count, escrow or reserved bytes.
+    #[test]
+    fn i5_refund_changes_no_state() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 5_000_000, 3_500_000, 1);
+        send(&mut t, "alice.near", 5_000_000, &msg(&a, Some(0)), 1);
+        let reserved = t.reserved_bytes;
+        let other = cm("alice.near", 5_000_000, 1, 7);
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&a, Some(0)), 2),
+            vec![5_000_000]
+        );
+        assert_eq!(
+            send(&mut t, "alice.near", 5_000_000, &msg(&other, Some(0)), 3),
+            vec![5_000_000]
+        );
+        assert_eq!(t.reserved_bytes, reserved);
+        assert_eq!(counts(&t), (1, 1, 5_000_000));
+    }
+
+    /// A copy of a stored cm is `dup_bid` whatever its seq says.
+    #[test]
+    fn i6_dup_wins_over_seq() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 2_000_000, 1, 1);
+        assert_eq!(
+            send(&mut t, "alice.near", 2_000_000, &msg(&a, Some(0)), 1),
+            vec![0]
+        );
+        for seq in [Some(0), Some(1), Some(5), None] {
+            assert_eq!(
+                send(&mut t, "alice.near", 2_000_000, &msg(&a, seq), 2),
+                vec![2_000_000]
+            );
+            assert_eq!(reason().as_deref(), Some("dup_bid"), "seq {seq:?}");
+        }
+        assert_eq!(counts(&t).0, 1);
+    }
+
+    /// D4: the bid event names cm and the sender's nth bid; the two new refunds name cm,
+    /// `have` and (dup_bid only) the stored copy's idx.
+    #[test]
+    fn i7_outcome_events_name_cm_and_count() {
+        let mut t = with_sale(|_| {});
+        let a = cm("alice.near", 2_000_000, 1, 1);
+        let b = cm("alice.near", 2_000_000, 2, 2);
+        let bob = cm("bob.near", 2_000_000, 1, 9);
+        assert_eq!(
+            send(&mut t, "bob.near", 2_000_000, &msg(&bob, None), 1),
+            vec![0]
+        );
+        assert_eq!(
+            send(&mut t, "alice.near", 2_000_000, &msg(&a, Some(0)), 1),
+            vec![0]
+        );
+        let e = last("bid").unwrap();
+        assert_eq!(
+            (e["cm"].as_str(), e["nth"].as_u64(), e["idx"].as_u64()),
+            (Some(a.as_str()), Some(0), Some(1))
+        );
+        send(&mut t, "alice.near", 2_000_000, &msg(&a, Some(0)), 2);
+        let e = last("refund").unwrap();
+        assert_eq!(
+            (
+                e["reason"].as_str(),
+                e["op"].as_str(),
+                e["cm"].as_str(),
+                e["have"].as_u64(),
+                e["idx"].as_u64()
+            ),
+            (
+                Some("dup_bid"),
+                Some("bid"),
+                Some(a.as_str()),
+                Some(1),
+                Some(1)
+            )
+        );
+        assert_eq!(e["amount"], "2000000");
+        send(&mut t, "alice.near", 2_000_000, &msg(&b, Some(0)), 2);
+        let e = last("refund").unwrap();
+        assert_eq!(
+            (e["reason"].as_str(), e["cm"].as_str(), e["have"].as_u64()),
+            (Some("bid_seq"), Some(b.as_str()), Some(1))
+        );
+        assert!(e["idx"].is_null());
+        assert_eq!(
+            send(&mut t, "alice.near", 2_000_000, &msg(&b, Some(1)), 3),
+            vec![0]
+        );
+        assert_eq!(last("bid").unwrap()["nth"].as_u64(), Some(1));
+    }
+
+    /// `seq` is a JSON number: a string (`"0"`) is refunded `bad_msg`, as posted to clients.
+    #[test]
+    fn i8_string_seq_is_bad_msg() {
+        let mut t = with_sale(|_| {});
+        let mut m: Value =
+            serde_json::from_str(&msg(&cm("alice.near", 2_000_000, 1, 1), None)).unwrap();
+        m["seq"] = json!("0");
+        assert_eq!(
+            send(&mut t, "alice.near", 2_000_000, &m.to_string(), 1),
+            vec![2_000_000]
+        );
+        assert_eq!(reason().as_deref(), Some("bad_msg"));
+        assert_eq!(counts(&t), (0, 0, 0));
+    }
 }

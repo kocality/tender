@@ -24,7 +24,11 @@ async fn mock_mpc_roundtrip() -> anyhow::Result<()> {
     let worker = sandbox().await?;
     let root = worker.root_account()?;
     let mpc = deploy_mock_mpc(&root).await?;
-    let request = json!({ "request": { "derivation_path": "tender/0/x", "domain_id": 2 } });
+    let request = json!({ "request": {
+        "derivation_path": "tender/0/x",
+        "app_public_key": tender::seal::app_public_key_json(tender::sale::AppPkMode::Generator),
+        "domain_id": 2,
+    } });
 
     let ok = root
         .call(mpc.id(), "request_app_private_key")
@@ -35,8 +39,24 @@ async fn mock_mpc_roundtrip() -> anyhow::Result<()> {
         .await?;
     assert!(ok.is_success(), "{}", failure_text(&ok));
     let got: Value = ok.json()?;
-    let want: Value = serde_json::from_str(&s1_response())?;
-    assert_eq!(got, want);
+    // A real CKD for MPC_PK: the contract's own key check accepts it for this caller and path
+    // in generator mode, and nothing else.
+    let (y, c) = (
+        got["big_y"].as_str().unwrap(),
+        got["big_c"].as_str().unwrap(),
+    );
+    let ok_for =
+        |mode, account: &str, path| tender::seal::key_matches(mode, y, c, MPC_PK, account, path);
+    let generator = tender::sale::AppPkMode::Generator;
+    assert!(ok_for(generator, root.id().as_str(), "tender/0/x"));
+    assert!(!ok_for(generator, root.id().as_str(), "tender/0/y"));
+    assert!(!ok_for(generator, "other.test.near", "tender/0/x"));
+    assert!(!ok_for(
+        tender::sale::AppPkMode::Identity,
+        root.id().as_str(),
+        "tender/0/x"
+    ));
+    assert_eq!(mpc.view("public_key").await?.json::<String>()?, MPC_PK);
     assert_eq!(mpc.view("calls").await?.json::<u32>()?, 1);
     assert_eq!(
         mpc.view("last_predecessor").await?.json::<String>()?,
@@ -142,8 +162,10 @@ async fn sale_with_bids(
     let w = world().await?;
     let t = deploy_tender(&w).await?;
     let id = create_sale(&w, &t, ONE_NEAR, f).await?;
-    for &(b, escrow) in bids {
-        let r = bid_mt(&w, &t, &w.bidders[b], id, escrow, &CT, &cm()).await?;
+    for (i, &(b, escrow)) in bids.iter().enumerate() {
+        // D-01: one account's bids need distinct commitments.
+        let cm = format!("{:02x}", i + 1).repeat(32);
+        let r = bid_mt(&w, &t, &w.bidders[b], id, escrow, &CT, &cm).await?;
         assert!(
             event(&r.logs(), "bid").is_some(),
             "bid refunded: {:?}",
@@ -325,9 +347,16 @@ async fn s18_key_ledger_err_then_ok() -> anyhow::Result<()> {
     assert_eq!(s["state"], "Keyed");
     assert_eq!(s["key_requests"], 2);
     assert_eq!(s["in_flight"], false);
-    let want: Value = serde_json::from_str(&s1_response())?;
-    assert_eq!(s["key"]["big_y"], want["big_y"]);
-    assert_eq!(s["key"]["big_c"], want["big_c"]);
+    // The stored key is the mock's real CKD for this contract and sale path (X12F-01).
+    let mode = tender::sale::AppPkMode::parse(&s1_mode()).unwrap();
+    assert!(tender::seal::key_matches(
+        mode,
+        s["key"]["big_y"].as_str().unwrap(),
+        s["key"]["big_c"].as_str().unwrap(),
+        MPC_PK,
+        t.as_str(),
+        s["path"].as_str().unwrap(),
+    ));
     let key_ns: u64 = s["key"]["ns"].as_str().unwrap().parse()?;
     let deadline: u64 = s["reveal_deadline_ns"].as_str().unwrap().parse()?;
     assert_eq!(deadline, key_ns + 86_400 * 1_000_000_000);
@@ -343,7 +372,6 @@ async fn s18_key_ledger_err_then_ok() -> anyhow::Result<()> {
     assert!(log[1]["resolved_block"].is_string());
 
     // The MPC saw exactly ckd_args(path, mode, 2) from the Tender account.
-    let mode = tender::sale::AppPkMode::parse(&s1_mode()).unwrap();
     let path = s["path"].as_str().unwrap();
     let sent: Value = serde_json::from_str(&w.mpc.view("last_request").await?.json::<String>()?)?;
     let want_args: Value = serde_json::from_str(&tender::seal::ckd_args(path, mode, 2))?;
@@ -359,6 +387,130 @@ async fn s18_key_ledger_err_then_ok() -> anyhow::Result<()> {
     assert_fails_with(&r, "open: sale is not open");
     let r = cancel(&w.root, &t, id).await?;
     assert_fails_with(&r, "cancel: conditions not met");
+    Ok(())
+}
+
+/// X12F-01: v1.signer answers a well-formed key that is not the key of the pinned
+/// `mpc_public_key` and this sale's app_id (here: the real mainnet S1 answer, made for another
+/// domain-2 key and caller), as after a domain-2 key or app_id derivation change. `on_key`
+/// records Err, the sale stays Open, and cancel rule (b) at close + 24 h refunds every bid in
+/// full. Before the check the sale went Keyed with a key that opens no bid and cancel was
+/// refused (the audit's `x12_wrong_key_opens_and_penalizes`).
+#[tokio::test]
+async fn x12f01_changed_key_refunds_in_full() -> anyhow::Result<()> {
+    let (w, t, id) = sale_with_bids(
+        |_| {},
+        &[(0, 2 * ONE_USDC), (1, 3 * ONE_USDC), (2, 4 * ONE_USDC)],
+    )
+    .await?;
+    w.mpc
+        .call("set_response")
+        .args_json(json!({ "json": s1_response() }))
+        .transact()
+        .await?
+        .into_result()?;
+    close_now(&w, &t, id).await?;
+    let r = call_tender(&w.root, &t, "open", json!({ "sale": id.to_string() })).await?;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    assert!(event(&r.logs(), "key").is_none(), "{:?}", r.logs());
+    assert!(event(&r.logs(), "key_error").is_some(), "{:?}", r.logs());
+    assert!(
+        r.logs()
+            .contains(&"on_key: key does not match mpc_public_key and app_id"),
+        "{:?}",
+        r.logs()
+    );
+    let s = get_sale(&w, &t, id).await?;
+    assert_eq!(
+        (s["state"].clone(), s["in_flight"].clone(), s["key"].clone()),
+        (json!("Open"), json!(false), Value::Null)
+    );
+    assert_eq!(key_log(&w, &t).await?[0]["outcome"], "Err");
+    assert_eq!(mpc_calls(&w).await?, 1);
+
+    close_minus(&w, &t, id, 86_401).await?;
+    let r = cancel(&w.root, &t, id).await?;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    assert_eq!(event(&r.logs(), "cancel").unwrap()["reason"], "no_key_24h");
+    let bids = get_bids(&w, &t, id).await?;
+    for (i, b) in bids.as_array().unwrap().iter().enumerate() {
+        let escrow = (2 + i as u128) * ONE_USDC;
+        assert_eq!(b["paid"]["usdc"], escrow.to_string(), "{b}");
+        assert_eq!(
+            (b["paid"]["ok"].clone(), b["state"].clone()),
+            (json!(true), json!("Sealed"))
+        );
+        assert_eq!(b["penalty"], "0");
+        let who = w.bidders[i].id().as_str();
+        assert_eq!(mt_balance(&w.intents, who, USDC).await?, escrow, "{who}");
+    }
+    assert_eq!(mt_balance(&w.intents, t.as_str(), USDC).await?, 0);
+    Ok(())
+}
+
+/// D-01/D-02 against the real intents.near 0.4.5 wasm: the same sealed bid signed twice (two
+/// Intents nonces, as after a lost relay answer) is stored once and the second transfer comes
+/// back in full (`dup_bid`); a different bid built from the same view (`seq` 0) comes back
+/// (`bid_seq`); the next real bid (`seq` 1) is stored.
+#[tokio::test]
+async fn s2x_same_sealed_bid_signed_twice_stored_once() -> anyhow::Result<()> {
+    let w = world().await?;
+    let t = deploy_tender(&w).await?;
+    let id = create_sale(&w, &t, ONE_NEAR, |_| {}).await?;
+    let who = Who::Signed(21);
+    let signer = account_of(&w, who);
+    fund(&w, who, 4 * ONE_USDC).await?;
+    let b = 2 * ONE_USDC;
+    let cm = commit_hex(id, &signer, b, 3_500_000, ONE_USDC as u64, &salt(0));
+    let msg = bid_msg(id, &CT, &cm).to_string();
+
+    let r = send(&w, &t, who, b, &msg).await?;
+    let first = event(&r.logs(), "bid").unwrap_or_else(|| panic!("{:?}", r.logs()));
+    let r = send(&w, &t, who, b, &msg).await?;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    assert!(
+        event(&r.logs(), "bid").is_none(),
+        "stored twice: {:?}",
+        r.logs()
+    );
+    let ev = event(&r.logs(), "refund").unwrap_or_else(|| panic!("{:?}", r.logs()));
+    assert_eq!(
+        (
+            ev["reason"].as_str(),
+            ev["cm"].as_str(),
+            ev["have"].as_u64(),
+            ev["idx"].as_u64()
+        ),
+        (Some("dup_bid"), Some(cm.as_str()), Some(1), Some(0))
+    );
+    assert_eq!(
+        (first["cm"].as_str(), first["nth"].as_u64()),
+        (Some(cm.as_str()), Some(0))
+    );
+    assert_eq!(mt_balance(&w.intents, &signer, USDC).await?, 2 * ONE_USDC);
+
+    let mut other = bid_msg(id, &CT, &commit_hex(id, &signer, b, 3_600_000, 1, &salt(1)));
+    other["seq"] = json!(0);
+    let r = send(&w, &t, who, b, &other.to_string()).await?;
+    assert_eq!(event(&r.logs(), "refund").unwrap()["reason"], "bid_seq");
+    other["seq"] = json!(1);
+    let r = send(&w, &t, who, b, &other.to_string()).await?;
+    assert_eq!(event(&r.logs(), "bid").unwrap()["nth"], 1);
+
+    let s = get_sale(&w, &t, id).await?;
+    assert_eq!(
+        (
+            s["bids"].clone(),
+            s["bidders"].clone(),
+            s["escrow_total"].clone()
+        ),
+        (json!(2), json!(1), json!("4000000"))
+    );
+    assert_eq!(mt_balance(&w.intents, &signer, USDC).await?, 0);
+    assert_eq!(
+        mt_balance(&w.intents, t.as_str(), USDC).await?,
+        4 * ONE_USDC
+    );
     Ok(())
 }
 
@@ -1570,6 +1722,7 @@ async fn gas_report() -> anyhow::Result<()> {
     }
     let (mut bid_tx, mut bid_receipt, mut per_bid) = (0u64, 0u64, 0u64);
     let mut items = Vec::new();
+    let mut dup_receipt = 0u64;
     for i in 0..n {
         let who = if i == 0 {
             signed
@@ -1577,6 +1730,19 @@ async fn gas_report() -> anyhow::Result<()> {
             Who::Named(i % BIDDERS.len())
         };
         let (escrow, p, q) = (2 * ONE_USDC, 3_000_000 + 10_000 * i as u64, ONE_USDC as u64);
+        if i == n - 1 {
+            // D4: a dup_bid refund of a sender with 10 bids in a 63-bid sale (full scan).
+            let prev = Who::Named((i - 1) % BIDDERS.len());
+            let p0 = 3_000_000 + 10_000 * (i - 1) as u64;
+            let cm = commit_hex(id, &account_of(&w, prev), escrow, p0, q, &salt(i - 1));
+            let mut msg = bid_msg(id, &CT, &cm);
+            msg["origin"] = json!("arbitrum");
+            fund(&w, prev, escrow).await?;
+            let r = send(&w, &t, prev, escrow, &msg.to_string()).await?;
+            let ev = event(&r.logs(), "refund").unwrap_or_else(|| panic!("{:?}", r.logs()));
+            assert_eq!(ev["reason"], "dup_bid");
+            dup_receipt = receipt_gas(&r, &t)[0];
+        }
         let cm = commit_hex(id, &account_of(&w, who), escrow, p, q, &salt(i));
         let mut msg = bid_msg(id, &CT, &cm);
         msg["origin"] = json!("arbitrum");
@@ -1675,7 +1841,7 @@ async fn gas_report() -> anyhow::Result<()> {
             &t,
             who,
             2 * ONE_USDC,
-            &bid_msg(id1, &CT, &cm()).to_string(),
+            &bid_msg(id1, &CT, &format!("{:02x}", i + 1).repeat(32)).to_string(),
         )
         .await?;
         assert!(event(&r.logs(), "bid").is_some(), "{:?}", r.logs());
@@ -1693,6 +1859,7 @@ async fn gas_report() -> anyhow::Result<()> {
         "create": tgas_of(create),
         "bid_via_mt_transfer_call": tgas_of(bid_tx),
         "bid_mt_on_transfer_receipt": tgas_of(bid_receipt),
+        "bid_dup_refund_receipt": tgas_of(dup_receipt),
         "open_total": tgas_of(open_total),
         "on_key": tgas_of(on_key),
         "reveal_8": tgas_of(reveal_8),
@@ -1732,7 +1899,9 @@ async fn gas_report() -> anyhow::Result<()> {
     let limits = [
         ("bid_mt_on_transfer_receipt", bid_receipt, 24),
         ("self_reveal", self_reveal, 24),
-        ("on_key", on_key, 12),
+        ("bid_dup_refund_receipt", dup_receipt, 24),
+        // X12F-01: ON_KEY_GAS is 30 Tgas.
+        ("on_key", on_key, 24),
         ("mt_batch_transfer_receipt", batch, 16),
         ("on_paid", on_paid, 4),
         ("finalize_first_64_bids", finalize_first, 240),

@@ -1,5 +1,5 @@
 # contract/scripts/
 
-- `check-imports.mjs`: wasm import allow-list, adapted from `defdone/annon` (Apache-2.0). Add `sha256`, `random_seed`, `promise_results_count`, `block_timestamp`, `account_balance` (spec §4.2). Must not allow `promise_batch_action_add_key_*`, `promise_batch_action_deploy_contract`, `promise_batch_action_delete_account`.
+- `check-imports.mjs`: wasm import allow-list, adapted from `defdone/annon` (Apache-2.0). Add `sha256`, `random_seed`, `promise_results_count`, `block_timestamp`, `account_balance` (spec §4.2). Must not allow `promise_batch_action_add_key_*`, `promise_batch_action_deploy_contract`, `promise_batch_action_delete_account`. X12F-01 (on-chain MPC key check) adds `sha3_256`, `bls12381_p1_sum`, `bls12381_p1_decompress`, `bls12381_p2_decompress`, `bls12381_map_fp_to_g1`, `bls12381_pairing_check`; no other BLS host function is allowed.
 - `build-wasms.sh`: builds spike, mock-mpc, tests/mock-ft and (once `src/sale.rs` exists) tender, then runs `check-imports` on `target/near/tender.wasm`. Run before `cargo test`.
 - `wasm-report.mjs`: merges `scripts/out/imports.json` (`check-imports --json`) and `scripts/out/gas.json` (sandbox test `gas_report`, `cargo test --test sandbox gas_report -- --ignored --nocapture`) into `evidence/wasm.json`; exits 1 if the three inputs describe different wasms.
