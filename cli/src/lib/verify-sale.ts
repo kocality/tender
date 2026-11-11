@@ -397,7 +397,7 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
   else {
     const bad: string[] = [];
     const B = sum(bids.map((b) => big(b.escrow)));
-    // The penalty pool is paid to nobody: it stays in the contract's Intents account (CRYPTO-01).
+    // The penalty pool stays in the contract's Intents account; no Tender method pays it out (CRYPTO-01).
     const pool = sum(bids.map((b) => big(b.penalty)));
     const usdcOut = sum(bids.map((b) => big(b.paid.usdc))) + big(sale.seller_payout.usdc);
     const tokOut = sum(bids.map((b) => big(b.paid.tokens))) + big(sale.seller_payout.tokens);

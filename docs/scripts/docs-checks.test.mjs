@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +120,27 @@ test('CLM-01: README states the demo sales as a plan while JUDGES row M02 is pen
   const done = /[1-9A-HJ-NP-Za-km-z]{43,44}/.test(m02);
   assert.match(readme(), /configured by us to fail its thresholds/i);
   (done ? assert.doesNotMatch : assert.match)(readme(), /Planned on mainnet/);
+});
+
+// ---- the penalty pool wording -----------------------------------------------------------------------------------------
+// CRYPTO-01: the 10% of an unrevealed bid stays in the contract's NEAR Intents balance and no Tender method pays it out,
+// but intents.near's admin roles can move any Intents balance. So near "penalty" or "pool" (same or adjacent line) the
+// docs and the UI may not say burned, forever, or that no one / no method can move it.
+const PENALTY_BANNED = /\bburn(ed|s|t)?\b|\bforever\b|\bno (one|method) can move\b/i;
+function penaltyWordingHits(text) {
+  const lines = text.split('\n');
+  const near = (i) => lines.slice(Math.max(0, i - 1), i + 2).some((l) => /penalt|pool/i.test(l));
+  return lines.flatMap((l, i) => (PENALTY_BANNED.test(l) && near(i) ? [`${i + 1}: ${l.trim()}`] : []));
+}
+const walk = (dir) => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => join(d.parentPath, d.name));
+
+test('CRYPTO-01: near "penalty" or "pool", nothing says burned, forever, or that no one / no method can move it', () => {
+  const old = "export const PENALTY_RULE =\n  \"The other 10% goes to nobody: it stays in the contract's NEAR Intents account, which no method can move.\";";
+  assert.equal(penaltyWordingHits(old).length, 1, 'the old wording must fail (the trigger word is on the line above)');
+  const good = "export const PENALTY_RULE =\n  \"The other 10% stays in the contract's NEAR Intents balance. No Tender method pays it to anyone. Like any Intents balance, intents.near's own admin roles could move it.\";";
+  assert.deepEqual(penaltyWordingHits(good), [], 'the corrected wording must pass');
+  const files = [join(docs, 'README.md'), join(repo, 'docs/protocol.md'), ...walk(join(repo, 'app/src')), ...walk(join(repo, 'cli/src'))];
+  for (const f of files) assert.deepEqual(penaltyWordingHits(readFileSync(f, 'utf8')), [], f);
 });
 
 // ---- facts in the docs match the code -------------------------------------------------------------------------------

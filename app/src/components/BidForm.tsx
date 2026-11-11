@@ -80,7 +80,7 @@ export function BidForm({
       </label>
       <p className="small muted">
         Whatever you do not spend at the clearing price is refunded. If no one reveals your bid before the deadline (the keeper normally does; you can too,
-        gasless), 10% of the escrow stays in the contract and is paid to nobody: not to other bidders and not to the seller.
+        gasless), 10% stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included.
       </p>
       {errors.map((e) => {
         const f = fieldOfError(e);

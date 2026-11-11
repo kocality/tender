@@ -207,8 +207,8 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
       </div>
       {blocked.length > 0 ? (
         <p className="note" role="note">
-          Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. If they are still unrevealed when the window ends, each loses 10% of its escrow; that 10%
-          stays in the contract and is paid to nobody. If you sealed one of them yourself, reveal it from its bid file above.
+          Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. If they are still unrevealed when the window ends, each loses 10% of its escrow. That 10%
+          stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included. If you sealed one of them yourself, reveal it from its bid file above.
         </p>
       ) : null}
       <div role="status">

@@ -117,7 +117,7 @@ export function ResultTable({
         </p>
       ) : null}
       <p className="small muted">
-        payouts {sale.payoutsDone} / {sale.payoutsTotal} · penalty pool {formatUsdc(result.penaltyPool)} USDC (stays in the contract, paid to nobody)
+        payouts {sale.payoutsDone} / {sale.payoutsTotal} · penalty pool {formatUsdc(result.penaltyPool)} USDC (stays in the contract&apos;s Intents balance; no Tender method pays it out)
       </p>
     </section>
   );

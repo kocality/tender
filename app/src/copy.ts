@@ -9,9 +9,9 @@ export const OPEN_RULE =
 export const HOSTED_BUNDLE =
   'If this hosted page were malicious it could leak your price before sealing, or swap the sealed bid you paste. Run the app locally, or seal with `pnpm seal:bid`, paste the result below and check that the cm in your wallet prompt equals the cm it printed. Paste only output you produced yourself.';
 
-/** The penalty as the contract applies it: the 10% is kept, paid to nobody. Every screen that mentions the penalty says this. */
+/** The penalty as the contract applies it: the 10% stays in the contract's NEAR Intents balance and no Tender method pays it out. Every screen that mentions the penalty says this. */
 export const PENALTY_RULE =
-  "An unrevealed bid gets 90% of its escrow back. The other 10% goes to nobody: it stays in the contract's NEAR Intents account, which no method can move. It is not paid to other bidders or to the seller.";
+  "When at least one bid in the sale is revealed, an unrevealed bid gets 90% of its escrow back (100% if no bid is revealed). The other 10% stays in the contract's NEAR Intents balance. No Tender method pays it to anyone: not to the seller, not to other bidders, not to us. Like any Intents balance, intents.near's own admin roles could move it.";
 
 /** Why a relayed bid can be missing from the sale: the contract refunds it with one of these reasons (the refund event is in the transaction logs). */
 export const NOT_STORED_CAUSES =
