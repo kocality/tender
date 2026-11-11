@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseCommon } from "./lib/cli.js";
 import {
-  EVIDENCE_DIR, SALE_TAGS, STEPS, explorerUrl, txOutcome, upsertGateRow, upsertMainnetRow,
+  EVIDENCE_DIR, SALE_TAGS, STEPS, explorerUrl, tenderEvents, txOutcome, upsertGateRow, upsertMainnetRow,
   type GateRow, type MainnetRow, type SaleTag, type Step,
 } from "./lib/evidence.js";
 import { blockHeight, decodeSuccessValue, txStatus, type Network } from "./lib/rpc.js";
@@ -14,7 +14,7 @@ const INBOX = fileURLToPath(new URL(["..", "..", "docs", "internal", "tx-inbox.m
 
 const usage = `usage:
   tsx scripts/record.ts --sale <tag> --step <step> --tx <hash> --signer <account> [--network mainnet]
-    [--expect failure] [--note "..."] [--chain base|arb|sol|near] [--contract <id>]
+    [--expect failure [--reason <Tender refund reason, e.g. dup_bid>]] [--note "..."] [--chain base|arb|sol|near] [--contract <id>]
     [--oneclick <depositAddress>] [--origin-tx <hash>] [--dest-tx <hash>] [--save-result <file>] [--dry-run] [--rpc <url>]
   tsx scripts/record.ts gate --gate <name> --result PASS|ALT|FAIL --path "<chosen path>" [--tx <h1,h2> --signer <acct>] [--ckd] [--notes "..."] [--files a,b] [--network] [--dry-run]
   tsx scripts/record.ts inbox [--network mainnet] [--dry-run]   # records the unmarked lines of the local tx inbox`;
@@ -26,6 +26,8 @@ export interface RecordOpts {
   txHash: string;
   signer: string;
   expect?: "success" | "failure";
+  /** With expect failure: the Tender refund reason the tx must show (verify #25 checks it). */
+  reason?: string;
   note?: string;
   chain?: MainnetRow["chain"];
   contract?: string;
@@ -102,6 +104,7 @@ export async function recordTx(o: RecordOpts): Promise<MainnetRow> {
   const dir = o.evidenceDir ?? EVIDENCE_DIR;
   const dryRun = o.dryRun === true;
   if (o.signer === o.txHash) throw new Error("--signer is the tx hash; pass the account that signed the transaction");
+  if (o.reason !== undefined && o.expect !== "failure") throw new Error("--reason needs --expect failure");
   const { ts, snapshot } = await saveTxSnapshot({ network: o.network, txHash: o.txHash, signer: o.signer, rpc: o.rpc, dir, dryRun });
   const r = ts.result;
   const notes: string[] = o.note ? [o.note] : [];
@@ -118,6 +121,14 @@ export async function recordTx(o: RecordOpts): Promise<MainnetRow> {
     console.warn(msg);
     notes.push(msg);
   }
+  if (o.reason !== undefined) {
+    const got = tenderEvents(r).find((e) => e.event === "refund")?.data.reason;
+    if (got !== o.reason) {
+      const msg = `WARN expected refund ${o.reason} but got ${got === undefined ? "no Tender refund" : String(got)}`;
+      console.warn(msg);
+      notes.push(msg);
+    }
+  }
 
   const row: MainnetRow = {
     sale: o.sale,
@@ -132,6 +143,7 @@ export async function recordTx(o: RecordOpts): Promise<MainnetRow> {
   if (o.contract) row.contract = o.contract;
   if (outcome) row.outcome = outcome;
   if (o.expect) row.expected = o.expect;
+  if (o.reason !== undefined) row.reason = o.reason;
   if (o.chain) row.chain = o.chain;
   row.snapshot = snapshot;
   row.snapshot_source = ts.source;
@@ -183,8 +195,9 @@ export async function recordTx(o: RecordOpts): Promise<MainnetRow> {
   if (notes.length) row.note = notes.join("; ");
   row.recorded_utc = new Date().toISOString();
 
+  // evidence-check refuses a testnet row in mainnet.json; `pnpm verify --network testnet --evidence evidence/testnet.json` reads testnet.json
   if (dryRun) console.log(JSON.stringify(row, null, 2));
-  else console.log(`${upsertMainnetRow(join(dir, "mainnet.json"), row)} ${row.sale}/${row.step} ${row.tx_hash} block=${row.block} outcome=${row.outcome} source=${row.snapshot_source}`);
+  else console.log(`${upsertMainnetRow(join(dir, `${o.network}.json`), row)} ${row.sale}/${row.step} ${row.tx_hash} block=${row.block} outcome=${row.outcome} source=${row.snapshot_source}`);
   return row;
 }
 
@@ -269,7 +282,7 @@ export async function recordInbox(o: { network: Network; dryRun?: boolean; rpc?:
 export async function main(argv: string[]): Promise<number> {
   const { common, values, positionals } = parseCommon(argv, {
     sale: { type: "string" }, step: { type: "string" }, tx: { type: "string" }, signer: { type: "string" },
-    expect: { type: "string" }, note: { type: "string" }, chain: { type: "string" }, oneclick: { type: "string" },
+    expect: { type: "string" }, reason: { type: "string" }, note: { type: "string" }, chain: { type: "string" }, oneclick: { type: "string" },
     "origin-tx": { type: "string" }, "dest-tx": { type: "string" }, "save-result": { type: "string" },
     gate: { type: "string" }, result: { type: "string" }, path: { type: "string" }, ckd: { type: "boolean" },
     notes: { type: "string" }, files: { type: "string" },
@@ -307,7 +320,7 @@ export async function main(argv: string[]): Promise<number> {
     if (chain !== undefined && !["base", "arb", "sol", "near"].includes(chain)) throw new Error("--chain must be base|arb|sol|near");
     await recordTx({
       network: common.network, sale: sale as SaleTag, step: step as Step, txHash: str("tx") as string, signer: str("signer") as string,
-      expect, note: str("note"), chain: chain as MainnetRow["chain"], contract: values.contract as string | undefined,
+      expect, reason: str("reason"), note: str("note"), chain: chain as MainnetRow["chain"], contract: values.contract as string | undefined,
       oneclick: str("oneclick"), originTx: str("origin-tx"), destTx: str("dest-tx"), saveResult: str("save-result"),
       dryRun, rpc: common.rpc,
     });

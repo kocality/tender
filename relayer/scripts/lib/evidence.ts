@@ -31,6 +31,7 @@ export interface MainnetRow {
   contract?: string;
   outcome?: "success" | "failure";
   expected?: "success" | "failure";
+  reason?: string;
   chain?: "base" | "arb" | "sol" | "near";
   snapshot?: string;
   snapshot_source?: "rpc" | "archival";
@@ -83,7 +84,7 @@ export function validateMainnetRow(r: unknown): string[] {
   else if (typeof r.block !== "number" || !Number.isInteger(r.block) || r.block < 0) p.push("block must be a non-negative integer");
   if (r.explorer_url === undefined) p.push("explorer_url is missing");
   else if (typeof r.explorer_url !== "string" || !r.explorer_url.startsWith("https://")) p.push("explorer_url must be an https URL");
-  for (const k of ["origin_tx", "deposit_address", "destination_tx", "signer_id", "receiver_id", "contract", "snapshot", "oneclick_status", "recorded_utc", "note"]) checkString(r, k, p);
+  for (const k of ["origin_tx", "deposit_address", "destination_tx", "signer_id", "receiver_id", "contract", "reason", "snapshot", "oneclick_status", "recorded_utc", "note"]) checkString(r, k, p);
   checkEnum(r, "network", ["mainnet", "testnet"], p);
   checkEnum(r, "outcome", ["success", "failure"], p);
   checkEnum(r, "expected", ["success", "failure"], p);

@@ -62,6 +62,14 @@ describe("recordTx", () => {
     expect(snap._meta.label).toBe("snapshot, not live");
     expect(snap.result.status).toEqual({ SuccessValue: "" });
   });
+  it("a testnet tx goes to testnet.json, never into mainnet.json", async () => {
+    stubRpc(txResult({ SuccessValue: "" }));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const dir = mkdtempSync(join(tmpdir(), "tender-rec-"));
+    await recordTx({ network: "testnet", sale: "0", step: "create", txHash: HASH, signer: "alice.testnet", contract: "rc3.alice.testnet", evidenceDir: dir });
+    expect(JSON.parse(readFileSync(join(dir, "testnet.json"), "utf8"))).toMatchObject([{ network: "testnet", contract: "rc3.alice.testnet", tx_hash: HASH }]);
+    expect(() => readFileSync(join(dir, "mainnet.json"))).toThrow();
+  });
   it("--dry-run writes nothing", async () => {
     stubRpc(txResult({ Failure: { ActionError: {} } }));
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -110,5 +118,13 @@ describe("the outcome is what Tender did, not the top-level status (S-05)", () =
     const row = await record(withLogs([ev("refund", { reason: "closed", op: "bid" })]), { step: "attack-late", expect: "failure" });
     expect(row).toMatchObject({ outcome: "failure", expected: "failure" });
     expect(row.note).toBe("Tender refunded it: closed");
+  });
+  it("--reason stores the refund reason verify #25 checks, and warns when the tx shows another one", async () => {
+    const row = await record(withLogs([ev("refund", { reason: "dup_bid", op: "bid", idx: 1 })]), { expect: "failure", reason: "dup_bid" });
+    expect(row).toMatchObject({ outcome: "failure", expected: "failure", reason: "dup_bid" });
+    expect(row.note).toBe("Tender refunded it: dup_bid");
+    const other = await record(withLogs([ev("refund", { reason: "bid_seq", op: "bid" })]), { expect: "failure", reason: "dup_bid" });
+    expect(other.note).toMatch(/WARN expected refund dup_bid but got bid_seq/);
+    await expect(record(withLogs([]), { reason: "dup_bid" })).rejects.toThrow(/--reason needs --expect failure/);
   });
 });
