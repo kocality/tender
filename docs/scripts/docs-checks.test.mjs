@@ -114,9 +114,11 @@ test('CLM-01: FREEZE=1 requires a transaction hash on every attack-room row', ()
   assert.ok(!fails(runLint([withTx], { FREEZE: '1' }).out, 'attack-room row'));
 });
 
-test('CLM-01: README states mainnet results as a plan until they exist', () => {
-  assert.match(readme(), /Sale 0 will be configured by us to fail its thresholds/);
-  assert.match(readme(), /TODO\(evidence: sale 0 created/);
+test('CLM-01: README states sale 0 as a plan while its JUDGES row is pending, as done once it has a hash', () => {
+  const m02 = judges().split('\n').find((l) => l.startsWith('| M02 |'));
+  assert.ok(m02, 'JUDGES row M02');
+  const done = /[1-9A-HJ-NP-Za-km-z]{43,44}/.test(m02);
+  assert.match(readme(), done ? /Sale 0 was configured by us to fail its thresholds/ : /Sale 0 will be configured by us to fail its thresholds/);
 });
 
 // ---- facts in the docs match the code -------------------------------------------------------------------------------
@@ -165,11 +167,11 @@ test('CLM-05: the prototype claim matches git history', () => {
   assert.doesNotMatch(readme(), /kept unchanged for reference/);
 });
 
-test('OPS-06: step 5 in README and JUDGES gives the output before and after sale 2 opens, both real seal-try lines', () => {
+test('OPS-06: the README seal:try step gives the output before and after sale 2 opens, both real seal-try lines', () => {
   const sealTry = read(repo, 'cli/src/seal-try.ts');
-  for (const text of [readme(), judges()]) {
-    const step = text.split('\n').find((l) => /^5\. .*seal:try --sale 2/.test(l));
-    assert.ok(step, 'step 5');
+  for (const text of [readme()]) {
+    const step = text.split('\n').find((l) => l.includes('seal:try --sale 2'));
+    assert.ok(step, 'seal:try step');
     assert.match(step, /2026-11-17T12:00:00Z/);
     for (const s of ['sealed: no key has been requested for sale 2 (key_requests = 0)', 'key released at block']) {
       assert.ok(step.includes(s), `step 5 shows ${s}`);
@@ -180,20 +182,20 @@ test('OPS-06: step 5 in README and JUDGES gives the output before and after sale
 });
 
 test('CI-06: the README explains the Node 18 failures', () => {
-  for (const text of [readme(), judges()]) {
-    assert.match(text, /Node 18 does not work/);
-    assert.match(text, /pnpm\.cjs/);
-    assert.match(text, /crypto\.getRandomValues must be defined/);
-  }
+  const text = readme();
+  assert.match(text, /Node 18 does not work/);
+  assert.match(text, /pnpm\.cjs/);
+  assert.match(text, /ERR_PNPM_UNSUPPORTED_ENGINE/);
 });
 
-test('CI-03: the README says why verify prints FAIL #3 on the testnet copy', () => {
-  assert.match(readme(), /earlier, non-reproducible build/);
-  assert.match(readme(), /FAIL #3 code-hash.*20\/22 checks passed/);
+test('CI-03: JUDGES row T1 says why verify prints FAIL #3 on the testnet copy', () => {
+  const row = judges().split('\n').find((l) => l.startsWith('| T1 |')) ?? '';
+  assert.match(row, /earlier, non-reproducible build/);
+  assert.match(row, /`FAIL` on #3 `code-hash`.*22\/24 checks passed/);
 });
 
-test('CLM-11: the testnet section cites the multichain-signed bids on sales 4 and 6', () => {
-  const row = readme().split('\n').find((l) => l.startsWith('| Multichain-signed bids'));
+test('CLM-11: JUDGES row T2 cites the multichain-signed bids on sales 4 and 6', () => {
+  const row = judges().split('\n').find((l) => l.startsWith('| T2 |'));
   assert.ok(row);
   const hashes = [...row.matchAll(/txns\/([1-9A-HJ-NP-Za-km-z]{43,44})/g)].map((m) => m[1]);
   assert.equal(new Set(hashes).size, 4);
@@ -203,21 +205,21 @@ test('CLM-11: the testnet section cites the multichain-signed bids on sales 4 an
 
 // ---- documented command output --------------------------------------------------------------------------------------
 const hasPnpm = spawnSync('pnpm', ['-v'], { encoding: 'utf8' }).status === 0;
-function stepLine(text, n) {
-  return text.split('\n').find((l) => l.startsWith(`${n}. (offline)`)) ?? '';
+function stepLine(text, cmd) {
+  return text.split('\n').find((l) => /^\d+\. \(offline\) /.test(l) && l.includes(`\`pnpm ${cmd}\``)) ?? '';
 }
 const seeStrings = (line) => [...(line.split(' - see ')[1] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1]);
-for (const [n, cmd] of [[7, 'demo:local'], [8, 'vectors']]) {
-  test(`CLM-07: offline step ${n} prints every string the docs promise (README and JUDGES)`, { skip: !hasPnpm }, () => {
+for (const cmd of ['demo:local', 'vectors']) {
+  test(`CLM-07: offline step pnpm ${cmd} prints every string the README promises`, { skip: !hasPnpm }, () => {
     const r = spawnSync('pnpm', [cmd], { cwd: repo, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     const out = r.stdout + r.stderr;
-    for (const text of [readme(), judges()]) {
-      const strings = seeStrings(stepLine(text, n));
-      assert.ok(strings.length >= 1, `step ${n} names what to see`);
-      for (const s of strings.filter((x) => !x.startsWith('pnpm '))) assert.ok(out.includes(s), `step ${n} output contains ${s}`);
+    for (const text of [readme()]) {
+      const strings = seeStrings(stepLine(text, cmd));
+      assert.ok(strings.length >= 1, `step pnpm ${cmd} names what to see`);
+      for (const s of strings.filter((x) => !x.startsWith('pnpm '))) assert.ok(out.includes(s), `step pnpm ${cmd} output contains ${s}`);
     }
-    if (n === 7) {
+    if (cmd === 'demo:local') {
       const secs = Number(out.match(/done in ([\d.]+) s/)?.[1]);
       assert.ok(secs < 1, `demo:local took ${secs} s, README says under a second`);
       assert.match(readme(), /under a second/);
@@ -231,7 +233,8 @@ test('CI-02: README test counts equal a clean run (COUNTS=1)', { skip: process.e
   const dirs = { clearing: 'packages/clearing', intents: 'packages/intents', seal: 'packages/seal', relayer: 'relayer', app: 'app', cli: 'cli' };
   for (const [name, dir] of Object.entries(dirs)) {
     const claimed = Number(row.match(new RegExp(`${name} (\\d+)`))?.[1]);
-    const r = spawnSync('pnpm', ['test'], { cwd: join(repo, dir), encoding: 'utf8' });
+    // LIVE=1 would turn on the live intents tests, which the README counts as skipped.
+    const r = spawnSync('pnpm', ['test'], { cwd: join(repo, dir), encoding: 'utf8', env: { ...process.env, LIVE: '' } });
     const got = Number((r.stdout + r.stderr).match(/Tests\s+(?:\d+ failed \| )?(\d+) passed/)?.[1]);
     assert.equal(claimed, got, `${name}: README ${claimed}, run ${got}`);
   }
@@ -248,7 +251,7 @@ test('CLM-12: the meme.cooking numbers in the video script equal the API (LIVE=1
 });
 
 test('CLM-11: the cited testnet relay transactions exist (LIVE=1)', { skip: process.env.LIVE !== '1' }, async () => {
-  const row = readme().split('\n').find((l) => l.startsWith('| Multichain-signed bids')) ?? '';
+  const row = judges().split('\n').find((l) => l.startsWith('| T2 |')) ?? '';
   for (const [, hash] of row.matchAll(/txns\/([1-9A-HJ-NP-Za-km-z]{43,44})/g)) {
     const res = await (await fetch('https://test.rpc.fastnear.com', {
       method: 'POST', headers: { 'content-type': 'application/json' },

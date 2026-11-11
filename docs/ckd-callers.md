@@ -1,6 +1,6 @@
 # CKD callers of v1.signer
 
-Read on 2026-11-10 (UTC). Method: NearBlocks v3 receipts of `v1.signer` filtered by `request_app_private_key`; each caller's latest request has its `app_public_key` decoded from archival RPC (`EXPERIMENTAL_receipt`). Class `public-identity` / `public-generator` means the request used an app public key that is public (the identity or generator key of a public-key mode); `private` means any other app key.
+Read on 2026-11-10 before 08:23 UTC, before Tender's own mainnet CKD requests. Method: NearBlocks v3 receipts of `v1.signer` filtered by `request_app_private_key`; each caller's latest request has its `app_public_key` decoded from archival RPC (`EXPERIMENTAL_receipt`). Class `public-identity` / `public-generator` means the request used an app public key that is public (the identity or generator key of a public-key mode); `private` means any other app key.
 
 Total: 268 receipts from 18 callers. Callers using a public app key (excluding Tender's own accounts): 0. Latest receipts that could not be read from archival RPC: 0.
 
@@ -29,4 +29,4 @@ Only each caller's latest receipt was decoded; earlier receipts of the same call
 
 ## Tender's own accounts
 
-`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, `v1.tenderseal.near`: none appears among the callers above on the read date. Their requests, once made, will be listed here as `public-identity` or `public-generator` according to the sale's app key mode and are not counted as other projects.
+`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, the planned `v1.tenderseal.near` (not deployed yet) and the implicit spike account `0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620`: none appears among the callers above. Our recorded requests came later on 2026-11-10 and all used a public app key: JUDGES rows S1 (identity and generator) and S2 (identity) from the implicit account, and S6-ckd (identity) from `spike.tenderseal.near`.

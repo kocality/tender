@@ -1,170 +1,170 @@
 # Tender: sealed-bid token sales from any chain, opened by NEAR's MPC network
 
-> Team-funded demo sales. There is no external seller yet. No AI in the product, on purpose.
+Tender runs token sales in which each bid's price and real size stay encrypted until the sale closes. A bid from Base, Arbitrum, Solana or NEAR is one signed NEAR Intents transfer that carries the ciphertext and a public escrow, which caps the bid's size. After close, the locked sale contract asks NEAR's MPC network for the sale's key only if the sale's public open conditions hold (total escrow ≥ `min_escrow`, distinct bidders ≥ `min_bidders`). Then anyone can decrypt every bid, and the sale clears at one price anyone can recompute. If the conditions fail, the sale is cancelled with full refunds and its key is never requested.
 
-Problem: in most token sales today every bid is public (Uniswap CCA, Echo/Sonar, meme.cooking), so participants snipe and herd, and buyers on other chains must bridge first.
+Problem: in most of the token sales we compared ([below](#how-it-compares)) every bid is public, so participants snipe and herd, and buyers on other chains must bridge first.
 
-Bid on a token sale from Base, Arbitrum, Solana or NEAR with your own wallet. Your price and real size are encrypted in your browser and stay as ciphertext on NEAR mainnet until the sale closes. Bidders don't have to come back: once the key is public anyone can reveal any bid (our keeper does; bidders can self-reveal without gas). At close anyone can call `open()`. The locked contract asks NEAR's MPC network for the sale's key only if the sale's public open conditions hold: total escrow ≥ `min_escrow` and distinct bidders ≥ `min_bidders`. These conditions read public escrow, not sealed prices. If they don't hold, the key is never requested, and since every key the MPC network releases to this contract is an on-chain receipt, you can check that with `pnpm verify --keys`. When the key is released, everyone decrypts every bid and the sale clears at one price anyone can recompute.
+| Status, 2026-11-11 UTC | State |
+|---|---|
+| Testnet copy `rc2.tender-339e4b.testnet` | live, no sale yet (steps 5-6) |
+| Mainnet contract `v1.tenderseal.near`, sales 0-3 | not deployed; [JUDGES rows M01-M31](JUDGES.md#chain-record) pending; spike transactions only so far ([rows S1-S9](JUDGES.md#mainnet-spikes-before-the-contract)) |
+| CI on GitHub | pending ([JUDGES row P3](JUDGES.md#off-chain)); its steps were run locally on a clean clone |
+| Hosted app | pending ([JUDGES row P1](JUDGES.md#off-chain)) |
+| Demo video | pending ([JUDGES row P2](JUDGES.md#off-chain)) |
 
-Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). Resharing gives new shares of the same key and does not revoke old ones, so the condition is fewer than 11 (the current reconstruction threshold) of the parties that hold or ever held a share of the domain-2 key colluding. We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs.[^tee]
+Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs. Resharing does not revoke old shares, so bids stay unreadable before release only while fewer than 11 of the parties that hold or ever held a share of the domain-2 key collude. It is not a mathematical guarantee.
 
-[^tee]: `v1.signer` `get_tee_accounts`: 17 entries, `allowed_docker_image_hashes`: 1, read on 2026-11-10; `pnpm verify` (check #2) prints the live counts. <!-- TODO(evidence: re-read in T06 from evidence/verify/sale-1-*.txt check #2, owner WS5-T06) -->
+Team-funded demo sales: there is no external seller yet. No AI in the product, on purpose. Each claim with its check, code and transaction: [JUDGES.md](JUDGES.md).
 
-## Try it (free, no wallet, ~5 min)
-Prerequisites: Node 24.22.2 (`nvm install 24.22.2`; check `node -v`), `corepack enable`. Node 18 does not work: `corepack enable && pnpm install` ends with `Cannot find module …/pnpm/12.18.0/bin/pnpm.cjs`, and with the `npx` fallback `pnpm demo:local` stops with `crypto.getRandomValues must be defined`. Rust 1.99.1 and cargo-near 0.23.0 (`cargo install --locked cargo-near@0.23.0`) only for step 9, Docker only for step 10. No corepack (Node not from nodejs.org, a Docker image or a sandbox)? Use `npx -y pnpm@12.18.0` wherever a step says `pnpm`. Steps marked (needs network) read public NEAR RPC; steps marked (offline) need no network after install.
-1. `git clone https://github.com/kocality/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` (no corepack: `npx -y pnpm@12.18.0 install --filter "@tender/cli..."`) - see the install finish with only the CLI, `@tender/seal`, `@tender/clearing`, `@tender/intents`, noble and bs58, plus the TypeScript runner (tsx, typescript, vitest) and their dependencies; no wallet SDKs.
-2. (needs network) `pnpm verify --keys` - see every key `v1.tenderseal.near` ever requested from `v1.signer`, and `sale 0   0 requests · Cancelled … · never requested (sealed unless the MPC threshold colludes)`.
-3. (needs network) `pnpm verify --sale 1` - see `<N>/<M> checks passed (<W> warnings)` and no `FAIL`, clearing price `3.60`, and an explorer link for every mainnet transaction. <!-- TODO(evidence: N/M/W copied verbatim from the last line of evidence/verify/sale-1-*.txt, owner WS5-T06) -->
-4. (needs network) `pnpm verify --sale 0` - see sale 0 `Cancelled` with `key_requests = 0`.
-5. (needs network) `pnpm seal:try --sale 2` - before 2026-11-17T12:00:00Z (sale 2, JAMBO, closes then) see `sealed: no key has been requested for sale 2 (key_requests = 0)`. After close our keeper opens it and the same command prints `key released at block …` (or `N key request(s) made`); `pnpm verify --sale 2` shows its live state.
-6. (needs network) `pnpm verify --sale 3` - see the attack-room sale: a garbage ciphertext and a copied bid `Penalized`, their 10% paid to the revealed bidder (`bidder.tenderseal.near`, a team account) and 0 to the seller's account `tenderseal.near`; all sale-3 bids are team-funded.
-7. (offline) `pnpm demo:local` - see 6 bids sealed, opened and cleared offline in under a second, clearing price `3.60`.
-8. (offline) `pnpm vectors` - see `4 passed (4)`: the official near/mpc CKD test vectors pass.
-9. (needs network on a fresh machine: crates and the sandbox binary) `pnpm install && bash contract/scripts/build-wasms.sh && cd contract && cargo test` - see 28 sandbox scenarios (plus 57 unit tests and 5 S3a tests) and the property tests pass against the real `intents.near` 0.4.5 wasm and a mock MPC. CI: https://github.com/yigitcangokmen/tender/actions/runs/42842988081 (success on `92066c7`, 2026-11-10; the repo is private until submission). <!-- TODO(evidence: re-count and CI run URL on the freeze commit; the repo is moving to a teammate's GitHub, so the run URL changes, owner WS1/WS4) -->
-10. `<docker reproducible build command>` - see sha256 `<hash>` = the `code_hash` of `v1.tenderseal.near`; `pnpm verify --sale 1 --rebuild` does the same comparison. <!-- TODO(evidence: command + hash from the rebuilt release candidate, owner WS1) -->
-11. Open `<HOSTED_URL>/#/try` and sign with MetaMask, Phantom or a NEAR wallet - see `signature valid · insufficient balance` from `intents.near.simulate_intents` (MetaMask, Phantom); a named NEAR account whose key is not registered shows `signature valid · this NEAR key is not registered in NEAR Intents yet` (expected; a view call, nothing is spent). <!-- TODO(evidence: HOSTED_URL and texts verbatim from app/src/copy.ts, owner WS3-T02 / WS5-T06) -->
-12. Open `<HOSTED_URL>/#/` - see sales 1 and 0 side by side; press **Decrypt** on sale 1 and see 6 bids decrypt in your browser and match their on-chain commitments. <!-- TODO(evidence: HOSTED_URL, owner WS4/WS5-T06) -->
+## Try it (free, no wallet)
 
-<!-- TODO(evidence: steps 2 to 6 and 12 describe mainnet sales 0 to 3 and their results (clearing price 3.60, 6 decrypted bids, Cancelled sale 0, sale 2 open until 2026-11-17, the attack-room sale); none exists on mainnet yet. Copy each output from the real run or delete the step, owner WS4/WS5-T06) -->
-Optional, costs real money (≥ 1 USDC): bid on sale 2 from any of the four chains at `<HOSTED_URL>/#/bid/2` before it closes at 2026-11-17T12:00:00Z; a later bid is refunded.
-If a public RPC rate-limits you: `pnpm verify --sale 1 --rpc <url> --archival-rpc <url>`. Archival-only checks print `WARN` with the reason, never `FAIL`.
+**Prerequisites.** Node 24.22.2 (`.nvmrc`), then `corepack enable`; without corepack, use `npx -y pnpm@12.18.0` wherever a step says `pnpm`. Rust 1.99.1 and cargo-near 0.23.0 (`cargo install --locked cargo-near@0.23.0`) only for step 8, Docker only for step 9.
+**Node 18 does not work**, nor Node 20: `package.json` requires 22.22.2 or newer, so the install stops with `ERR_PNPM_UNSUPPORTED_ENGINE` and names the Node it needs. With corepack on Node 18 and an empty corepack cache, the error is `Cannot find module '…/pnpm/12.18.0/bin/pnpm.cjs'` instead.
 
-## Trust table
-| What | Who you trust | If it breaks |
-|---|---|---|
-| Bids stay unreadable until the key is released | Fewer than 11 (the current reconstruction threshold) of the parties that hold or ever held a share of the NEAR MPC domain-2 key collude; resharing does not revoke old shares (16 current nodes on 2026-11-10; `verify` prints the live threshold). Same network that secures Chain Signatures. The nodes also run in attested TEEs; we add no TEE and no committee of our own | Bids are read early. Escrow stays in the contract |
-| Nobody else can request this sale's key | `app_id` is derived from the calling account, so only `v1.tenderseal.near` gets this key. The account was created with no access key and has no upgrade method; each sale path contains a random seed generated after the contract existed. `verify` checks the code hash, the access-key list and the wasm imports | Visible in `verify` |
-| The contract requests a key only when the public open conditions hold | Contract code (`open()`), reproducible build | Visible: the key ledger (`get_key_log`) and `pnpm verify --keys` |
-| The key arrives (liveness) | NEAR MPC network | Anyone can call `cancel` after close + 24 h: full refunds |
-| Bids get revealed | Anyone (the bidder, a gasless self-reveal through Intents, any third party, our keeper) during a window of at least 24 h | An unrevealed bid loses 10% of its escrow to the revealed bidders, never to the seller's account |
-| Bidder identity and amounts | `intents.near` signature checks (erc191, raw_ed25519, nep413) | Depends on NEAR Intents |
-| Clearing math | Contract code; `pnpm verify` recomputes it | A mismatch is visible |
-| Cross-chain in and out | 1Click and its bridges | A stuck swap follows 1Click's own refund flow, outside the contract |
-| Encryption in your browser | Our hosted JavaScript bundle | A malicious bundle could leak your price before sealing. Run the app locally or seal with `pnpm seal:bid` |
-| Relaying | Nobody: `execute_intents` is permissionless | If our relayer censors you, relay elsewhere |
+1. (network: GitHub, npm; works once the repo is public, [JUDGES row P5](JUDGES.md#off-chain)) `git clone https://github.com/kocality/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` - see `Scope: 4 of 7 workspace projects` and `Packages: +46`: the CLI and its libraries, no wallet SDKs.
+2. (offline) `pnpm demo:local` - see `P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6` and `done in` under a second: the worked example below, sealed, opened and cleared on your machine.
+3. (offline) `pnpm vectors` - see `4 passed (4)`: the near/mpc CKD test vectors.
+4. (offline) `node contract/scripts/check-imports.mjs contract/res/tender.wasm` - see `PASS 24 imports`: none can add a key, deploy code or delete the account.
+5. (network: testnet RPC) `curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc2.tender-339e4b.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"7Wr8DDsDA9XYJMw48HwDg4Y5vbWLwd38EN2A9trAezDv"` (the base58 form of step 9's sha256) and `"keys":[]`.
+6. (network: testnet RPC) `pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --keys` - see `key log (contract state): 0 requests` and `= 0 (match)`.
+7. (network on a fresh machine) `pnpm install && pnpm -r test` - see every package pass with the counts in the [Tests row](#build-and-test-evidence).
+8. (Rust; downloads near-sandbox) `bash contract/scripts/build-wasms.sh && (cd contract && cargo test)` - see the unit, sandbox and S3a tests pass with the counts in the Tests row.
+9. (Docker, about 3 min plus a one-time image pull, full git history) `git checkout 8812fce143290ba83a2597acc60e49e161a20383 && (cd contract && cargo near build reproducible-wasm && shasum -a 256 target/near/tender.wasm)` - see `60cb8293f4d48883d693cae051ed14d04cb8686669ab9477def8d110c412b2a9`, the value in `contract/res/tender.wasm.sha256`. Build exactly this commit: the NEP-330 metadata embeds the commit, so any later commit gives a different hash.
 
-## Testnet rehearsal evidence (testnet, not mainnet)
-Everything in this section ran on NEAR **testnet** on 2026-11-10 against a copy of the contract (`v1.tender-09bdfe.testnet`, identity mode, no access keys) and the testnet MPC `v1.signer-prod.testnet` 3.18.0. It shows the flow works end to end; it is not mainnet evidence and no mainnet value moved. This testnet copy runs an earlier, non-reproducible build of the contract (code_hash `8oai2goj…`), and the verify outputs below were taken against that local build (`--wasm contract/target/near/tender.wasm`, not committed). Against the current `contract/res/tender.wasm`, `pnpm verify --network testnet --contract v1.tender-09bdfe.testnet --sale 0` prints `FAIL #3 code-hash` and `20/22 checks passed`: expected, not a defect of this copy.
+### Steps 10-18: on chain
 
-| What | Result | Source |
-|---|---|---|
-| Sale 0, 2 sealed bids, `open()` got a real CKD key | key requested at block 277053281, delivered at block 277053289 (8 blocks); key ledger 1 request, `Ok` | `evidence/verify/testnet-v1.tender-09bdfe-keys-20261110T1013Z.txt` |
-| `pnpm verify --sale 0` before reveal (earlier build) | 15/17 checks passed (2 warnings); #12 2/2 decrypt, #13 2/2 match | `evidence/verify/testnet-v1.tender-09bdfe-sale-0-20261110T1009Z-prereveal.txt` |
-| `pnpm verify --sale 0` after finalize (earlier build) | 21/22 checks passed (1 warning): the warning is #6 (no `--rebuild`); P* = 3.90 USDC/wnear, recomputed = `get_result`; payouts 3/3 | `evidence/verify/testnet-v1.tender-09bdfe-sale-0-20261110T1013Z.txt` |
-| `pnpm verify --keys` | `key log (contract state): 1 request`; NearBlocks receipts = 1 (match); threshold 11 of 16 (live) | `evidence/verify/testnet-v1.tender-09bdfe-keys-20261110T1013Z.txt` |
-| `pnpm seal:try --sale 0` | key released at block 277053289, `checkKey true`, test message decrypts | `evidence/verify/testnet-v1.tender-09bdfe-seal-try-sale-0-20261110T1013Z.txt` |
-| Transactions ([testnet.nearblocks.io](https://testnet.nearblocks.io)) | birth [26np72KT…](https://testnet.nearblocks.io/txns/26np72KTmzC9z8HX743hRAcXFGXx2ohxRWyzutwYF4sK) · create [CT7GSr6x…](https://testnet.nearblocks.io/txns/CT7GSr6xCYAzm37J3fGAu7m7ceUqGefseoyfoMwt8sFF) · bid [5fdPPfk5…](https://testnet.nearblocks.io/txns/5fdPPfk5cEUg3x2aidUCZnsaE6VacJ9cztCMEgg7REsF) · bid [Ermgeczd…](https://testnet.nearblocks.io/txns/ErmgeczD8gfuRsCwDbiup6rcPZ3U3fEcuH13Vnk1T7vS) · open [4e74FNST…](https://testnet.nearblocks.io/txns/4e74FNSTRsqeckYYq8PJZmcX85DSkJeMPkjaChW48rwD) · reveal [BX2Z39mT…](https://testnet.nearblocks.io/txns/BX2Z39mTbTwcP1sinA4c63SQsuuvwAYc4pNDTKuaavPg) · finalize [FnypREk9…](https://testnet.nearblocks.io/txns/FnypREk9epKaXRaGMB8dY94rNL5PrK3PULYUduEwULui) | team log of the rehearsal, 2026-11-10T10:12Z |
-| Multichain-signed bids | Sales 4 and 6 on the same copy each hold a `raw_ed25519` bid (origin `sol`) and an `erc191` bid (origin `base`), relayed through `execute_intents` on the testnet Intents copy, later `Revealed` and paid. Sale 4: [Gy9byvHc…](https://testnet.nearblocks.io/txns/Gy9byvHc1BEq468EzFuW4yiXE5pyhTEtTwhHuYcxjJpG) (`raw_ed25519`, signer `4044077e…0f6e`) · [A9AMis5a…](https://testnet.nearblocks.io/txns/A9AMis5aFz3GyiihRU4W8EEkW1wRRoNLkVafA6kNkdX1) (`erc191`, `0x03b701e9…2985`). Sale 6: [9eHYFAZd…](https://testnet.nearblocks.io/txns/9eHYFAZdu1JZvxLGnbsBLf4jot5sFKBFEBLo5djN5jgX) (`raw_ed25519`, `7ba2eade…4b05`) · [5ZghewJ7…](https://testnet.nearblocks.io/txns/5ZghewJ73mNexVGpGpzfK9vHHNfThkz6j4EdCB2o55zv) (`erc191`, `0xc7bddb8c…ffd5`). The signers are Node stand-ins with test keys, not real wallets; the real-wallet checks are the mainnet rows | `get_bids` on `v1.tender-09bdfe.testnet` with `{"id":"4","from":0,"limit":10}` (also `"6"`); team test runs, 2026-11-10 |
-| CI | push run on `92066c7`: jobs `ts`, `secrets`, `rust` success, `repro` skipped by design ([run 42842988081](https://github.com/yigitcangokmen/tender/actions/runs/42842988081)) | GitHub Actions, 2026-11-10 |
-| Reproducible build | No hash is quoted yet. The release-candidate wasm will be rebuilt (the repository is moving to a teammate's GitHub, and the NEP-330 source link in the wasm names the repository), so earlier build hashes no longer apply. The new sha256, commit and CI run are added after that rebuild, together with the comparison against the mainnet `code_hash`; `contract/res/tender.wasm.sha256` is the file `pnpm verify` compares with. <!-- TODO(evidence: rebuilt RC sha256, commit, CI repro run URL, local Docker rebuild result and mainnet code_hash, owner WS1/WS4) --> | `contract/res/tender.wasm.sha256` |
-| Tests | 57 unit + 28 sandbox + 5 S3a (cargo); clearing 10, intents 29, seal 36, relayer 266, app 159, cli 83 passing tests (pnpm); `pnpm vectors` 4 passed (4) <!-- TODO(evidence: re-run `pnpm -r test` and `cargo test` on the freeze commit and update lines 23, 56 and 58 together; `node --test docs/scripts/docs-checks.test.mjs` checks the pnpm counts with COUNTS=1, owner WS5-T06) --> | `pnpm -r test` at `92066c7`, 2026-11-11 |
+| # | Do | See | Result |
+|---|---|---|---|
+| 10 | `pnpm verify --network testnet --contract rc2.tender-339e4b.testnet --sale 0` | no `FAIL` line; `#3 code-hash` PASS against the RC2 wasm | pending (T4-T9) |
+| 11 | `pnpm verify --keys` | every key `v1.tenderseal.near` ever requested, one line per sale | pending (M01, M05) |
+| 12 | `pnpm seal:try --sale 2` | before `2026-11-17T12:00:00Z`: `sealed: no key has been requested for sale 2 (key_requests = 0)`; after close: `key released at block …` | pending (M18) |
+| 13 | `pnpm verify --sale 1` | no `FAIL` line; `#15 clearing-price` P* = 3.60 USDC per NEAR | pending (M06-M16) |
+| 14 | `pnpm verify --sale 0` | `#23 cancelled-sealed` PASS: `Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)` | pending (M02-M05) |
+| 15 | `pnpm verify --sale 3` | garbage and copied bids `Penalized`; `#17 conservation` PASS | pending (M23-M31) |
+| 16 | hosted app `#/try`: sign with MetaMask, Phantom or a NEAR wallet | `signature valid · insufficient balance` (a view call; nothing is spent) | pending (P1) |
+| 17 | hosted app `#/`: press **Decrypt** on sale 1 (sales 1 and 0 side by side) | 6 bids decrypt in your browser and match their on-chain commitments | pending (P1, M16) |
+| 18 | optional, costs at least 1 USDC: bid on sale 2 at hosted app `#/bid/2` before close | the bid is stored sealed | pending (P1, M18) |
 
-<!-- TODO(evidence: mainnet counterparts replace this section's role once G-S1 and the rehearsal on mainnet have run; keep it as "testnet rehearsal" or delete it, owner WS5-T06) -->
-
-## Live mainnet evidence
-<!-- evidence:start -->
-<!-- TODO(evidence: generated by docs/scripts/evidence-table.mjs from evidence/mainnet.json, owner WS5-T06) -->
-<!-- evidence:end -->
-Sale 0 will be configured by us to fail its thresholds (planned: min_escrow 50 USDC, one 1 USDC bid). All bids in sales 0-3 will be team-funded. <!-- TODO(evidence: sale 0 created and its bid placed; change "will be" to "was" and "planned" away only then, owner WS4/WS5-T06) -->
-Source: `evidence/mainnet.json`. Raw RPC responses captured while still on non-archival nodes: `evidence/rpc/` (snapshot, not live).
+What each of the 27 checks proves, the flags for a rate-limited public RPC, and which checks can only `WARN`: [docs/verify.md](docs/verify.md).
 
 ## How it works
-1. The bidder brings USDC into their own NEAR Intents account: from NEAR directly, or from Base, Arbitrum or Solana through a 1Click deposit address (the app has no send code; you send from your own wallet).
-2. In the browser (or with `pnpm seal:bid`) the bid `(price, size, salt)` is encrypted with Boneh-Franklin identity-based encryption to the identity `pk ‖ app_id(v1.tenderseal.near, path)` and bound by a sha256 commitment.
-3. The bidder signs one Intents `Transfer` (erc191, raw_ed25519 or nep413) of the escrow cap to `v1.tenderseal.near` with the ciphertext and commitment in `msg`. A relayer (permissionless; anyone can run one) simulates and submits it with `execute_intents`.
-4. `intents.near` notifies `v1.tenderseal.near.mt_on_transfer`, which stores the sealed bid. Any failure returns the amount to the bidder.
-5. After close anyone calls `open(sale)`. If the public open conditions hold (`min_escrow`, `min_bidders`), the contract calls `v1.signer.request_app_private_key` (MPC domain 2) and stores the key it receives.
-6. Anyone fetches the key, decrypts every bid and calls `reveal`; the contract checks only the sha256 commitment. Bidders can also reveal gaslessly with a 1 micro-USDC Intents transfer that is returned.
-7. `finalize` clears the sale at one uniform price with integer-only math, applies the 10% penalty on unrevealed bids (paid to revealed bidders, never to the seller's account) and pays out with `intents.near` `mt_batch_transfer`.
-8. If the conditions don't hold, anyone calls `cancel`: full refunds, and the key is never requested. If no key arrives, `cancel` works after close + 24 h.
-9. Bidders withdraw to any chain through a 1Click quote. `pnpm verify` recomputes the whole sale from public RPC.
 
-## What is sealed, what is not
-- Sealed until the key is released: price `p`, real size `q`, salt.
-- Public from the start: each bid's escrow cap `B`, the bidder's NEAR Intents account, the time, total escrow and bidder count, the deposit transactions on the origin chain. The origin-chain badge is self-declared.
-- Public after the key is released: everything, on purpose, so anyone can recompute the result.
-- A cancelled sale with `key_requests = 0`: its key was never requested, so `p` and `q` were never decrypted by anyone using this contract's key. The ciphertexts stay on chain; see Honest limits.
+```mermaid
+flowchart LR
+  W["Bidder wallet<br/>on its own chain"] -- "1 deposit" --> I["Bidder's NEAR Intents account<br/>intents.near"]
+  I -- "3 bid" --> C["Locked sale contract<br/>v1.tenderseal.near"]
+  A["Anyone: keeper, bidder, you"] -- "5 open" --> C
+  C -- "5 request key" --> M["NEAR MPC network<br/>v1.signer, domain 2"]
+  M -- "5 sale key" --> C
+  A -- "6 reveal" --> C
+  C -- "7 finalize" --> I
+  C -. "8 cancel" .-> I
+  I -- "9 withdraw" --> W
+```
 
-## How Tender compares
-Each competitor cell is a quote from that project's own documentation (links and read date below), or a dash where the source says nothing. Uniswap's Continuous Clearing Auction is complementary rather than a competitor.
+Edge numbers are the table rows; rows 2 and 4 happen inside a node.
 
-| | Bids hidden before close | What opens them | Who evaluates the open condition | Where the price is computed | Bid from |
-|---|---|---|---|---|---|
-| Dark Vault [1] | Yes: "nobody can open it early, this site included" | A time lock: "as trustworthy as drand" | — (a time, not a condition) | The site: "The site learns the funded bids after the close. It has to, to decide the auction." | Zcash; "a bid paid in SOL, delivered as shielded ZEC by NEAR Intents" |
-| Uniswap CCA [2] | No: bidders submit `(maxPrice, amount)` bids at prices that are multiples of `tickSpacing` above `floorPrice` | — (bids are public) | — | On chain (EVM) | EVM chains |
-| Echo / Sonar [3] | No: "The commitment data API is public" | — | — | "computed off-chain by Sonar"; "you implement the allocation logic yourself" | The sale contract's chain ("e.g., Ethereum, Base") |
-| Shutter API [4] | Yes (threshold encryption) | "a predetermined time or … a specific on-chain event" | "the Keyper network" | — (application-specific) | "deployed on Gnosis Chain" |
-| MACI [5] | Yes, except from the coordinator: "No one except a trusted coordinator should be able to decrypt a vote." | The coordinator | The coordinator | — (voting, not a sale) | "an Ethereum application" |
-| **Tender** | Yes: price and size (escrow caps are public) | `open()` on the sale contract → NEAR MPC CKD key | The contract that holds the escrow: total escrow ≥ `min_escrow` and distinct bidders ≥ `min_bidders` | On chain; anyone recomputes it with `pnpm verify` | Base, Arbitrum, Solana, NEAR, each with its own wallet |
-
-Conditional decryption itself is not new: Shutter API offers "event-based decryption triggers". What we found nowhere else is the combination: the chain's existing MPC network as the key holder, a locked contract as the only account that can request the key, an on-chain record of every key it was given, and escrow plus settlement in the same contract. Inside this hackathon, Morrowseal [6] also releases a key from a NEAR contract on a condition; its key holder is an OutLayer TEE and the key stays private.
-
-Tender is not a better CCA. It can run a sealed pre-round before a CCA or LBP liquidity launch: the sealed round finds a price, liquidity is handed to a pool afterwards (roadmap, not demonstrated).
-
-[1] https://near.zecdarkvault.xyz, read 2026-11-10 · [2] https://blog.uniswap.org/continuous-clearing-auctions, https://github.com/Uniswap/continuous-clearing-auction/blob/main/docs/TechnicalDocumentation.md, read 2026-11-10 · [3] https://docs.echo.xyz/sonar/integration-guides/reading-commitment-data.md, https://docs.echo.xyz/sonar/planning/settlement-strategies.md, https://docs.echo.xyz/sonar/planning/sale-lifecycle.md, read 2026-11-10 · [4] https://docs.shutter.network/docs/protocol/api, read 2026-11-10 · [5] https://maci.pse.dev/docs/introduction, read 2026-11-10 · [6] https://github.com/zer0plugyut-afk/morrowseal, read 2026-11-10
-
-<!-- TODO(WS5-T02-B: re-read every source 2026-11-13 10:30Z-11-14 00:00Z, refresh the read dates, owner WS5-T02) -->
-
-## Honest limits
-- Before the key is released, privacy needs fewer than 11 (the current reconstruction threshold) of the parties that hold or ever held a share of the MPC domain-2 key colluding (16 current nodes on 2026-11-10; `verify` prints the live value). Resharing gives new shares of the same key and does not revoke old shares, so former operators who kept theirs count. It is not a mathematical guarantee.
-- The open conditions measure public escrow, not price. Anyone with capital can push a weak sale over its thresholds with below-reserve bids, get fully refunded, and make every bid decrypt.
-- The contract cannot check on chain that a ciphertext decrypts. A bidder can submit garbage and never reveal; that costs 10% of their escrow, paid to the revealed bidders, never to the seller's account. Invalid ciphertext is handled by this bond: the same class of fix as Dark Vault's deposits and Flock's bond.
-- Bidders don't have to come back, but if nobody reveals an honest bid within the window it loses 10% too. The window is at least 24 h, anyone can reveal any bid once the key is public (our keeper does), and bidders can self-reveal without gas.
-- No receipt-freeness: a bidder can prove their bid to a briber by revealing the salt, unlike MACI.
-- Escrow caps, including a failed sale's total, are public. Only price and real size are sealed.
-- A cancelled sale's key was never requested only if `key_requests = 0`. A sale cancelled after a failed key request may be decryptable; `verify` labels the two cases differently.
-- "Never requested" means the contract never asked for the key; it still rests on the MPC threshold: eleven or more of the parties that hold or ever held a share of the domain-2 key (16 current nodes on 2026-11-10) colluding could derive any key.
-- Ciphertexts stay on chain permanently; a future compromise of NEAR's domain-2 master key would decrypt every sealed bid, including cancelled sales.
-- If NEAR's MPC domain-2 key changed before a sale opens, that sale cannot open; it is cancelled after close + 24 h with full refunds.
-- A seller's shill bids cannot be prevented, only seen after the key is released. Use the reserve price.
-- "Never to the seller" means never to the seller's account. The contract cannot tell who controls a bidder, so a seller that bids from another account, a sub-account included, can collect the penalty pool as a revealed bidder. In sale 3 the only revealed bid comes from `bidder.tenderseal.near`, a team account, so the pool goes to a team-controlled bidder.
-- A sale's price unit is 10^lot_exp whole tokens and the contract requires `decimals + lot_exp` to be between 20 and 26, so a token with d decimals is priced per lot of at least 10^(20−d) whole tokens (a 6-decimal token: per 10^14 tokens), and a bid price is at most u64 ≈ 1.8·10^19 micro-USDC per lot.
-- A sale holds at most 64 bids with a 1 USDC minimum. Someone can fill the slots with below-reserve bids; nobody loses funds (they are refunded), but the sale can be crowded out. Sale 2 closes at 2026-11-17T12:00:00Z, inside the judging window; after that it is opened, revealed and finalized by the keeper, and `pnpm seal:try --sale 2` prints the key instead of `no key has been requested`.
-- Sale creation is restricted to the team account in this deployment; bidding, open, reveal, finalize and cancel are permissionless.
-- If our hosted bundle were malicious it could leak your price before sealing. Seal locally with `pnpm seal:bid` if you do not trust it.
-- `verify` proves the deployed wasm equals `contract/res/tender.wasm`. Proving that the source builds to that wasm needs the Docker reproducible build; without `--rebuild`, `verify` prints `WARN`.
-- The NearBlocks cross-check in `verify --keys` relies on a third-party indexer and is support, not proof (`WARN` on errors). The proof is the contract's own key ledger plus the code.
-- Cross-chain legs depend on 1Click and its bridges.
-- Team-funded demo sales. There is no external seller yet. No AI in the product, on purpose.
-
-## Attack room (sale 3 and others, mainnet)
-| Attack | Result | Transaction |
+| # | What happens | Funds sit in |
 |---|---|---|
-| Call `open` before close (sale 2) | Panics | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Call `open` when the open conditions don't hold (sale 0) | Panics; `cancel` then makes it terminal | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Team account requests CKD with sale 2's path | Gets a key for its own `app_id`; it does not decrypt sale 2 (`pnpm seal:try --sale 2 --try-key evidence/spikes/eoa-ckd-2.json` → wrong identity; output `evidence/verify/seal-try-sale-2-eoa-*.txt`) | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Garbage ciphertext, never revealed | `Penalized`, 10% to the revealed bidders (in sale 3 that is `bidder.tenderseal.near`, a team account; every sale-3 bid is team-funded) | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Copy someone else's ct + cm (a second Solana wallet copies the honest bid) | Cannot be revealed (the commitment binds the original bidder and `B`), `Penalized` | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Late bid | Refunded by `mt_on_transfer` returning the amount | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Reveal with a wrong commitment | Panics | <!-- TODO(evidence: tx hash, owner WS4) --> |
-| Seller withholds reveals to earn the penalty | The seller's account receives no part of the penalty (a bidder the seller controls can, see Honest limits) | by construction (`contract/src/clearing.rs`) |
+| 1 | **Deposit.** USDC goes into the bidder's own Intents account, directly or through a 1Click deposit address. The app has no send code: you send from your own wallet. | the bidder's Intents account |
+| 2 | **Seal.** In the browser or with `pnpm seal:bid`: Boneh-Franklin IBE to `pk ‖ app_id(v1.tenderseal.near, path)`, bound by a sha256 commitment. | unchanged |
+| 3 | **Bid.** One signed Intents `Transfer` (erc191, raw_ed25519 or nep413) of the escrow cap B, carrying the ciphertext and commitment. | the contract's Intents account |
+| 4 | **Store or refund.** `mt_on_transfer` stores the bid; any failure returns the amount. | the contract, or back to the bidder |
+| 5 | **Open.** After close anyone can call `open`. If the open conditions hold, the contract records the request in its key ledger (`key_requests += 1`) before it calls the MPC. | the contract |
+| 6 | **Reveal.** Once the key is public, anyone can decrypt and call `reveal`, which checks the commitment, not decryption; our keeper does this. A bidder can also self-reveal, without gas or from the saved bid file ([details](docs/protocol.md#reveal)). | the contract |
+| 7 | **Finalize.** One uniform, integer-only price, paid out with `mt_batch_transfer`. If at least one bid was revealed, an unrevealed bid gets 90% of its escrow back. The other 10% goes to nobody: it stays in the contract's NEAR Intents account, which no method can move. It is not paid to the seller's account, and not to other bidders either, because a share for revealed bids could flow back to the unrevealed bidder's own revealed decoy bid. If no bid is revealed, nobody is penalized and every bid is refunded in full. | the bidders' and seller's Intents accounts; the 10% pool stays in the contract |
+| 8 | **Cancel.** Anyone can `cancel` after close if the conditions fail, or if no key arrived ([exact rule](docs/protocol.md#sale-states)); both refund in full. | back in the bidders' Intents accounts |
+| 9 | **Withdraw.** Back to an origin chain through a 1Click quote; recorded so far: to Base. | the bidder's wallet |
 
-## NEAR technologies used
-- MPC Confidential Key Derivation: `v1.signer` 3.18.0 on 2026-11-10 (`verify` prints the live version), domain 2 (BLS12-381), `request_app_private_key` in `<mode>` mode, called by the contract as a cross-contract call with an `on_key` callback; `v1.signer` answers through its own yield/resume. <!-- TODO(evidence: app_pk_mode from get_config, owner WS1) -->
-- NEAR Intents (`intents.near` 0.4.5): `Transfer` with notification → `mt_on_transfer` (NEP-245), MultiPayload `erc191`, `raw_ed25519`, `nep413`, `simulate_intents`, `execute_intents`, `mt_batch_transfer`.
-- 1Click API: deposits from Base, Arbitrum and Solana into the bidder's own Intents account; withdrawals to any chain.
-- A locked account: `v1.tenderseal.near` created with no access key in one transaction, no upgrade path.
-- NEP-141 tokens: wNEAR (`wrap.near`), NEAR-native USDC, JAMBO (`jambo-1679.meme-cooking.near`, a meme.cooking token, sale 2).
-- NEAR Connect (`@hot-labs/near-connect`), near-sdk 5.30.1, cargo-near 0.23.0 reproducible build with NEP-330 source metadata. Test vectors: near/mpc 3.18.0 (byte-identical to 3.17.0).
+Worked example (sale 1, from `fixtures/clearing/demo-sale-1.json`). The sale sells 3 NEAR with a reserve of 3.00 USDC per NEAR. Six sealed bids offer 4, 3, 3, 2, 3 and 2 USDC at 3.90, 3.80, 3.70, 3.60, 3.20 and 2.90 USDC per NEAR. The price is the highest one at which the bids at or above it buy all 3 NEAR: at 3.70 their 10 USDC buy about 2.7 NEAR, at 3.60 their 12 USDC buy about 3.3, so every winner pays 3.60. The 3.60 bid gets the remaining 0.22 NEAR for 0.800001 USDC, and the 3.20 and 2.90 bids get their escrow back. Step 2 runs this sale offline.
 
-## Use `@tender/seal` in your own contract
-<!-- TODO(ws2-api: a 10-line TypeScript example using the exact exports of packages/seal/src/index.ts; the package is private and not on npm, so the example shows a workspace import; owner WS5-T06) -->
+### NEAR technologies used
 
-## Built during the hackathon (Q-001, Q-003)
-All of our code in this repository was written from 2026-11-08 to 2026-11-14, inside the window that opened with the announcement on 2026-10-19. There is no pre-hackathon code and no existing product on another chain (Q-002, Q-004). The IBE prototype in `prototype/` was written on 2026-11-08/09 and is kept for reference: its IBE core (`ibe.mjs`, `pv.mjs`, `gen.mjs`, `t.mjs`, `vec.json`, `live.json`) is unchanged since the initial commit (`git log -- prototype/ibe.mjs` shows one). Later, on 2026-11-10, we added the gate checkers (`s1-check.mjs`, `s2-encrypt.mjs`, `s2-decrypt.mjs`, `s7-check.mjs`) and `seal-golden.mjs`, and edited comments in the checkers and `prototype/README.md` (planning-file references removed). First commit: `<hash>` (<date>). The submitted state is tagged `hackathon-submission`. Third-party files (the `intents.near` 0.4.5 wasm, adapted annon file, near/mpc test vectors) are listed under Libraries (Q-005). <!-- TODO(evidence: first commit hash and date, owner WS5-T06) -->
+| Technology | What Tender uses | Code |
+|---|---|---|
+| MPC Confidential Key Derivation | `v1.signer` 3.18.0 on 2026-11-10, domain 2 (BLS12-381), `request_app_private_key` in `identity` mode, a cross-contract call with an `on_key` callback | `contract/src/seal.rs` |
+| NEAR Intents (`intents.near` 0.4.5) | `Transfer` with notification → `mt_on_transfer` (NEP-245), `simulate_intents` / `execute_intents`, `mt_batch_transfer` | `contract/src/intents.rs`, `packages/intents` |
+| 1Click API | deposit addresses and withdraw quotes | `app/src/lib/oneclick.ts` |
+| NEP-141 tokens | wNEAR `wrap.near`, NEAR-native USDC, JAMBO `jambo-1679.meme-cooking.near` | `sales/` |
+| NEAR Connect | `@hot-labs/near-connect` 0.12.0 for NEAR wallets | `app/` |
+| Contract toolchain | near-sdk 5.30.1; cargo-near reproducible build with NEP-330 source metadata | `contract/Cargo.toml` |
+
+## How it compares
+
+| | Bids hidden before close | What opens them | Who decides to open | Bid from | Source |
+|---|---|---|---|---|---|
+| **Tender** | price and size | NEAR MPC CKD key, requested by the sale contract | the sale contract, on its open conditions | the four chains above | this repo |
+| Dark Vault | yes | a drand time lock | nobody (a time, not a condition) | Zcash; SOL through NEAR Intents | [quotes](docs/compare.md#dark-vault) |
+| Uniswap CCA | no | — | — | EVM chains | [quotes](docs/compare.md#uniswap-cca) |
+| Echo / Sonar | no | — | — | the sale contract's chain | [quotes](docs/compare.md#echo--sonar) |
+| Shutter API | yes (threshold encryption) | a time or an on-chain event | the Keyper network | Gnosis Chain | [quotes](docs/compare.md#shutter-api) |
+| MACI | yes, except from the coordinator | the coordinator | the coordinator | Ethereum (voting, not a sale) | [quotes](docs/compare.md#maci) |
+
+Plain commit-reveal needs every bidder to come back, and a bidder who sees the other reveals can withhold their own; here anyone can open every stored bid once the key is out. Conditional decryption is not new (Shutter, above). What we found nowhere else is the combination: the chain's existing MPC network as the key holder, a locked contract as the only requester ([trust](#trust-and-limits)), an on-chain record of every key it got, and escrow plus settlement in the same contract. Morrowseal, in this hackathon, also releases a key from a NEAR contract on a condition; its key holder is an OutLayer TEE and its key stays private ([quote](docs/compare.md#morrowseal)). On 2026-11-10 we found no other `v1.signer` CKD caller whose latest request used a public app key ([docs/ckd-callers.md](docs/ckd-callers.md)).
+
+## Trust and limits
+
+Sealed until the key is released: price `p`, real size `q`, salt. Public from the start: each bid's escrow cap `B`, the bidder's Intents account, the time, total escrow, the bidder count and the origin-chain deposit transactions; the origin badge is self-declared. After release everything is public, on purpose.
+
+| You rely on | For | If it breaks |
+|---|---|---|
+| The MPC threshold above | bids unreadable before release | bids are read early, and nothing on chain shows it; escrow stays in the contract |
+| `app_id` is derived from the calling account, so only `v1.tenderseal.near` can get the key. The account is created keyless, with no upgrade method (today: the RC2 testnet copy, steps 4-5). Every sale path carries a random seed generated after the contract existed. | nobody else can request this sale's key | — |
+| Contract `open` and the reproducible build | the key is requested only when the conditions hold | — |
+| NEAR MPC liveness | the key arrives | the sale can be cancelled (row 8 above) |
+| Someone revealing within the window | bids get revealed | an unrevealed bid loses the 10% of row 7 above |
+| `intents.near` signature checks | bidder identity and amounts | depends on NEAR Intents |
+| 1Click and its bridges | cross-chain in and out | a stuck swap follows 1Click's own refund flow, outside the contract; 1Click sets its own fees ([recorded](docs/protocol.md#off-chain-services)) |
+| Our hosted JavaScript bundle | encryption in your browser | a malicious bundle could leak your price before sealing; seal locally with `pnpm seal:bid` |
+| Nobody: `execute_intents` is permissionless | relaying | if our relayer refuses you, relay elsewhere ([what our relayer keeps](docs/protocol.md#off-chain-services)) |
+
+Limits (mechanics: [docs/protocol.md](docs/protocol.md)):
+- **Open conditions are not prices.** Anyone with capital can push a weak sale over its thresholds with below-reserve bids, get refunded, and make every bid decrypt. `min_bidders` counts distinct Intents accounts, which are cheap to create, so it gives no Sybil resistance.
+- **No decrypt check on chain.** The contract cannot check that a ciphertext decrypts, so a garbage bid's only cost is the 10% of row 7: the escrow is the bond.
+- **No receipt-freeness:** the salt lets a bidder prove a bid to a briber, unlike MACI.
+- **"Never requested" is not "sealed for good".** It means the contract never asked for the key. The ciphertexts stay on chain, so collusion at the threshold above or a future compromise of NEAR's domain-2 master key would decrypt every stored bid, cancelled sales included. A sale cancelled after a request may be decryptable: a key the MPC delivers after the 1 h request timeout, or one whose `on_key` failed, is not stored but stays public in the MPC receipt. `verify` labels the two cases differently.
+- **MPC key change.** If NEAR replaces its domain-2 key before a sale opens, the sale's key does not decrypt its bids: only bidders who kept their bid file can reveal, and the rest lose the 10% of row 7 if any bid is revealed ([details](docs/protocol.md#key-request)).
+- **Refunded bids stay readable.** A refunded bid is not stored, but its ciphertext stays in public transaction history and decrypts if that sale's key is released. Our CLI and app narrow this with short-lived signed payloads ([details](docs/protocol.md#bids-the-contract-refunds)); other signers are not covered.
+- **Shill bids.** A seller's shill bids cannot be prevented, only seen after release; use the reserve price.
+- **Bid limits.** At most 64 bids per sale, 1 USDC minimum each, so refunded below-reserve bids can crowd a sale out.
+- **Price ceiling.** One whole 6-decimal token can cost at most about 0.18 USDC; tokens with more decimals allow more ([rule](docs/protocol.md#clearing-and-penalty)).
+- **Deployment.** Only the seller accounts fixed at init can create sales. No audit.
+
+## Demo sales
+
+| Sale | What it shows | Rows |
+|---|---|---|
+| 0 | Sale 0 will be configured by us to fail its thresholds: its `min_escrow` (1,000,000.000001 USDC) is above the contract's per-sale escrow cap, so it can never open. | M02-M05 |
+| 1 | The worked example on mainnet: 6 bids from 4 chains; Decrypt in the browser (step 17). | M06-M16 |
+| 2 | JAMBO, a meme.cooking token, sold in a sealed round that closes inside the judging window (step 12). | M18-M22 |
+| 3 | The attack room. | [JUDGES.md › Attack room](JUDGES.md#attack-room) |
+
+## Build and test evidence
+
+| What | Result |
+|---|---|
+| Tests | clearing 13, intents 36, seal 37, relayer 369, app 350, cli 104 passing (pnpm; 22 more skipped); cargo 74 unit + 30 sandbox (+2 ignored) + 5 S3a (+1 ignored). The sandbox runs the `intents.near` wasm that is live on mainnet and a mock MPC, with property tests. Clean clone at `0e5a603`, 2026-11-11 UTC |
+| Wasm RC2 | commit `8812fce`, 275,115 bytes, built twice with the same sha256 (step 9) in `sourcescan/cargo-near:0.23.0-rust-1.99.1` (image digest pinned in `contract/Cargo.toml`); NEP-330 source link `github.com/kocality/tender/tree/8812fce…`; report `evidence/wasm.json` |
+| Testnet | a full rehearsal on an earlier build, and multichain-signed bids: [JUDGES rows T1-T2](JUDGES.md#testnet) |
+
+Integrator entry point: `packages/seal/src/index.ts` (workspace package, not on npm). Evidence file formats: `evidence/README.md`.
+
+## Built during the hackathon (rules Q-001, Q-003)
+
+All code in this repository was written inside the hackathon's code window, which Q-001 opens at the 2026-10-19 announcement (the hackathon itself started on 2026-11-01). There is no pre-hackathon code and no existing product on NEAR or any other chain (Q-002, Q-004). First commit: `17fbfc6`, 2026-11-10T00:57:39Z; later on 2026-11-10 (UTC) the history was rewritten to a single author, with commit dates kept. The IBE prototype core in `prototype/` (`ibe.mjs`, `pv.mjs`, `gen.mjs`, `t.mjs`, `vec.json`, `live.json`) is unchanged since its first commit; `s1-check.mjs`, `s2-encrypt.mjs`, `s2-decrypt.mjs`, `s7-check.mjs` and `seal-golden.mjs` were added later. Submitted state: tag `hackathon-submission`, pending ([JUDGES row P4](JUDGES.md#off-chain)).
 
 ## Libraries, prior work and AI code (Q-005)
-- `@noble/curves` 2.4.0 and `@noble/hashes` 2.4.0 (MIT), `bs58` 6.0.0: BLS12-381 pairing, hashing and encoding in `@tender/seal`.
-- `drand/tlock-js` (Apache-2.0 OR MIT, Copyright (c) 2022 drand team): the identity-based encryption in `src/crypto/ibe.ts` is adapted from it.
-- `defdone/annon` (Apache-2.0, Copyright 2026 defdone): `contracts/annon/check-imports.mjs` is adapted from it, and the call pattern of `contracts/annon/src/mpc.rs` is followed in the spike contract. Our `contract/mock-mpc/` is our own code with the same role as annon's mock.
-- `near/mpc` (MIT, Copyright (c) 2025 NEAR One Limited): CKD test vectors, `crates/threshold-signatures/tests/vectors/ckd_test_vectors.json`.
-- `near/intents` (MIT, Copyright (c) 2025 NEAR Foundation): the `intents.near` 0.4.5 wasm used in sandbox tests.
-- near-sdk 5.30.1, near-workspaces 0.24.0, cargo-near 0.23.0, viem 2.57.16, near-api-js 7.4.0, `@hot-labs/near-connect` 0.12.0, `@defuse-protocol/intents-sdk` 0.95.0, Vite, React.
+
+- `@noble/curves` and `@noble/hashes` 2.4.0, `bs58` 6.0.0 (`@tender/seal`, `@tender/intents`); viem 2.57.16 and qrcode 1.5.4 (app); near-api-js 7.4.0 (relayer); `@defuse-protocol/intents-sdk` 0.95.0 (dev-only test oracle); near-workspaces 0.24.0 and proptest 1.12.0 (contract tests).
+- Adapted code: drand/tlock-js IBE in `packages/seal/src/ibe.ts` and `prototype/ibe.mjs`; defdone/annon's import checker in `contract/scripts/check-imports.mjs`.
+- Used unchanged: the near/mpc CKD test vectors (`fixtures/ckd_test_vectors.json`) and the near/intents 0.4.5 wasm (`contract/tests/res/defuse-0.4.5.wasm`).
 - Parts of the code were written with AI coding assistants and reviewed by the team.
-- Full list with file paths: `NOTICE` and `LICENSES/`. <!-- TODO(evidence: confirm versions against pnpm ls -r --depth 0 and contract/Cargo.toml, and NOTICE paths once WS2-T03 and WS1-T04 land, owner WS5-T06) -->
+- Full list with licenses: `NOTICE`, `LICENSES/`.
 
 ## Other projects by team members (Q-015)
-Arrow: https://github.com/yigitcangokmen/arrow. A separate, independent submission: no shared code, packages, contracts, accounts or wallets. <!-- TODO(H-ARROW: confirm wording with the Arrow lead) -->
+
+Arrow: a separate, independent NEAR HACKATHON submission with no shared code, packages, contracts, accounts or wallets. Repository link pending ([JUDGES row P6](JUDGES.md#off-chain)).
 
 ## License
-MIT. See `LICENSE`, `NOTICE` and `LICENSES/`.
+
+MIT (`LICENSE`).
