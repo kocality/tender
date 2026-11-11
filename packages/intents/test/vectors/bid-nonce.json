@@ -1,0 +1,32 @@
+{
+ "note": "Independent Python oracle (hashlib/struct) for bidNonce; preimage tender/bid-nonce/v1 || len(contract)||contract || u64le(sale) || len(signer)||signer || cm; deadline = floor((close_ns - 60e9)/1e9) s",
+ "cases": [
+  {
+   "salt_hex": "252812b3",
+   "close_ns": "1800010800000000000",
+   "contract": "v1.tenderseal.near",
+   "sale": "7",
+   "signer": "0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a",
+   "cm": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "nonce_b64": "Vij2xgAlKBKzAIiWLTvs+hguw6BWPUu9HbhZJuR8IAg="
+  },
+  {
+   "salt_hex": "00000001",
+   "close_ns": "1800010800999999999",
+   "contract": "v1.tenderseal.near",
+   "sale": "0",
+   "signer": "yigitcangokmen.near",
+   "cm": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "nonce_b64": "Vij2xgAAAAABAIiWLTvs+hic+TkVgJ7wz0QZoRlV6jI="
+  },
+  {
+   "salt_hex": "252812b3",
+   "close_ns": "1800010800000000000",
+   "contract": "rc3.tenderseal.testnet",
+   "sale": "18446744073709551615",
+   "signer": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+   "cm": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "nonce_b64": "Vij2xgAlKBKzAIiWLTvs+hiZm6sNDMxg7GFUuJvo040="
+  }
+ ]
+}

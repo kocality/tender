@@ -19,7 +19,7 @@ export class RpcAnswer extends Error {
 }
 
 /** Handler errors that depend on the node's own chain state (a lagging or pruned node), not on the request. */
-const NODE_STATE_CAUSES = ['UNKNOWN_BLOCK', 'NOT_SYNCED_YET', 'NO_SYNCED_BLOCKS', 'GARBAGE_COLLECTED_BLOCK'];
+const NODE_STATE_CAUSES = ['UNKNOWN_BLOCK', 'NOT_SYNCED_YET', 'NO_SYNCED_BLOCKS', 'GARBAGE_COLLECTED_BLOCK', 'UNKNOWN_TRANSACTION'];
 
 /** Errors a node reports about the request (HANDLER_ERROR, REQUEST_VALIDATION_ERROR); INTERNAL_ERROR, timeouts and node-state causes are node problems. */
 function isAnswer(error: unknown): boolean {
@@ -46,8 +46,8 @@ interface RpcResponse {
 }
 
 /**
- * JSON-RPC call with the V2 policy: each URL up to 3 attempts (1/2/4 s backoff), then the next URL. An answer the node
- * gave about the request itself (contract panic, missing account) is thrown at once.
+ * JSON-RPC call with the V2 policy: each URL up to 3 attempts (1/2/4 s backoff), then the next URL; an HTTP 429 moves on to
+ * the next URL at once. An answer the node gave about the request itself (contract panic, missing account) is thrown at once.
  */
 async function rpcCall(rpcUrls: string[], method: string, params: unknown, opts?: RpcOptions): Promise<unknown> {
   if (rpcUrls.length === 0) throw new Error('no RPC URL given');
@@ -62,6 +62,11 @@ async function rpcCall(rpcUrls: string[], method: string, params: unknown, opts?
           body: JSON.stringify({ jsonrpc: '2.0', id: 'tender', method, params }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
+        // Rate limited: another try on the same URL only waits longer than the next provider needs (OPS-04).
+        if (res.status === 429) {
+          lastError = new Error(`${url}: HTTP 429`);
+          break;
+        }
         if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
         const j = (await res.json()) as RpcResponse;
         if (j.error !== undefined) {
@@ -85,6 +90,9 @@ async function rpcCall(rpcUrls: string[], method: string, params: unknown, opts?
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
+
+/** Any JSON-RPC method under the same failover policy (`rpcCall`). */
+export const rpcRequest = rpcCall;
 
 /** `query/call_function` at `finality: "final"`; returns the parsed JSON result. */
 export async function viewCall<T>(

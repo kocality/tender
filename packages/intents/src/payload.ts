@@ -12,9 +12,13 @@ export interface RevealItem {
 
 const DEFAULT_MIN_GAS = 30_000_000_000_000n;
 
-/** C7 bid msg; key order op, sale, ct, cm, origin. `origin` is self-declared, UI badge only. */
-export function bidMsg({ sale, ct, cm, origin }: { sale: string | bigint; ct: string; cm: string; origin?: BidOrigin }): string {
-  return JSON.stringify({ op: 'bid', sale: String(sale), ct, cm, origin });
+/**
+ * C7 bid msg; key order op, sale, ct, cm, origin, seq. `origin` is self-declared, UI badge only. `seq` (a JSON number, u16) is how
+ * many bids this account already had in the sale when the bid was prepared: the contract refunds a bid whose `seq` is stale.
+ */
+export function bidMsg({ sale, ct, cm, origin, seq }: { sale: string | bigint; ct: string; cm: string; origin?: BidOrigin; seq?: number }): string {
+  if (seq !== undefined && !(Number.isInteger(seq) && seq >= 0 && seq <= 0xffff)) throw new Error(`seq must be a u16, got ${seq}`);
+  return JSON.stringify({ op: 'bid', sale: String(sale), ct, cm, origin, seq });
 }
 
 /** C17 gasless self-reveal msg. */

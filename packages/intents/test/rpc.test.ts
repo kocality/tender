@@ -38,6 +38,26 @@ describe('rpcCall', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3); // 2 attempts on the first URL, then the second answers
   });
 
+  test('HTTP 429 goes to the next URL at once: one call per URL, no backoff sleep (OPS-04)', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url === 'http://one.invalid'
+        ? new Response('Rate limits exceeded', { status: 429 })
+        : Response.json({ jsonrpc: '2.0', id: 'tender', result: { header: { timestamp_nanosec: '7' } } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const t0 = Date.now();
+    expect(await blockTimestampNs(['http://one.invalid', 'http://two.invalid'])).toBe(7n); // default 1/2/4 s backoff
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['http://one.invalid', 'http://two.invalid']);
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
+  test('429 on every URL ends with the 429 error after one call each', async () => {
+    const fetchMock = vi.fn(async () => new Response('Rate limits exceeded', { status: 429 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(blockTimestampNs(['http://one.invalid', 'http://two.invalid'], { backoffMs: [0, 0, 0] })).rejects.toThrow('HTTP 429');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test('a node that lacks the block (UNKNOWN_BLOCK on a pinned read, not synced) is a node problem: the next URL is tried', async () => {
     for (const cause of ['UNKNOWN_BLOCK', 'NOT_SYNCED_YET']) {
       const fetchMock = vi.fn(async (url: string) => {

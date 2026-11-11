@@ -9,3 +9,5 @@ export * from './hash.js';
 export * from './rpc.js';
 export * from './intentsViews.js';
 export * from './simulate.js';
+export * from './ed25519.js';
+export * from './txOutcome.js';
