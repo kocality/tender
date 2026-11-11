@@ -21,7 +21,7 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 
 ## Key request
 
-- **App key mode.** It is fixed in `new()`: `identity` (`S = big_c`), `generator` (`S = big_c − big_y`) or `plain` (app public key = the G1 generator, `S = big_c − big_y`). `sales/v1-init.json` sets `identity`, and the RC2 testnet copy runs `identity`.
+- **App key mode.** It is fixed in `new()`: `identity` (`S = big_c`), `generator` (`S = big_c − big_y`) or `plain` (app public key = the G1 generator, `S = big_c − big_y`). `sales/v1-init.json` sets `generator` (CRYPTO-07: both modes passed on mainnet, but identity passes the upstream pairing check only as a degenerate case that a later `v1.signer` could reject, which would stop a non-upgradeable v1 from ever opening a sale; generator is the documented case a = 1). The RC2 testnet copy runs `identity`.
 - **Ledger entry and call.** The entry starts as `Pending`. The call to `v1.signer.request_app_private_key` carries 1 yoctoNEAR from the contract balance and 30 Tgas plus the unused gas (weight 1); `on_key` gets 15 Tgas.
 - **Failed answer.** If the answer does not parse, `on_key` records `Err` and clears the in-flight flag, so `open` can be retried.
 - **Dead request.** A request still in flight 1 h after `open` (`IN_FLIGHT_TIMEOUT_SECS`) counts as dead: `open` may ask again and cancel rule (b) applies.

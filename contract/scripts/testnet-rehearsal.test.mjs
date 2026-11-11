@@ -44,3 +44,25 @@ test('no_retry_after_send', () => {
   assert.equal(r.status, 1);
   assert.equal(r.calls, 1);
 });
+
+// CRYPTO-07: v1 runs generator mode; every init file, the S1 evidence row and the rehearsal default agree.
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const read = (p) => readFileSync(join(root, p), 'utf8');
+
+test('v1_uses_generator_mode', () => {
+  for (const f of ['v1-init', 'rehearsal-init', 'testnet-init']) {
+    assert.equal(JSON.parse(read(`sales/${f}.json`)).app_pk_mode, 'generator', f);
+  }
+  assert.match(sh, /MODE="\$\{MODE:-generator\}"/);
+  const rows = JSON.parse(read('evidence/spikes.json'));
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? Object.values(rows));
+  assert.equal(list.find((r) => r.gate === 'S1').chosen_path, 'generator');
+});
+
+// OPS-04: the deprecated near.org RPC is not a default fallback in .env.example.
+test('env_example_has_no_deprecated_rpc', () => {
+  const env = read('.env.example');
+  assert.doesNotMatch(env, /^(VITE_)?NEAR_RPC_FALLBACKS=.*rpc\.(mainnet|testnet)\.near\.org/m);
+  assert.match(env, /^NEAR_RPC_FALLBACKS=https:\/\/near\.drpc\.org,https:\/\/rpc\.shitzuapes\.xyz$/m);
+  assert.match(env, /^VITE_NEAR_RPC_FALLBACKS=$/m);
+});

@@ -8,7 +8,7 @@
 # Usage (repo root): bash contract/scripts/testnet-rehearsal.sh
 #   STEP=<n>  resume at step n (state in contract/scripts/out/m3-state.json: public account ids and tx hashes only)
 #   H=<6 hex> account suffix for a fresh run (default: from the state file, else random)
-#   MODE=identity|generator|plain  app_pk_mode for new() (default identity)
+#   MODE=identity|generator|plain  app_pk_mode for new() (default generator, CRYPTO-07)
 #   EXTRA_FUND=<testnet account in the keychain>  tops up the intents copy when fund1 is not there
 #   NEAR_NETCFG=<near-cli network-config name>  (default testnet), e.g. one that points at a less busy RPC
 # Accounts: three faucet accounts (tender-, intents-, fund1-<H>.testnet; the faucet rate-limits per IP) and
@@ -35,7 +35,7 @@ mkdir -p "$OUT" "$LOGS"
 
 if [ -f "$STATE" ] && [ -z "${H:-}" ]; then H="$(jq -r .h "$STATE")"; fi
 H="${H:-$(openssl rand -hex 3)}"
-MODE="${MODE:-identity}"
+MODE="${MODE:-generator}"
 TENDER="tender-$H.testnet" INTENTS="intents-$H.testnet" FUND1="fund1-$H.testnet"
 USDC="usdc.$TENDER" WNEAR="wnear.$TENDER" B1="bidder1.$TENDER" B2="bidder2.$TENDER" V1="v1.$TENDER"
 if [ ! -f "$STATE" ]; then
