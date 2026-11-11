@@ -1,6 +1,8 @@
 // pnpm seal:bid — seal a bid locally with open-source code (no hosted bundle) and print the unsigned Intents payload.
 // stdout: one JSON object with public fields only. p, q and the salt go to ~/.tender/bids/ (chmod 600), never stdout:
 // with the salt, the low-entropy p and q could be brute-forced from cm.
+// Both carry `seq` (the signer's stored bids when sealed) and the pinned Intents salt, so the printed payload, a
+// paste into the app and the team script all sign this bid with one nonce (DOUBLE-PLAN rows 5-6).
 import './lib/node-version.js';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -10,13 +12,14 @@ import { hexToBytes } from '@noble/hashes/utils.js';
 import {
   type BidOrigin,
   bidMsg,
+  bidNonce,
   buildPayload,
-  buildVersionedNonce,
   currentSalt,
   makeDeadline,
   nep413Message,
   payloadString,
   solanaSignerId,
+  toBase64,
   transferIntent,
 } from '@tender/intents';
 import { MPC_DOMAIN2_PK, sealBid } from '@tender/seal';
@@ -28,9 +31,10 @@ import { Rpc } from './lib/rpc.js';
 import { MpcViews, TenderViews } from './lib/views.js';
 
 const USAGE = `usage: pnpm seal:bid --sale N --price P --size Q --escrow B --signer <id> [--origin base|arb|sol|near]
-  [--no-payload] [--unsafe-fixed-salt --salt <32 hex>]
+  [--seq N] [--no-payload] [--unsafe-fixed-salt --salt <32 hex>]
 ${COMMON_USAGE}
-  --price: USDC per 10^lot_exp whole tokens · --size, --escrow: USDC (at most 6 decimals)`;
+  --price: USDC per 10^lot_exp whole tokens · --size, --escrow: USDC (at most 6 decimals)
+  --seq: the signer's stored bids in this sale (default: read from get_bids); the contract refunds the bid if it differs`;
 
 const ORIGINS = ['base', 'arb', 'sol', 'near'] as const;
 const MIN_ESCROW = 1_000_000n;
@@ -84,6 +88,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     escrow: { type: 'string' },
     signer: { type: 'string' },
     origin: { type: 'string' },
+    seq: { type: 'string' },
     salt: { type: 'string' },
     'unsafe-fixed-salt': { type: 'boolean' },
     'no-payload': { type: 'boolean' },
@@ -99,6 +104,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     throw new UsageError('--salt needs --unsafe-fixed-salt: a known or reused salt lets anyone recover p and q from cm (tests only)');
   }
   if (v.salt !== undefined && !/^[0-9a-fA-F]{32}$/.test(v.salt)) throw new UsageError('--salt must be 32 hex characters');
+  if (v.seq !== undefined && !(/^\d{1,5}$/.test(v.seq) && Number(v.seq) <= 65_535)) throw new UsageError('--seq must be a whole number 0..65535');
   const fail = (m: string) => {
     io.err(`error: ${m}`);
     return 1;
@@ -128,6 +134,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
   const head = await rpc.finalBlock();
   const [config, sale] = await Promise.all([views.config(head.height), views.sale(saleId, head.height)]);
   if (!sale) return fail(`sale ${saleId} not found on ${net.contract}`);
+  const mine = (await views.bids(saleId, head.height)).filter((b) => b.bidder === who.signer).map((b) => `#${b.idx}`);
   const live = await new MpcViews(rpc, config.mpc).publicKey(Number(config.domain_id), head.height);
   const repo = deps.expectedMpk ?? MPC_DOMAIN2_PK[net.network];
   if (config.mpc_public_key !== live || live !== repo) {
@@ -158,8 +165,18 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     q,
     ...(v.salt ? { salt: hexToBytes(v.salt.toLowerCase()) } : {}),
   });
-  const msg = bidMsg({ sale: saleId, ct: sealed.ct_b64, cm: sealed.cm_hex, ...(origin ? { origin } : {}) });
+  // seq: the contract stores this bid only while the signer has exactly `seq` bids here (refund `bid_seq` otherwise).
+  const seq = v.seq === undefined ? mine.length : Number(v.seq);
+  if (mine.length && v.seq === undefined) {
+    io.err(`warning: ${who.signer} already has ${mine.length} bid${mine.length === 1 ? '' : 's'} in sale ${saleId} (${mine.join(', ')}): this seals an additional bid (seq ${seq})`);
+  }
+  if (seq !== mine.length) io.err(`warning: --seq ${seq} ≠ ${mine.length} stored bid${mine.length === 1 ? '' : 's'} of ${who.signer}: the contract refunds this bid (bid_seq) unless the count is ${seq} when it lands`);
+  const msg = bidMsg({ sale: saleId, ct: sealed.ct_b64, cm: sealed.cm_hex, ...(origin ? { origin } : {}), seq });
   if (new TextEncoder().encode(msg).length > 512) return fail('bid msg exceeds 512 bytes');
+  // The Intents salt is pinned here, with the bid: a re-sign of this bid keeps its nonce while the salt stays valid.
+  const intentsSalt = await currentSalt(net.rpc, config.intents);
+  const nonceBytes = bidNonce({ saltHex: intentsSalt, closeNs: BigInt(sale.close_ns), contract: net.contract, sale: saleId, signer: who.signer, cm: sealed.cm_hex });
+  const nonce = toBase64(nonceBytes);
 
   // Secret part: only on this machine, never on stdout.
   const dir = deps.bidsDir ?? join(homedir(), '.tender', 'bids');
@@ -174,6 +191,9 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
     cm: sealed.cm_hex,
     escrow: B.toString(),
     origin: origin ?? null,
+    seq,
+    intents_salt: intentsSalt,
+    nonce,
     p: p.toString(),
     q: q.toString(),
     salt: sealed.salt_hex,
@@ -186,13 +206,12 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
   if (v['no-payload']) {
     io.err('payload: null (--no-payload)');
   } else {
-    const saltHex = await currentSalt(net.rpc, config.intents);
     // Chain time, not the local clock: a slow clock would sign an expired payload, a fast one a long-lived one.
+    // The payload deadline (≤ close − 60 s) never passes the nonce deadline (close − 60 s).
     const nowMs = Number(head.timestamp_ns / 1_000_000n);
-    const { deadlineMs, deadlineIso } = makeDeadline(nowMs, Math.min(600_000, closeMs - CLOSE_MARGIN_MS - nowMs));
-    const nonce = buildVersionedNonce({ saltHex, deadlineMs });
+    const { deadlineIso } = makeDeadline(nowMs, Math.min(600_000, closeMs - CLOSE_MARGIN_MS - nowMs));
     const intent = transferIntent({ receiverId: net.contract, tokenId: sale.quote_token, amount: B, msg, minGas: MIN_GAS });
-    const pl = buildPayload({ signerId: who.signer, verifyingContract: config.intents, deadlineIso, nonce, intents: [intent] });
+    const pl = buildPayload({ signerId: who.signer, verifyingContract: config.intents, deadlineIso, nonce: nonceBytes, intents: [intent] });
     // A NEAR account signs nep413, implicit 64-hex ones too when they come from a NEAR wallet (--origin near).
     if (who.kind === 'near' || (who.kind === 'implicit' && origin === 'near')) {
       payload = nep413Message(pl);
@@ -202,6 +221,7 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
       io.err(`${who.kind === 'evm' ? 'erc191' : 'raw_ed25519'}: sign the payload string as is`);
     }
     io.err(`sign within 10 minutes (deadline ${deadlineIso.replace(/\.\d{3}Z$/, 'Z')})`);
+    io.err('sign and relay this payload OR paste this JSON in the app: both are the same bid (one nonce), only one can run');
   }
 
   io.out(
@@ -214,6 +234,9 @@ export async function main(argv: string[], io: Io = consoleIo, deps: SealBidDeps
       cm: sealed.cm_hex,
       escrow: B.toString(),
       origin: origin ?? null,
+      seq,
+      intents_salt: intentsSalt,
+      nonce,
       msg,
       payload,
     }),

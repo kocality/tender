@@ -70,9 +70,9 @@ describe('seal:try', () => {
 
   it('--try-key with a bare {big_y,big_c} needs --caller', async () => {
     const w = buildWorld({ state: 'Open' });
-    const sim = simulateMpc({ contract: w.contract, path: w.sale.path, mode: 'identity' });
+    const sim = simulateMpc({ contract: w.contract, path: w.sale.path, mode: w.mode });
     const file = join(mkdtempSync(join(tmpdir(), 'seal-try-')), 'bare.json');
-    writeFileSync(file, JSON.stringify(simulateCkdResponse(sim.mskHex, w.mpk, appId('tenderseal.near', w.sale.path), 'identity')));
+    writeFileSync(file, JSON.stringify(simulateCkdResponse(sim.mskHex, w.mpk, appId('tenderseal.near', w.sale.path), w.mode)));
     await expect(run(w, ['--try-key', file])).rejects.toMatchObject({ exitCode: 2 });
     const r = await run(w, ['--try-key', file, '--caller', 'tenderseal.near']);
     expect(r.out.at(-1)).toBe('wrong identity: this key was derived for tenderseal.near, not v1.tenderseal.near');

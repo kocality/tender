@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { main, runDemo } from '../src/demo-local.js';
+import { buildWorld } from '../src/lib/sim.js';
 
 const LAST = 'P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6';
 const quiet = () => {
@@ -22,6 +23,16 @@ describe('demo:local', () => {
       expect(lines.join('\n')).not.toMatch(/mainnet uses (?!v1\.signer)|sealed for[e]ver|succeed[s]/);
     });
   }
+
+  it('defaults to generator mode, the mode v1 is born with (CRYPTO-07)', async () => {
+    const { lines, io } = quiet();
+    expect(runDemo({ seed: '01' }, io).exitCode).toBe(0);
+    expect(lines[1]).toMatch(/ · mode generator$/);
+    const viaCli = quiet();
+    expect(await main(['--seed', '01'], viaCli.io)).toBe(0);
+    expect(viaCli.lines[1]).toMatch(/ · mode generator$/);
+    expect(buildWorld().config.app_pk_mode).toBe('generator');
+  });
 
   it('same seed gives the same commitments (ciphertexts stay randomized)', () => {
     const a = quiet();

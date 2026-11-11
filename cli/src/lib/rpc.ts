@@ -1,4 +1,5 @@
 // NEAR JSON-RPC with failover (V2): 3 attempts per provider with 1/2/4 s backoff, then the next provider.
+// HTTP 429 moves to the next provider at once (OPS-04); only the last provider backs off on it.
 // Only transient errors are retried (P-8); deterministic ones (unknown account, contract panic) throw at once.
 
 export type RpcErrorKind = 'transient' | 'permanent';
@@ -8,12 +9,15 @@ export class RpcError extends Error {
   readonly provider: string;
   /** NEAR error cause name when the node gave one (UNKNOWN_ACCOUNT, UNKNOWN_TRANSACTION, …). */
   readonly cause_name: string | undefined;
-  constructor(message: string, kind: RpcErrorKind, provider: string, causeName?: string) {
+  /** HTTP status when the provider answered with one. */
+  readonly status: number | undefined;
+  constructor(message: string, kind: RpcErrorKind, provider: string, causeName?: string, status?: number) {
     super(message);
     this.name = 'RpcError';
     this.kind = kind;
     this.provider = provider;
     this.cause_name = causeName;
+    this.status = status;
   }
 }
 
@@ -62,7 +66,7 @@ export class Rpc {
       throw new RpcError(`${url}: ${(e as Error).message}`, 'transient', url);
     }
     if (res.status === 408 || res.status === 429 || res.status >= 500) {
-      throw new RpcError(`${url}: HTTP ${res.status}`, 'transient', url);
+      throw new RpcError(`${url}: HTTP ${res.status}`, 'transient', url, undefined, res.status);
     }
     if (!res.ok) throw new RpcError(`${url}: HTTP ${res.status}`, 'permanent', url);
     let j: { result?: unknown; error?: JsonRpcError };
@@ -99,6 +103,8 @@ export class Rpc {
             if (e.cause_name !== undefined) throw e;
             break;
           }
+          // Rate limited: another provider answers sooner than this one after a backoff.
+          if (e.status === 429 && u < this.urls.length - 1) break;
           const lastAttempt = u === this.urls.length - 1 && a === BACKOFF_MS.length - 1;
           if (!lastAttempt) await this.sleep(wait);
         }

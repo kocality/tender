@@ -257,6 +257,8 @@ describe('verify --sale', () => {
     w.config.key_log_len = '2';
     let r = await runVerify(w);
     expect(r.line(21)).toContain('PASS #21 key-ledger — 2 requests for this sale (Err, Ok) = key_requests');
+    // X12F-01: an Err entry is an MPC error or an answer that failed on_key's pairing check against the pinned key
+    expect(r.line(21)).toContain(" · Err = the MPC answered with an error or with a key that on_key refused (unparseable, or failing the pairing check against the pinned key); nothing was stored");
     w.sale.key_requests = 3;
     r = await runVerify(w);
     expect(r.status(21)).toBe('FAIL');
@@ -362,10 +364,54 @@ describe('verify --sale', () => {
     const row = { sale: '1', step: 'bid', tx_hash: 'H1', signer_id: 'relayer.near', network: 'mainnet' };
     expect((await runVerify(w, { evidenceFile: writeEvidence([row]), rpcFetch })).status(25)).toBe('PASS');
     let r = await runVerify(w, { evidenceFile: writeEvidence([{ ...row, tx_hash: 'H2' }]), rpcFetch });
-    expect(r.line(25)).toContain('bid H2: failure, expected success');
+    expect(r.line(25)).toContain('bid H2: failure (refund closed), expected success');
     r = await runVerify(w, { evidenceFile: writeEvidence([{ ...row, step: 'finalize', tx_hash: 'H3' }]), rpcFetch });
     expect(r.status(25)).toBe('WARN');
     expect((await runVerify(w, { evidenceFile: writeEvidence([{ ...row, tx_hash: 'H2', expected: 'failure' }]), rpcFetch })).status(25)).toBe('PASS');
+  });
+
+  it('#25 names the dup_bid / bid_seq refunds, and a row with `reason` must be refunded for exactly that reason (DOUBLE-PLAN D1/D4)', async () => {
+    const w = buildWorld({ state: 'Finalized' });
+    const ev = (event: string, data: object) => `EVENT_JSON:${JSON.stringify({ standard: 'tender', version: '1.0.0', event, data: [data] })}`;
+    const cm = 'ab'.repeat(32);
+    const logs: Record<string, string[]> = {
+      D1: [ev('refund', { reason: 'dup_bid', sender_id: 'a.near', token_id: 't', amount: '5', op: 'bid', cm, have: 1, idx: 0 })],
+      D2: [ev('refund', { reason: 'bid_seq', sender_id: 'a.near', token_id: 't', amount: '5', op: 'bid', cm, have: 2, idx: null })],
+      D3: [ev('refund', { reason: 'closed', sender_id: 'a.near', token_id: 't', amount: '5', op: 'bid' })],
+      D4: [ev('bid', { sale: '1', idx: 2, bidder: 'a.near', escrow: '5', origin: null, cm, nth: 1 })],
+    };
+    const base = fakeRpc(w);
+    const rpcFetch = (async (input: unknown, init?: { body?: unknown }) => {
+      const body = JSON.parse(String(init?.body)) as { method: string; params: { tx_hash: string } };
+      if (body.method === 'EXPERIMENTAL_tx_status') {
+        const result = { status: { SuccessValue: '' }, receipts_outcome: [{ outcome: { logs: logs[body.params.tx_hash] } }] };
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 'tender', result }), { status: 200 });
+      }
+      return base(input as string, init as RequestInit);
+    }) as typeof fetch;
+    const row = { sale: '1', step: 'bid-again', tx_hash: 'D1', signer_id: 'relayer.near', network: 'mainnet' };
+    let r = await runVerify(w, { evidenceFile: writeEvidence([row, { ...row, tx_hash: 'D2' }]), rpcFetch });
+    expect(r.line(25)).toContain('bid-again D1: failure (refund dup_bid: the same sealed bid is already stored as #0), expected success');
+    expect(r.line(25)).toContain("bid-again D2: failure (refund bid_seq: the signer had 2 stored bids, not the seq it was sealed for), expected success");
+    const want = { ...row, expected: 'failure', reason: 'dup_bid' };
+    r = await runVerify(w, { evidenceFile: writeEvidence([want]), rpcFetch });
+    expect(r.line(25)).toBe('PASS #25 archival-tx — 1/1 recorded transactions found with the recorded outcome');
+    r = await runVerify(w, { evidenceFile: writeEvidence([{ ...want, tx_hash: 'D3' }]), rpcFetch });
+    expect(r.line(25)).toContain('bid-again D3: failure (refund closed), expected failure (refund dup_bid)');
+    r = await runVerify(w, { evidenceFile: writeEvidence([{ ...want, tx_hash: 'D4' }]), rpcFetch });
+    expect(r.line(25)).toContain('bid-again D4: success, expected failure (refund dup_bid)');
+  });
+
+  it('#9 FAILs when one bidder has the same sealed bid stored twice (the contract refunds that as dup_bid)', async () => {
+    const w = buildWorld({ state: 'Open' });
+    const [b0, b1] = w.bids;
+    b1!.bidder = b0!.bidder;
+    b1!.cm = b0!.cm;
+    w.sale.bidders -= 1;
+    const r = await runVerify(w);
+    expect(r.line(9)).toBe(`FAIL #9 bid-count — same sealed bid stored twice for ${b0!.bidder}: #0 = #1 (the contract refunds a copy as dup_bid)`);
+    b1!.cm = 'cd'.repeat(32); // two different bids from one bidder are allowed
+    expect((await runVerify(w)).status(9)).toBe('PASS');
   });
 
   it('all RPC providers down → exit 2', async () => {

@@ -3,6 +3,9 @@ import { resolveNetwork } from '../../src/lib/config.js';
 import { accountUrl, blockUrl, txUrl } from '../../src/lib/explorer.js';
 import { formatTokens, formatUsdc, parseDecimal, priceUnit, stringifyJson, utcFromNs } from '../../src/lib/format.js';
 
+const MAINNET_RPC = ['https://free.rpc.fastnear.com', 'https://near.drpc.org', 'https://rpc.shitzuapes.xyz'];
+const TESTNET_RPC = ['https://test.rpc.fastnear.com', 'https://near-testnet.drpc.org', 'https://testnet-rpc.intea.rs'];
+
 describe('format', () => {
   it('parseDecimal', () => {
     expect(parseDecimal('3.9', 6)).toBe(3_900_000n);
@@ -48,10 +51,39 @@ describe('format', () => {
   });
 
   it('resolveNetwork: flag > env > default', () => {
-    expect(resolveNetwork({}, {})).toMatchObject({ network: 'mainnet', contract: 'v1.tenderseal.near', mpc: 'v1.signer', rpc: ['https://free.rpc.fastnear.com', 'https://rpc.mainnet.near.org'] });
-    expect(resolveNetwork({}, { TENDER_CONTRACT_ID: 'rehearsal.tenderseal.near', NEAR_RPC_URL: 'https://env' })).toMatchObject({ contract: 'rehearsal.tenderseal.near', rpc: ['https://env'] });
+    expect(resolveNetwork({}, {})).toMatchObject({ network: 'mainnet', contract: 'v1.tenderseal.near', mpc: 'v1.signer', rpc: MAINNET_RPC });
+    expect(resolveNetwork({}, { TENDER_CONTRACT_ID: 'rehearsal.tenderseal.near', NEAR_RPC_URL: 'https://env' })).toMatchObject({ contract: 'rehearsal.tenderseal.near', rpc: ['https://env', ...MAINNET_RPC] });
     expect(resolveNetwork({ contract: 'flag.near', rpc: 'https://flag' }, { TENDER_CONTRACT_ID: 'env.near', NEAR_RPC_URL: 'https://env' })).toMatchObject({ contract: 'flag.near', rpc: ['https://flag'] });
     expect(() => resolveNetwork({ network: 'testnet' }, {})).toThrow('--contract is required on testnet');
     expect(resolveNetwork({ network: 'testnet', contract: 'v1.tender-abc.testnet' }, {})).toMatchObject({ mpc: 'v1.signer-prod.testnet' });
+  });
+
+  it('resolveNetwork: three independent keyless providers per network, no deprecated near.org RPC (OPS-04)', () => {
+    for (const net of ['mainnet', 'testnet'] as const) {
+      const rpc = resolveNetwork({ network: net, contract: 'x.near' }, {}).rpc;
+      expect(rpc).toEqual(net === 'mainnet' ? MAINNET_RPC : TESTNET_RPC);
+      expect(new Set(rpc.map((u) => new URL(u).hostname.split('.').slice(-2).join('.'))).size).toBe(3);
+      expect(rpc.join(' ')).not.toMatch(/\/\/rpc\.(mainnet|testnet)\.near\.org/);
+    }
+  });
+
+  it('resolveNetwork: an env RPC URL goes first and keeps the defaults, without duplicates, on its own network', () => {
+    const env = {
+      NEAR_RPC_URL: 'https://free.rpc.fastnear.com/',
+      NEAR_RPC_FALLBACKS: 'https://near.drpc.org, https://my.rpc ,',
+      NEAR_TESTNET_RPC_URL: 'https://my.testnet.rpc',
+      NEAR_ARCHIVAL_RPC_URL: 'https://my.archival',
+    };
+    expect(resolveNetwork({}, env)).toMatchObject({
+      rpc: ['https://free.rpc.fastnear.com', 'https://near.drpc.org', 'https://my.rpc', 'https://rpc.shitzuapes.xyz'],
+      archival: ['https://my.archival', 'https://archival-rpc.mainnet.fastnear.com', 'https://archival-rpc.mainnet.near.org'],
+    });
+    // the mainnet env URLs never leak into a testnet run
+    expect(resolveNetwork({ network: 'testnet', contract: 'x.testnet' }, env)).toMatchObject({
+      rpc: ['https://my.testnet.rpc', ...TESTNET_RPC],
+      archival: ['https://archival-rpc.testnet.fastnear.com', 'https://archival-rpc.testnet.near.org'],
+    });
+    // an explicit --rpc is the only provider
+    expect(resolveNetwork({ rpc: 'https://flag' }, env).rpc).toEqual(['https://flag']);
   });
 });

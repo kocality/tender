@@ -22,12 +22,12 @@ describe('Rpc', () => {
   it('fails over after 3 attempts with 1/2/4 s backoff', async () => {
     const waits: number[] = [];
     const { calls, fetchImpl } = script([
-      () => new Response('', { status: 429 }),
+      () => new Response('', { status: 503 }),
       () => new Response('', { status: 503 }),
       () => {
         throw new TypeError('fetch failed');
       },
-      () => new Response('', { status: 429 }),
+      () => new Response('', { status: 503 }),
       () => ok(fixture('signer-version.json')),
     ]);
     const rpc = new Rpc(['https://a', 'https://b'], { fetchImpl, sleep: async (ms) => void waits.push(ms) });
@@ -44,6 +44,28 @@ describe('Rpc', () => {
     await expect(rpc.call('status', [])).rejects.toMatchObject({ kind: 'transient' });
     expect(calls).toHaveLength(6);
     expect(waits).toEqual([1000, 2000, 4000, 1000, 2000]);
+  });
+
+  it('moves to the next provider at once on HTTP 429 (OPS-04)', async () => {
+    const waits: number[] = [];
+    const { calls, fetchImpl } = script([() => new Response('', { status: 429 }), () => ok(fixture('signer-version.json'))]);
+    const rpc = new Rpc(['https://a', 'https://b'], { fetchImpl, sleep: async (ms) => void waits.push(ms) });
+    expect(await rpc.view('v1.signer', 'version', {})).toBe('3.18.0');
+    expect(calls).toEqual(['https://a', 'https://b']);
+    expect(waits).toEqual([]);
+  });
+
+  it('keeps the backoff for a 429 on the last provider', async () => {
+    const waits: number[] = [];
+    const { calls, fetchImpl } = script([
+      () => new Response('', { status: 429 }),
+      () => new Response('', { status: 429 }),
+      () => ok(fixture('signer-version.json')),
+    ]);
+    const rpc = new Rpc(['https://a', 'https://b'], { fetchImpl, sleep: async (ms) => void waits.push(ms) });
+    expect(await rpc.view('v1.signer', 'version', {})).toBe('3.18.0');
+    expect(calls).toEqual(['https://a', 'https://b', 'https://b']);
+    expect(waits).toEqual([1000]);
   });
 
   it('does not retry UNKNOWN_ACCOUNT', async () => {

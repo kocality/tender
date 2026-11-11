@@ -15,7 +15,7 @@ import {
   simulateCkdResponse,
 } from '@tender/seal';
 import bs58 from 'bs58';
-import { type Network, TESTED_INTENTS_CODE_HASH } from './config.js';
+import { DEMO_APP_PK_MODE, type Network, TESTED_INTENTS_CODE_HASH } from './config.js';
 import { demoSaleFixturePath, fixturePath } from './paths.js';
 import type { BidView, ConfigView, KeyReqView, ResultView, SaleState, SaleView } from './views.js';
 
@@ -142,7 +142,7 @@ export function demoSaleInputs(): { sale: { supply: bigint; decimals: number; lo
 
 /** A self-consistent sale world in one of four states, sealed with the simulated MPC's key. */
 export function buildWorld(opts: WorldOptions = {}): World {
-  const mode = opts.mode ?? 'identity';
+  const mode = opts.mode ?? DEMO_APP_PK_MODE;
   const network = opts.network ?? 'mainnet';
   const contract = opts.contract ?? 'v1.tenderseal.near';
   const saleId = opts.saleId ?? 1n;

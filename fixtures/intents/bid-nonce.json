@@ -1,0 +1,44 @@
+{
+ "_doc": "DOUBLE-PLAN layer 2: the one NEAR Intents nonce of a sealed bid. nonce = 5628f6c6 || 00 || intents_salt(4) || i64_le(nonce_deadline_ns) || tail15, nonce_deadline_ms = floor_s(close_ns - 60 s), tail15 = sha256('tender/bid-nonce/v1' || u8 len || contract || u64_le(sale) || u8 len || signer || cm32)[0..15]. seq is not in the hash. Values computed with Python hashlib on 2026-11-11; case 1 equals the vector the Rust sandbox run used (docs/internal/think/double-client.md).",
+ "cases": [
+  {
+   "name": "rust-sandbox-vector",
+   "intents_salt": "0a0b0c0d",
+   "close_ns": "1800000060000000000",
+   "contract": "v1.tenderseal.near",
+   "sale": "3",
+   "signer": "alice.near",
+   "cm": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "nonce_deadline_ms": 1800000000000,
+   "preimage_hex": "74656e6465722f6269642d6e6f6e63652f76311276312e74656e6465727365616c2e6e65617203000000000000000a616c6963652e6e656172cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "nonce_hex": "5628f6c6000a0b0c0d0000b49376e2fa18624f21652c2e9aa46a08357f6c8014",
+   "nonce_b64": "Vij2xgAKCwwNAAC0k3bi+hhiTyFlLC6apGoINX9sgBQ="
+  },
+  {
+   "name": "evm-signer",
+   "intents_salt": "5f3e2a10",
+   "close_ns": "1794398400123456789",
+   "contract": "v1.tenderseal.near",
+   "sale": "2",
+   "signer": "0x2724f4d3a1b2c3d4e5f60718293a4b5c6d7e8f90",
+   "cm": "abababababababababababababababababababababababababababababababab",
+   "nonce_deadline_ms": 1794398340000,
+   "preimage_hex": "74656e6465722f6269642d6e6f6e63652f76311276312e74656e6465727365616c2e6e65617202000000000000002a307832373234663464336131623263336434653566363037313832393361346235633664376538663930abababababababababababababababababababababababababababababababab",
+   "nonce_hex": "5628f6c6005f3e2a1000284079c8fbe618385bd4d0ee0001be0939364548cd0c",
+   "nonce_b64": "Vij2xgBfPioQAChAecj75hg4W9TQ7gABvgk5NkVIzQw="
+  },
+  {
+   "name": "implicit-signer-testnet",
+   "intents_salt": "00000001",
+   "close_ns": "1794312000000000000",
+   "contract": "v1.tender-09bdfe.testnet",
+   "sale": "0",
+   "signer": "30abdbe2000000000000000000000000000000000000000000000000000000022b",
+   "cm": "0101010101010101010101010101010101010101010101010101010101010101",
+   "nonce_deadline_ms": 1794311940000,
+   "preimage_hex": "74656e6465722f6269642d6e6f6e63652f76311876312e74656e6465722d3039626466652e746573746e65740000000000000000423330616264626532303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303232620101010101010101010101010101010101010101010101010101010101010101",
+   "nonce_hex": "5628f6c600000000010028f1e733ade6181e2fbbbd163331979c491535442431",
+   "nonce_b64": "Vij2xgAAAAABACjx5zOt5hgeL7u9FjMxl5xJFTVEJDE="
+  }
+ ]
+}

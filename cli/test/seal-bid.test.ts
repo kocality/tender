@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodeVersionedNonce, solanaSignerId } from '@tender/intents';
+import { bidNonce, decodeVersionedNonce, solanaSignerId, toBase64 } from '@tender/intents';
 import bs58 from 'bs58';
 import { MPC_DOMAIN2_PK, decryptBids } from '@tender/seal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,10 +39,10 @@ describe('seal:bid', () => {
     expect(r.code).toBe(0);
     expect(r.out).toHaveLength(1);
     const j = JSON.parse(r.out[0]!) as Record<string, string | null>;
-    expect(Object.keys(j)).toEqual(['sale', 'contract', 'network', 'signer', 'ct', 'cm', 'escrow', 'origin', 'msg', 'payload']);
-    expect(j).toMatchObject({ sale: '1', contract: 'v1.tenderseal.near', network: 'mainnet', signer: EVM, escrow: '5000000', origin: 'base' });
+    expect(Object.keys(j)).toEqual(['sale', 'contract', 'network', 'signer', 'ct', 'cm', 'escrow', 'origin', 'seq', 'intents_salt', 'nonce', 'msg', 'payload']);
+    expect(j).toMatchObject({ sale: '1', contract: 'v1.tenderseal.near', network: 'mainnet', signer: EVM, escrow: '5000000', origin: 'base', seq: 0, intents_salt: '252812b3' });
     expect(r.out[0]).not.toMatch(/"(salt|p|q)"/);
-    expect(JSON.parse(j.msg!)).toEqual({ op: 'bid', sale: '1', ct: j.ct, cm: j.cm, origin: 'base' });
+    expect(JSON.parse(j.msg!)).toEqual({ op: 'bid', sale: '1', ct: j.ct, cm: j.cm, origin: 'base', seq: 0 });
     expect(new TextEncoder().encode(j.msg!).length).toBeLessThanOrEqual(512);
     expect(r.err).toContain('p = 3900000 micro-USDC per 1 NEAR · q = 4000000 micro-USDC · escrow = 5000000 micro-USDC');
 
@@ -51,8 +51,8 @@ describe('seal:bid', () => {
     const file = join(bidsDir, files[0]!);
     expect(statSync(file).mode & 0o777).toBe(0o600);
     const secret = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-    expect(Object.keys(secret)).toEqual(['sale', 'contract', 'network', 'signer', 'ct', 'cm', 'escrow', 'origin', 'p', 'q', 'salt']);
-    expect(secret).toMatchObject({ p: '3900000', q: '4000000', ct: j.ct, cm: j.cm });
+    expect(Object.keys(secret)).toEqual(['sale', 'contract', 'network', 'signer', 'ct', 'cm', 'escrow', 'origin', 'seq', 'intents_salt', 'nonce', 'p', 'q', 'salt']);
+    expect(secret).toMatchObject({ p: '3900000', q: '4000000', ct: j.ct, cm: j.cm, seq: 0, intents_salt: '252812b3', nonce: j.nonce });
     expect(secret.salt).toMatch(/^[0-9a-f]{32}$/);
     expect(r.out[0]).not.toContain(secret.salt as string);
 
@@ -69,6 +69,52 @@ describe('seal:bid', () => {
     expect(p.intents).toEqual([{ intent: 'transfer', receiver_id: 'v1.tenderseal.near', tokens: { [SIM_USDC]: '5000000' }, msg: j.msg, min_gas: '30000000000000' }]);
     expect(decodeVersionedNonce(p.nonce).saltHex).toBe('252812b3');
     expect(r.err.some((l) => /^sign within 10 minutes \(deadline \d{4}-.*Z\)$/.test(l))).toBe(true);
+  });
+
+  it('the payload nonce is the bid nonce of this sealed bid: a re-run or a paste of the same bid has the same nonce (DOUBLE-PLAN rows 5-6)', async () => {
+    const fixed = [...BID, '--unsafe-fixed-salt', '--salt', 'aa'.repeat(16)];
+    const a = await run(fixed);
+    world.block.timestamp_ns += 11n * 60n * 1_000_000_000n; // 11 minutes later: another payload deadline
+    const b = await run(fixed);
+    const ja = JSON.parse(a.out[0]!) as { cm: string; nonce: string; payload: string };
+    const jb = JSON.parse(b.out[0]!) as { cm: string; nonce: string; payload: string };
+    const pa = JSON.parse(ja.payload) as { nonce: string; deadline: string };
+    const pb = JSON.parse(jb.payload) as { nonce: string; deadline: string };
+    expect(jb.cm).toBe(ja.cm);
+    expect(pb.deadline).not.toBe(pa.deadline);
+    expect(pb.nonce).toBe(pa.nonce);
+    expect(ja.nonce).toBe(pa.nonce);
+    const want = bidNonce({ saltHex: '252812b3', closeNs: BigInt(world.sale.close_ns), contract: world.contract, sale: 1n, signer: EVM, cm: ja.cm });
+    expect(pa.nonce).toBe(toBase64(want));
+    // the nonce deadline is close - 60 s; the payload deadline never passes it
+    const closeMs = Number(BigInt(world.sale.close_ns) / 1_000_000n);
+    expect(decodeVersionedNonce(pa.nonce).deadlineNs).toBe(BigInt(Math.floor((closeMs - 60_000) / 1000) * 1000) * 1_000_000n);
+    expect(Date.parse(pb.deadline) * 1e6).toBeLessThanOrEqual(Number(decodeVersionedNonce(pb.nonce).deadlineNs));
+    expect(a.err).toContain('sign and relay this payload OR paste this JSON in the app: both are the same bid (one nonce), only one can run');
+  });
+
+  it("seq = the signer's stored bids in this sale, named in a warning; --seq overrides it (DOUBLE-PLAN D1)", async () => {
+    const near = ['--sale', '1', '--price', '3.5', '--size', '1', '--escrow', '1', '--signer', 'bidder.tenderseal.near', '--origin', 'near'];
+    const mine = world.bids.filter((x) => x.bidder === 'bidder.tenderseal.near').map((x) => `#${x.idx}`);
+    expect(mine).toHaveLength(1);
+    const r = await run(near);
+    const j = JSON.parse(r.out[0]!) as { seq: number; msg: string };
+    expect(j.seq).toBe(1);
+    expect(JSON.parse(j.msg).seq).toBe(1);
+    expect(r.err).toContain(`warning: bidder.tenderseal.near already has 1 bid in sale 1 (${mine[0]}): this seals an additional bid (seq 1)`);
+    const o = await run([...near, '--seq', '0']);
+    expect(JSON.parse(o.out[0]!).seq).toBe(0);
+    expect(o.err.some((l) => l.includes('--seq 0 ≠ 1 stored bid'))).toBe(true);
+    await expect(run([...near, '--seq', '-1'])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(run([...near, '--seq', '65536'])).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it('--no-payload still pins seq, intents_salt and the nonce in the file', async () => {
+    const r = await run([...BID, '--no-payload']);
+    const j = JSON.parse(r.out[0]!) as { payload: null; seq: number; intents_salt: string; nonce: string };
+    expect(j.payload).toBeNull();
+    expect(j).toMatchObject({ seq: 0, intents_salt: '252812b3' });
+    expect(decodeVersionedNonce(j.nonce).saltHex).toBe('252812b3');
   });
 
   it('NEAR signer gets the nep413 message', async () => {
@@ -97,7 +143,8 @@ describe('seal:bid', () => {
       const r = await run(BID);
       const p = JSON.parse((JSON.parse(r.out[0]!) as { payload: string }).payload) as { deadline: string; nonce: string };
       expect(p.deadline).toBe(new Date(chainMs + 600_000).toISOString());
-      expect(decodeVersionedNonce(p.nonce).deadlineNs).toBe(BigInt(chainMs + 600_000) * 1_000_000n);
+      // the nonce deadline is the sale's close − 60 s (bid nonce), never the local clock
+      expect(decodeVersionedNonce(p.nonce).deadlineNs).toBe(BigInt(world.sale.close_ns) - 60_000_000_000n);
     } finally {
       spy.mockRestore();
     }

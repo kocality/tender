@@ -26,6 +26,8 @@ export interface EvidenceRow {
   deposit_address?: string;
   outcome?: 'success' | 'failure';
   expected?: 'success' | 'failure';
+  /** With expected failure: the Tender refund reason the tx must show (e.g. dup_bid, bid_seq). */
+  reason?: string;
 }
 
 export type RebuildResult = { kind: 'hash'; codeHash: string; rev: string } | { kind: 'unavailable'; reason: string };
@@ -89,17 +91,26 @@ function tenderEvents(r: unknown): { event: string; data: Record<string, unknown
   return out;
 }
 
+/** A Tender refund in words; dup_bid and bid_seq carry `have` and `idx` (DOUBLE-PLAN D4). */
+function refundLabel(d: Record<string, unknown>): string {
+  if (d.reason === 'dup_bid') return `refund dup_bid: the same sealed bid is already stored as #${String(d.idx)}`;
+  if (d.reason === 'bid_seq') return `refund bid_seq: the signer had ${String(d.have)} stored bids, not the seq it was sealed for`;
+  return `refund ${String(d.reason)}`;
+}
+
 /**
  * A tx can succeed at top level while Tender refused the op (it returns the amount and emits `refund`) or a payout
- * failed (`payout` with ok false): those count as failure (S-05).
+ * failed (`payout` with ok false): those count as failure (S-05). `reason` is the first refund's reason.
  */
-function txOutcome(r: unknown): 'success' | 'failure' | 'pending' {
+function txOutcome(r: unknown): { outcome: 'success' | 'failure' | 'pending'; reason?: string; label?: string } {
   const st = (r as { status?: Record<string, unknown> } | null)?.status ?? {};
-  if ('Failure' in st) return 'failure';
-  if (!('SuccessValue' in st)) return 'pending';
+  if ('Failure' in st) return { outcome: 'failure' };
+  if (!('SuccessValue' in st)) return { outcome: 'pending' };
   const ev = tenderEvents(r);
-  if (ev.some((e) => e.event === 'refund' || (e.event === 'payout' && e.data.some((d) => d.ok === false)))) return 'failure';
-  return 'success';
+  const refund = ev.find((e) => e.event === 'refund')?.data[0];
+  if (refund) return { outcome: 'failure', reason: String(refund.reason), label: refundLabel(refund) };
+  if (ev.some((e) => e.event === 'payout' && e.data.some((d) => d.ok === false))) return { outcome: 'failure', label: 'payout failed' };
+  return { outcome: 'success' };
 }
 
 export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
@@ -221,6 +232,14 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
     if (bids.some((b, i) => b.idx !== i)) bad.push('bid idx not 0..n-1');
     const distinct = new Set(bids.map((b) => b.bidder)).size;
     if (distinct !== sale.bidders) bad.push(`distinct bidders ${distinct} ≠ sale.bidders ${sale.bidders}`);
+    // One account's same sealed bid is stored once: the contract refunds a copy as dup_bid (DOUBLE-PLAN D1).
+    const firstOf = new Map<string, number>();
+    for (const b of bids) {
+      const k = `${b.bidder} ${b.cm}`;
+      const first = firstOf.get(k);
+      if (first === undefined) firstOf.set(k, b.idx);
+      else bad.push(`same sealed bid stored twice for ${b.bidder}: #${first} = #${b.idx} (the contract refunds a copy as dup_bid)`);
+    }
     const escrow = sum(bids.map((b) => big(b.escrow)));
     if (escrow !== big(sale.escrow_total)) bad.push(`Σ escrow ${escrow} ≠ escrow_total ${sale.escrow_total}`);
     if (bad.length) add(9, 'bid-count', 'FAIL', bad.join('; '));
@@ -531,7 +550,11 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
     }
     const seq = mine.map((k) => k.outcome).join(', ') || 'none';
     if (bad.length) add(21, 'key-ledger', 'FAIL', bad.join('; '));
-    else add(21, 'key-ledger', 'PASS', `${mine.length} request${mine.length === 1 ? '' : 's'} for this sale (${seq}) = key_requests; ${keyLog.length} in the contract's key log`);
+    else {
+      // X12F-01: on_key also records Err for a key that fails its pairing check against the pinned key.
+      const errText = mine.some((k) => k.outcome === 'Err') ? ' · Err = the MPC answered with an error or with a key that on_key refused (unparseable, or failing the pairing check against the pinned key); nothing was stored' : '';
+      add(21, 'key-ledger', 'PASS', `${mine.length} request${mine.length === 1 ? '' : 's'} for this sale (${seq}) = key_requests; ${keyLog.length} in the contract's key log${errText}`);
+    }
   }
 
   // #22 nearblocks-receipts (independent indexer, WARN only)
@@ -575,8 +598,11 @@ export async function runSaleChecks(ctx: VerifyCtx): Promise<Check[]> {
         if (!got.ok) got = await attempt(() => ctx.archival.txStatus(r.tx_hash, sender));
         if (!got.ok) return `${r.step} ${short(r.tx_hash)}: ${got.err}`;
         const want = r.expected ?? 'success';
+        const wantReason = want === 'failure' && r.reason ? r.reason : undefined;
         const o = txOutcome(got.v);
-        return o === want ? null : `${r.step} ${short(r.tx_hash)}: ${o}, expected ${want}`;
+        if (o.outcome === want && (wantReason === undefined || o.reason === wantReason)) return null;
+        const seen = `${o.outcome}${o.label ? ` (${o.label})` : ''}`;
+        return `${r.step} ${short(r.tx_hash)}: ${seen}, expected ${want}${wantReason ? ` (refund ${wantReason})` : ''}`;
       }),
     );
     const bad = res.filter(Boolean);
