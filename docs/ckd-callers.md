@@ -4,8 +4,6 @@ Read on 2026-11-10 before 08:23 UTC, before Tender's own mainnet CKD requests. M
 
 Total: 268 receipts from 18 callers. Callers using a public app key (excluding Tender's own accounts): 0. Latest receipts that could not be read from archival RPC: 0.
 
-Only each caller's latest receipt was decoded; earlier receipts of the same caller are counted but not individually classified.
-
 | Caller | Requests | Latest receipt | App key class |
 |---|---|---|---|
 | `ckd-auth.logunov.near` | 65 | `HjcyuuRpShixKDUh9TiXxMdbRp3CDUJg71TDgBJ1rquY` | private |
@@ -29,4 +27,4 @@ Only each caller's latest receipt was decoded; earlier receipts of the same call
 
 ## Tender's own accounts
 
-`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, the planned `v1.tenderseal.near` (not deployed yet) and the implicit spike account `0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620`: none appears among the callers above. Our recorded requests came later on 2026-11-10 and all used a public app key: JUDGES rows S1 (identity and generator) and S2 (identity) from the implicit account, and S6-ckd (identity) from `spike.tenderseal.near`.
+`tenderseal.near`, `spike.tenderseal.near`, `rehearsal.tenderseal.near`, the planned `v1.tenderseal.near` and the implicit spike account `0a92bc62601112332a225ea19961d549bb4b689bbd723f5dcf1f19bab5212620`: none appears among the callers above. Our recorded requests came later on 2026-11-10 and all used a public app key ([JUDGES › Mainnet spikes](../JUDGES.md#mainnet-spikes-before-the-contract)).

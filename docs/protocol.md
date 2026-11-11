@@ -1,6 +1,6 @@
 # Tender protocol: mechanics
 
-How the contract in `contract/src/` behaves, for reviewers. Constants are quoted from `contract/src/lib.rs` and `contract/src/sale.rs`.
+How the contract in `contract/src/` behaves. Constants are quoted from `contract/src/lib.rs` and `contract/src/sale.rs`.
 
 ## Sale states
 
@@ -11,7 +11,7 @@ How the contract in `contract/src/` behaves, for reviewers. Constants are quoted
 - **Finalized.** The settling `finalize` cleared the sale; later calls send the remaining payouts.
 - **Cancelled.** Terminal: no method leads from it to a key request. `cancel` needs state Open, no stored key, no live request, and either (a) close has passed, the open conditions fail and `key_requests == 0`, or (b) close + 24 h has passed.
 
-The contract has no owner and no admin method; the seller list is fixed in `new()`.
+The contract has no owner and no admin method. `new()` fixes the seller list, the only accounts that can create sales.
 
 ## Commitment
 
@@ -25,7 +25,8 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 - **Ledger entry and call.** The entry starts as `Pending`. The call to `v1.signer.request_app_private_key` carries 1 yoctoNEAR from the contract balance and 30 Tgas plus the unused gas (weight 1); `on_key` gets 15 Tgas.
 - **Failed answer.** If the answer does not parse, `on_key` records `Err` and clears the in-flight flag, so `open` can be retried.
 - **Dead request.** A request still in flight 1 h after `open` (`IN_FLIGHT_TIMEOUT_SECS`) counts as dead: `open` may ask again and cancel rule (b) applies.
-- **Changed MPC key.** `on_key` does not compare the answer with the stored domain-2 MPC key, so after a key change the sale still goes Keyed with a key that does not decrypt its bids (`verify` #1 and #11 fail); the way out is the bid file (Reveal › Recovery).
+- **Late or failed key.** A key the MPC delivers after that timeout, or one whose `on_key` failed, is not stored but stays public in the MPC receipt, so a sale cancelled after a request may be decryptable; `verify` [#23](verify.md#the-27-checks-of---sale) labels it apart from "never requested".
+- **Changed MPC key.** `on_key` does not compare the answer with the stored domain-2 MPC key, so after a key change the sale still goes Keyed with a key that does not decrypt its bids (`verify` #1 and #11 fail). Only bidders who kept their bid file can reveal ([Recovery](#reveal)); the others can lose the [penalty](#clearing-and-penalty).
 
 ## Reveal
 
@@ -38,7 +39,7 @@ It binds the bidder's Intents account and the escrow `B`, so a copied ciphertext
 
 - **Ranking.** Bids rank by price, high to low; ties go by arrival.
 - **Winners.** A full winner pays `q`. Every bid at `p == P*` forms the marginal group, which shares the remaining supply pro rata by `q` and pays `ceil(t·P*/scale)`.
-- **Penalty.** The 10% penalty (README › How it works, row 7) is `floor(B/10)` per Sealed bid.
+- **Penalty.** Only if at least one bid was revealed, `finalize` withholds `floor(B/10)` from each bid still Sealed and refunds the rest; if no bid was revealed, every bid is refunded in full. The withheld pool is paid to nobody: it stays in the contract's NEAR Intents account, and no method pays it out. It goes neither to the seller's account nor to the revealed bidders, because a share for revealed bids could flow back to the unrevealed bidder's own revealed decoy bid.
 - **Conservation.** Σ refunds + seller USDC + pool = Σ B. `finalize` panics instead of paying out if this fails.
 - **Same code twice.** `contract/src/clearing.rs` (u128) and `packages/clearing` (bigint) are both tested against `fixtures/clearing/*.json` and property tests.
 - **Price unit.** Prices are micro-USDC per lot of 10^lot_exp tokens. `create` refunds with `decimals_plus_lot_exp` unless `decimals + lot_exp` is in 20..26, so one whole token can cost at most about 0.18 USDC at 6 decimals (table: `sales/README.md`). The contract cannot read `ft_metadata` while it handles the transfer, so `relayer/scripts/sale.ts` blocks a create whose declared decimals differ from the token's; `verify` #27 checks the same after the fact.

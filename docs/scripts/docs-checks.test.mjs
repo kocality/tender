@@ -114,11 +114,12 @@ test('CLM-01: FREEZE=1 requires a transaction hash on every attack-room row', ()
   assert.ok(!fails(runLint([withTx], { FREEZE: '1' }).out, 'attack-room row'));
 });
 
-test('CLM-01: README states sale 0 as a plan while its JUDGES row is pending, as done once it has a hash', () => {
+test('CLM-01: README states the demo sales as a plan while JUDGES row M02 is pending, and drops the plan once it has a hash', () => {
   const m02 = judges().split('\n').find((l) => l.startsWith('| M02 |'));
   assert.ok(m02, 'JUDGES row M02');
   const done = /[1-9A-HJ-NP-Za-km-z]{43,44}/.test(m02);
-  assert.match(readme(), done ? /Sale 0 was configured by us to fail its thresholds/ : /Sale 0 will be configured by us to fail its thresholds/);
+  assert.match(readme(), /configured by us to fail its thresholds/i);
+  (done ? assert.doesNotMatch : assert.match)(readme(), /Planned on mainnet/);
 });
 
 // ---- facts in the docs match the code -------------------------------------------------------------------------------
@@ -236,7 +237,7 @@ test('CI-02: README test counts equal a clean run (COUNTS=1)', { skip: process.e
     const claimed = Number(row.match(new RegExp(`${name} (\\d+)`))?.[1]);
     // LIVE=1 would turn on the live intents tests, which the README counts as skipped.
     const r = spawnSync('pnpm', ['test'], { cwd: join(repo, dir), encoding: 'utf8', env: { ...process.env, LIVE: '' } });
-    const got = Number((r.stdout + r.stderr).match(/Tests\s+(?:\d+ failed \| )?(\d+) passed/)?.[1]);
+    const got = Number((r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').match(/Tests\s+(?:\d+ failed \| )?(\d+) passed/)?.[1]);
     assert.equal(claimed, got, `${name}: README ${claimed}, run ${got}`);
   }
 });
