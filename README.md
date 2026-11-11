@@ -1,10 +1,146 @@
 # Tender: sealed-bid token sales from any chain, opened by NEAR's MPC network
 
-Problem: in most of the token sales we compared ([below](#how-it-compares)) every bid is public, so participants snipe and herd, and buyers on other chains must bridge first.
+Problem: in most token sales every bid is public before close, so late bidders copy or snipe, and buyers on other chains must bridge first ([how others compare](#how-it-compares)).
 
-Tender keeps each bid's price and size encrypted until the sale's key is released. A bid from Base, Arbitrum, Solana or NEAR is one signed NEAR Intents transfer that carries the ciphertext and escrows USDC. After close, the locked sale contract asks NEAR's MPC network for the sale's key only if the sale's public open conditions hold (total escrow ≥ `min_escrow`, bidders ≥ `min_bidders`). Then anyone can decrypt every bid, and the sale clears at one price anyone can recompute. Otherwise anyone can cancel the sale for full refunds, and its key is never requested.
+Tender keeps each bid's price and size encrypted until the sale's key is released. The locked sale contract is the only account that can obtain its sales' keys from NEAR's MPC network, and it asks only when the sale's public open conditions hold.
+
+```mermaid
+flowchart TB
+  B["Bidders on Base, Arbitrum,<br/>Solana and NEAR"] -- "sealed bid + USDC escrow,<br/>one NEAR Intents transfer" --> C["Locked sale contract<br/>v1.tenderseal.near"]
+  C --> Q{{"After close:<br/>escrow ≥ min_escrow and<br/>bidders ≥ min_bidders?"}}
+  Q -- "yes" --> K["Contract asks NEAR's<br/>MPC network for the key,<br/>then anyone can decrypt the bids"]
+  K --> P["One price for every winner,<br/>unspent escrow back"]
+  Q -- "no" --> R["Anyone cancels:<br/>full refunds,<br/>key never requested"]
+```
+
+[The story](#the-story) runs one sale down each branch.
 
 **Status, 2026-11-11 UTC.** Runs today: steps 1-9 below ([`git clone` once the repo is public](JUDGES.md#off-chain)) and [a full testnet sale with a real MPC key](JUDGES.md#testnet). Not live yet: the mainnet contract `v1.tenderseal.near`, the [hosted app and demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
+
+## The story
+
+**Priya lists a sale.** She wants to sell 3 NEAR (as wNEAR) to whoever values it most, at no less than 3.00 USDC per NEAR. She sets two public open conditions: at least 5 USDC escrowed (`min_escrow`) and at least 3 bidders (`min_bidders`). Bea, on Base, bids early; Sam, on Solana, bids later:
+
+| | In a public sale | In Tender |
+|---|---|---|
+| What Sam sees before he bids | Bea's price, 3.90 | Bea's 5 USDC of escrow, no price |
+| What Sam bids | off what he sees: he copies Bea, or bids just enough at the last block | his own value: 3.20 |
+
+The names are illustrative and the numbers are the worked example in `fixtures/clearing/demo-sale-1.json`. On mainnet this sale and its twin (below) are planned, not run yet ([Demo sales](#demo-sales)); today this sale runs offline in [step 2](#try-it-free-no-wallet), and the twin's path in a sandbox test.
+
+**Six bids from four chains.** A bid's size is the USDC it spends if it wins in full; its escrow `B` is at least that, and whatever it does not spend is refunded. Each name shares its first letter with its chain:
+
+| Bidder | Chain and wallet | Shown in step 2's output as |
+|---|---|---|
+| Bea | Base, MetaMask | `base · EVM-1` |
+| Sofia | Solana, Phantom | `sol · SOL-1` |
+| Arlo | Arbitrum, MetaMask | `arb · EVM-2` |
+| Nia | NEAR, a NEAR wallet | `near · bidder.tenderseal.near` |
+| Sam | Solana, Phantom | `sol · SOL-2` |
+| Ben | Base, MetaMask | `base · EVM-3` |
+
+Bea bridges a little over 5 USDC from Base into her own NEAR Intents account. Her browser seals "3.90 USDC per NEAR, for up to 4 USDC", and she signs one transfer that carries the sealed bid and 5 USDC of escrow. Nia's USDC is already on NEAR, so she skips the bridge.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Bea as Bea (MetaMask, Base)
+  actor Nia as Nia (NEAR wallet)
+  participant O as 1Click
+  participant I as NEAR Intents
+  participant C as Sale contract
+  Bea->>O: sends USDC on Base
+  O->>I: credits it, less its fee,<br/>to Bea's own Intents account
+  Note over Bea: seals 3.90 USDC per NEAR,<br/>for up to 4 USDC
+  Bea->>I: signs one transfer:<br/>5 USDC + sealed bid
+  I->>C: stores the bid, still sealed
+  Note over Nia: USDC already on NEAR, no bridge
+  Nia->>I: signs one transfer:<br/>3 USDC + sealed bid
+  I->>C: stores the bid, still sealed
+  Note over C: after 6 bids: 21 USDC escrowed,<br/>key_requests = 0
+```
+
+**The wall at close.** This is what Sam and everyone saw grow, one row per bid (Sam's is row 4), in step 2's output:
+
+```text
+idx origin                           escrow USDC  ct (160 B)            cm
+0   base · EVM-1                            5.00  gmDodKaIonkGoBVT…  f551bf5babf2…
+1   sol · SOL-1                             5.00  h6b1tvKIxqIpw8m9…  5254ce0bc204…
+2   arb · EVM-2                             3.00  leQ4zxpAWI/ZlOaU…  8c0894463402…
+3   near · bidder.tenderseal.near           3.00  mT0zFRaxPpRINN2Z…  4cd66e955bc6…
+4   sol · SOL-2                             3.00  pf0KKJnu/ALLR9Yq…  9bfe1c6463bd…
+5   base · EVM-3                            2.00  gEO3MMvnpwKpYuOS…  2b7ef1873fba…
+```
+
+Your run prints other ciphertexts and commitments: the salts are random. With `key_requests = 0`, no one has requested the key. What is public and what that rests on: [Trust and limits](#trust-and-limits).
+
+**The sale opens.** After close anyone, even you, calls `open`: 21 USDC ≥ 5 and 6 bidders ≥ 3, so the contract records the request and asks NEAR's MPC network for the sale's key.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Y as You (or anyone)
+  participant C as Sale contract
+  participant M as NEAR MPC network
+  participant K as Keeper (or anyone)
+  participant I as NEAR Intents
+  Y->>C: open sale 1, after close
+  Note over C: 21 USDC ≥ 5<br/>6 bidders ≥ 3<br/>ledger entry first:<br/>key_requests = 1
+  C->>M: asks for the sale key
+  M-->>C: key stored on chain, readable by anyone
+  Note over Y,K: anyone decrypts all 6 bids and checks each commitment
+  K->>C: reveals 6 bids, commitments 6/6
+  K->>C: finalize: one price, P* = 3.60 USDC/NEAR
+  C->>I: 7 payouts, one transfer each: wNEAR to 4 winners,<br/>10.800001 USDC to Priya, unspent USDC back
+```
+
+**Every bid opens without its bidder.** The key is public now, so Sam, you or anyone can decrypt all six bids and check each against its commitment (6/6). Our keeper reveals them, so no bidder has to come back. A bid left unrevealed when the window ends can be penalized ([rule](docs/protocol.md#clearing-and-penalty)).
+
+**One price.** Walk down from the highest price, adding up sizes, until the bids buy all 3 NEAR. Each box converts the sum to NEAR at that box's price:
+
+```mermaid
+flowchart TB
+  A["at 3.90: Bea, 4 USDC<br/>sum 4 USDC<br/>about 1.03 NEAR"] --> B["at 3.80: + Sofia, 3 USDC<br/>sum 7 USDC<br/>about 1.84 NEAR"]
+  B --> C["at 3.70: + Arlo, 3 USDC<br/>sum 10 USDC<br/>about 2.70 NEAR, short of 3"]
+  C --> D["at 3.60: + Nia, 2 USDC<br/>sum 12 USDC<br/>about 3.33 NEAR, covers 3"]
+  D --> P["P* = 3.60 USDC/NEAR<br/>every winner pays 3.60"]
+  D -.-> L["below 3.60:<br/>Sam 3.20, Ben 2.90<br/>all escrow back"]
+```
+
+Every winner pays 3.60, Bea too, though she bid 3.90; Nia, at exactly 3.60, gets what is left.
+
+| Bidder | Sealed bid (USDC/NEAR · size USDC) | Gets NEAR | Pays USDC | Back USDC |
+|---|---|---|---|---|
+| Bea | 3.90 · 4 | 1.11 | 4.00 | 1.00 |
+| Sofia | 3.80 · 3 | 0.83 | 3.00 | 2.00 |
+| Arlo | 3.70 · 3 | 0.83 | 3.00 | 0.00 |
+| Nia | 3.60 · 2 | 0.22 | 0.800001 | 2.199999 |
+| Sam | 3.20 · 3 | 0 | 0.00 | 3.00 |
+| Ben | 2.90 · 2, below the 3.00 reserve | 0 | 0.00 | 2.00 |
+
+Priya receives 10.800001 USDC, and none of her 3 NEAR comes back; 10.800001 + 10.199999 = 21 USDC, the escrow that came in. Nia's extra micro-USDC is rounding: the marginal bid's payment rounds up ([rule](docs/protocol.md#clearing-and-penalty)). NEAR is rounded here; step 2 prints 24 decimals.
+
+**Home again.** Each of the seven is paid into their own Intents account, and Bea takes her 1.00 USDC back to Base.
+
+**The twin sale.** Priya also runs sale 0, set up on purpose to fail its open conditions so it shows the cancel path ([how](#demo-sales)). One bidder puts in 1 USDC. After close an `open` call is refused: escrow below `min_escrow`. Anyone calls `cancel`; the bid comes back in full, so does Priya's 0.1 NEAR, and the contract never calls the MPC network ([what that means](#trust-and-limits)).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as A bidder
+  participant C as Sale contract (sale 0)
+  actor Y as You (or anyone)
+  participant M as NEAR MPC network
+  B->>C: 1 USDC sealed bid via NEAR Intents, stored
+  Y->>C: open, after close
+  C-->>Y: refused: escrow below min_escrow
+  Y->>C: cancel
+  C->>B: 1 USDC back in full, to the bidder's Intents account
+  Note over C: Priya's 0.1 NEAR goes back too
+  Note over M: not called: key_requests = 0
+```
+
+The twin's sandbox test is `s08_min_escrow_cancel_never_requested` (step 8): the same path with other numbers (1 NEAR for sale, `min_escrow` 50 USDC). The mechanics behind each beat: [How it works](#how-it-works), rows 1-9.
 
 ## Try it (free, no wallet)
 
@@ -17,7 +153,7 @@ Node 18 does not work, nor Node 20: the install stops with `ERR_PNPM_UNSUPPORTED
 </details>
 
 1. (network: GitHub, npm) `git clone https://github.com/kocality/tender && cd tender && corepack enable && pnpm install --filter "@tender/cli..."` - see `Scope: 4 of 7 workspace projects` and `Packages: +46`: the CLI and its libraries, no wallet SDKs.
-2. (offline) `pnpm demo:local` - see `P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6` and `done in` under a second: the [worked example](#how-it-works), sealed, opened and cleared on your machine. If you run only one step, run this one.
+2. (offline) `pnpm demo:local` - see `P* = 3.60 USDC/NEAR · 6/6 bids decrypted · commitments 6/6` and `done in` under a second: [the story's sale](#the-story), sealed, opened and cleared on your machine. If you run only one step, run this one.
 3. (offline) `pnpm vectors` - see `4 passed (4)`: the near/mpc CKD test vectors.
 4. (offline) `node contract/scripts/check-imports.mjs contract/res/tender.wasm` - see `PASS 24 imports`: none can add a key, deploy code or delete the account.
 5. (network: testnet RPC) `curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"rc2.tender-339e4b.testnet"}}'`, then the same with `"request_type":"view_access_key_list"` - see `"code_hash":"7Wr8DDsDA9XYJMw48HwDg4Y5vbWLwd38EN2A9trAezDv"` (the base58 form of step 9's sha256) and `"keys":[]`.
@@ -49,8 +185,8 @@ Every check and flag: [docs/verify.md](docs/verify.md).
 ## How it works
 
 ```mermaid
-flowchart LR
-  W["Bidder wallet<br/>on its own chain"] -- "1 deposit" --> I["Bidder's NEAR Intents account<br/>intents.near"]
+flowchart TB
+  W["Bidder wallet<br/>on its own chain"] -- "1 deposit" --> I["Bidder's Intents account"]
   I -- "3 bid" --> C["Locked sale contract<br/>v1.tenderseal.near"]
   A["Anyone: keeper, bidder, you"] -- "5 open" --> C
   C -- "5 request key" --> M["NEAR MPC network<br/>v1.signer, domain 2"]
@@ -61,7 +197,7 @@ flowchart LR
   I -- "9 withdraw" --> W
 ```
 
-Edge numbers are the table rows.
+Edge numbers are the table rows; rows 2 and 4 happen inside the wallet and the contract.
 
 | # | What happens | Funds sit in |
 |---|---|---|
@@ -75,7 +211,19 @@ Edge numbers are the table rows.
 | 8 | **Cancel.** `cancel` ([rule](docs/protocol.md#sale-states)). | back in the bidders' Intents accounts |
 | 9 | **Withdraw.** Back to an origin chain through a 1Click quote; recorded: [S5](JUDGES.md#mainnet-spikes-before-the-contract). | the bidder's wallet |
 
-Worked example (sale 1, from `fixtures/clearing/demo-sale-1.json`). A bid's size is the USDC it spends if it wins in full; its escrow `B` is at least that, and whatever it does not spend is refunded. The sale sells 3 NEAR with a reserve of 3.00 USDC per NEAR. Six sealed bids offer 4, 3, 3, 2, 3 and 2 USDC at 3.90, 3.80, 3.70, 3.60, 3.20 and 2.90 USDC per NEAR. The price is the highest one at which the bids at or above it buy all 3 NEAR: at 3.70 their 10 USDC buy about 2.7 NEAR, at 3.60 their 12 USDC buy about 3.3, so every winner pays 3.60. The 3.60 bid gets the remaining 0.22 NEAR for 0.800001 USDC, and the 3.20 and 2.90 bids lose.
+```mermaid
+stateDiagram-v2
+  [*] --> Open: create
+  Open --> Open: key error, retry open
+  Open --> Keyed: key stored
+  Keyed --> Keyed: reveal, in the window
+  Keyed --> Finalized: finalize, window over or all revealed
+  Open --> Cancelled: cancel, conditions failed and never requested, or 24 h after close with no key
+  Finalized --> [*]
+  Cancelled --> [*]
+```
+
+Sale 1 in the story runs Open → Keyed → Finalized; its twin, sale 0, runs Open → Cancelled. The exact rules: [protocol › Sale states](docs/protocol.md#sale-states).
 
 ### NEAR technologies used
 
@@ -99,16 +247,34 @@ Worked example (sale 1, from `fixtures/clearing/demo-sale-1.json`). A bid's size
 | Shutter API | yes | a time or an on-chain event | the Keyper network | Gnosis Chain | [quotes](docs/compare.md#shutter-api) |
 | MACI | yes, except from the coordinator | the coordinator | the coordinator | Ethereum (voting, not a sale) | [quotes](docs/compare.md#maci) |
 
-Plain commit-reveal needs every bidder to come back, and a bidder who sees the other reveals can withhold their own; here the key, not the bidder, opens each bid, except one sealed as garbage ([Limits](#trust-and-limits)). What we found nowhere else is the combination: the chain's existing MPC network as the key holder, a locked contract as the only requester ([proof](JUDGES.md#claims-and-where-to-check-them)), an on-chain record of every key it got, and escrow plus settlement in the same contract. Morrowseal, in this hackathon, also releases a key from a NEAR contract on a condition; its key holder is an OutLayer TEE and its key stays private ([quote](docs/compare.md#morrowseal)). Tender requests with a public app key, so the released key is public; on 2026-11-10 no other `v1.signer` CKD caller's latest request did ([docs/ckd-callers.md](docs/ckd-callers.md)).
+- **Against plain commit-reveal.** There every bidder must come back, and a bidder who sees the other reveals can withhold their own. How Tender avoids both: [the story](#the-story); the one exception: [Limits](#trust-and-limits).
+- **The combination we found nowhere else:** the chain's existing MPC network as the key holder, [the only-requester rule](#trust-and-limits), an on-chain record of every key it got, and escrow plus settlement in the same contract.
+- **Closest in this hackathon: Morrowseal.** It also releases a key from a NEAR contract on a condition; its key holder is an OutLayer TEE and its key stays private ([quote](docs/compare.md#morrowseal)). Tender requests with a public app key, so the released key is public; on 2026-11-10 no other `v1.signer` CKD caller's latest request did ([docs/ckd-callers.md](docs/ckd-callers.md)).
 
 ## Trust and limits
 
-Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs. Resharing does not revoke old shares, so the threshold counts every party that holds or ever held a share of the domain-2 key. The salt is sealed too. Public from the start: each bid's escrow cap `B`, the bidder's Intents account, the time, total escrow, the bidder count and the origin-chain deposit transactions; the origin badge is self-declared. After release everything is public.
+Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs. Resharing does not revoke old shares, so the threshold counts every party that holds or ever held a share of the domain-2 key.
+
+| Sealed until the key is released | Public from the start |
+|---|---|
+| each bid's price, size and salt | each bid's escrow cap `B`, the bidder's Intents account and the time; total escrow and the bidder count; the origin-chain deposit transactions (the origin badge is self-declared) |
+
+After release everything is public.
+
+```mermaid
+flowchart LR
+  T["v1.tenderseal.near<br/>keyless,<br/>no upgrade method"] -- "sale 1's path" --> M["NEAR MPC network<br/>derives the key for<br/>app_id(caller, path)"]
+  O["Any other account,<br/>us included"] -- "the same path" --> M
+  M -- "to v1.tenderseal.near" --> K1["sale 1's key:<br/>decrypts sale 1's bids"]
+  M -- "to the other account" --> K2["a different key:<br/>decrypts nothing in sale 1"]
+```
+
+This is row 2 of the table below; the proof is the JUDGES claim row [Only `v1.tenderseal.near` can get this key](JUDGES.md#claims-and-where-to-check-them).
 
 | You rely on | For | If it breaks |
 |---|---|---|
 | The MPC threshold above | bids unreadable before release | bids are read early, and nothing on chain shows it; escrow stays in the contract |
-| `app_id` is derived from the calling account. `v1.tenderseal.near` is created keyless, with no upgrade method. Every sale path carries a random seed generated after the contract existed. | the only-requester rule ([above](#how-it-compares)) | someone else could request it and read the bids early |
+| `app_id` is derived from the calling account. `v1.tenderseal.near` is created keyless, with no upgrade method. Every sale path carries a random seed generated after the contract existed. | the only-requester rule (diagram above) | someone else could request it and read the bids early |
 | Contract `open` and the reproducible build | the [open-conditions rule](JUDGES.md#claims-and-where-to-check-them) | a sale could be decrypted without meeting its conditions |
 | NEAR MPC liveness | the key arrives | the sale can be cancelled (row 8 above) |
 | Someone revealing within the window | bids get revealed | an unrevealed bid can pay the [row 7 penalty](#how-it-works) |
@@ -117,7 +283,10 @@ Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verif
 | Our hosted JavaScript bundle | encryption in your browser | a malicious bundle could leak your price before sealing; seal locally with `pnpm seal:bid` |
 | Nobody: `execute_intents` is permissionless | relaying | if our relayer refuses you, relay elsewhere ([what our relayer keeps](docs/protocol.md#off-chain-services)) |
 
-Limits (mechanics: [docs/protocol.md](docs/protocol.md)):
+<details><summary>Limits: what an attacker can still do, and what we do not claim (10)</summary>
+
+Mechanics: [docs/protocol.md](docs/protocol.md).
+
 - **Open conditions are not prices.** Anyone with capital can push a weak sale over its thresholds with below-reserve bids, get refunded, and make every bid decrypt. `min_bidders` counts distinct Intents accounts, which are cheap to create, so it gives no Sybil resistance.
 - **No decrypt check on chain.** `reveal` checks the commitment, not that the ciphertext decrypts. A bidder who seals garbage under a valid commitment gets a last look: once the other bids open, they reveal from their own bid file or withhold, at the cost of the [row 7 penalty](#how-it-works); the escrow is the bond.
 - **No receipt-freeness:** the salt lets a bidder prove a bid to a briber, unlike MACI.
@@ -129,15 +298,17 @@ Limits (mechanics: [docs/protocol.md](docs/protocol.md)):
 - **Price ceiling.** A token with 9 or fewer decimals has a [price ceiling](docs/protocol.md#clearing-and-penalty); wNEAR (24 decimals) and JAMBO (18) have none in practice.
 - **Deployment.** No audit; [sale creation is restricted](docs/protocol.md#sale-states).
 
+</details>
+
 ## Demo sales
 
 Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | Sale | What it shows | Rows |
 |---|---|---|
-| 0 | Configured by us to fail its thresholds: its `min_escrow` (1,000,000.000001 USDC) is above the contract's per-sale escrow cap, so it can never open. | M02-M05 |
-| 1 | The worked example: 6 bids from 4 chains; Decrypt in the browser (step 17). | M06-M16; testnet stand-ins: [T1, T2](JUDGES.md#testnet) |
-| 2 | JAMBO, a meme.cooking token, sold in a sealed round that closes inside the judging window (step 12). | M18-M22 |
+| 0 | The story's twin. Configured by us to fail its thresholds: its `min_escrow` (1,000,000.000001 USDC) is above the contract's per-sale escrow cap, so it can never open. | [M02-M05](JUDGES.md#mainnet-tender) |
+| 1 | [The story's sale](#the-story): 6 bids from 4 chains; Decrypt in the browser (step 17). | [M06-M16](JUDGES.md#mainnet-tender); testnet stand-ins: [T1, T2](JUDGES.md#testnet) (Solana and Base signatures; no Arbitrum bid is recorded yet) |
+| 2 | JAMBO, a meme.cooking token, sold in a sealed round that closes inside the judging window (step 12). | [M18-M22](JUDGES.md#mainnet-tender) |
 | 3 | Bad bids: garbage, copied and late (step 15). | [JUDGES.md › Attack room](JUDGES.md#attack-room) |
 
 ## Build and test evidence

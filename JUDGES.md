@@ -31,7 +31,7 @@ Raw RPC responses: `evidence/rpc/` (snapshot, not live). Machine-readable rows: 
 | M03 | sale 0: one 1 USDC bid | stored sealed | pending |
 | M04 | sale 0: `open` | panics: escrow below `min_escrow` | pending |
 | M05 | sale 0: `cancel` | `Cancelled`, `key_requests = 0` | pending |
-| M06 | sale 1: create | the README worked example | pending |
+| M06 | sale 1: create | the sale in [README › The story](README.md#the-story) | pending |
 | M07 | sale 1: bid, origin base | stored sealed | pending |
 | M08 | sale 1: bid, origin sol | stored sealed | pending |
 | M09 | sale 1: bid, origin arb | stored sealed | pending |
