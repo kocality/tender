@@ -213,7 +213,8 @@ for (const cmd of ['demo:local', 'vectors']) {
   test(`CLM-07: offline step pnpm ${cmd} prints every string the README promises`, { skip: !hasPnpm }, () => {
     const r = spawnSync('pnpm', [cmd], { cwd: repo, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
-    const out = r.stdout + r.stderr;
+    // CI forces colour; vitest then splits '4 passed (4)' with escape codes
+    const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
     for (const text of [readme()]) {
       const strings = seeStrings(stepLine(text, cmd));
       assert.ok(strings.length >= 1, `step pnpm ${cmd} names what to see`);
