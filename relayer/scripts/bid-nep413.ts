@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { KeyPair, KeyPairSigner } from "near-api-js";
 import {
-  b58encode, bidMsg, blockTimestampNs, buildPayload, buildVersionedNonce, currentSalt, fromBase64, makeDeadline, mtBalanceOf,
-  nep413FromWallet, nep413Message, payloadString, simulateIntents, transferIntent,
+  b58encode, bidMsg, bidNonce, bidNonceDeadlineMs, blockTimestampNs, buildPayload, buildVersionedNonce, currentSalt, fromBase64, isNonceUsed, isValidSalt, makeDeadline, mtBalanceOf,
+  nep413FromWallet, nep413Message, payloadString, simulateIntents, toBase64, transferIntent,
   type BidOrigin, type DefusePayload, type MultiPayload,
 } from "@tender/intents";
 import { MPC_DOMAIN2_PK, commitmentHex, sealBid } from "@tender/seal";
@@ -14,16 +14,18 @@ import type { SaleTag, Step } from "./lib/evidence.js";
 import { loadKeyPair, type KeyPairString } from "./lib/keys.js";
 import { RPC } from "./lib/rpc.js";
 import { explorer, gasBalanceProblem, makeAccount, sendStep } from "./lib/send.js";
-import { spendableBalance } from "../src/near.js";
+import { recordSigned, spendableBalance } from "../src/near.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 import { getBids, getConfig, getSale, type BidView, type ConfigView, type SaleView } from "./lib/views.js";
 
 const usage = `usage:
   tsx scripts/bid-nep413.ts --sale <id> --price <USDC per 10^lot_exp tokens> --size <USDC> --escrow <USDC>
     [--signer bidder.tenderseal.near] [--origin near] [--network mainnet|testnet] [--contract <id>]
-    [--sealed <seal:bid json>] [--via-relay <url>] [--late] [--tag R|0|1|2|3] [--yes]
+    [--sealed <seal:bid json>] [--via-relay <url>] [--late] [--additional] [--tag R|0|1|2|3] [--yes]
   Signs one Intents Transfer with the signer's NEAR key (nep413) and submits it. Dry-run unless --yes.
-  With --sealed, --price and --size are not needed: ct, cm and the escrow come from that file.`;
+  With --sealed, --price and --size are not needed: ct, cm, seq, the Intents salt and the escrow come from that file.
+  A sealed bid has one Intents nonce, so running it again can never place it twice; a bid the chain already shows is not sent.
+  --additional: send a different bid although the signer already has one in this sale (a second bid on purpose).`;
 
 const MIN_BID = 1_000_000n; // micro-USDC
 const ORIGIN_RE = /^[\x21-\x7e]{1,8}$/;
@@ -40,6 +42,14 @@ export interface Submitted {
   signer: string; // the account that signed the NEAR transaction (the bidder, or the relayer when --via-relay)
 }
 
+/** The send may have landed (a transaction was signed, or the relayer answered 202 execute_unknown): never send the same bid again with a new nonce. */
+export class SendUnknown extends Error {
+  constructor(readonly hashes: string[], readonly sender?: string, readonly until?: string) {
+    super(`the send may have landed: ${hashes.join(", ") || "no hash"}`);
+    this.name = "SendUnknown";
+  }
+}
+
 /** Everything that touches the network or a key. Tests pass a fake. */
 export interface BidEnv {
   config(): Promise<ConfigView>;
@@ -51,6 +61,10 @@ export interface BidEnv {
   spendable(account: string): Promise<bigint>;
   intentsKeys(intents: string, account: string): Promise<string[]>;
   currentSalt(intents: string): Promise<string>;
+  /** Whether intents.near still accepts this salt (8 hex). */
+  saltValid(intents: string, salt: string): Promise<boolean>;
+  /** Whether the account's nonce (base64) was already executed. */
+  nonceUsed(intents: string, account: string, nonceB64: string): Promise<boolean>;
   simulate(intents: string, mp: MultiPayload): Promise<{ ok: true } | { ok: false; kind: string; message: string }>;
   /** `null` when the signer has no key on this machine. */
   secretKey(signer: string): KeyPairString | null;
@@ -77,6 +91,8 @@ export function liveEnv(c: Common): BidEnv {
     spendable: (account) => spendableBalance(urls, account),
     intentsKeys: (intents, account) => intentsPublicKeys(c.network, intents, account),
     currentSalt: (intents) => currentSalt(urls, intents),
+    saltValid: (intents, salt) => isValidSalt(urls, intents, salt),
+    nonceUsed: (intents, account, nonce) => isNonceUsed(urls, intents, account, nonce),
     simulate: (intents, mp) => simulateIntents(urls, intents, [mp]),
     secretKey(signer) {
       try {
@@ -88,12 +104,21 @@ export function liveEnv(c: Common): BidEnv {
     },
     async execute(signer, intents, mp) {
       const step: CallStep = { signer, receiver: intents, method: "execute_intents", args: { signed: [mp] }, deposit: "0 NEAR", gasTgas: 300, network: c.network };
-      const r = await sendStep(makeAccount(c.network, signer, c.rpc), step, c.rpc);
+      const account = makeAccount(c.network, signer, c.rpc);
+      const rec = recordSigned(account);
+      let r;
+      try {
+        r = await sendStep(account, step, c.rpc, rec.signer);
+      } catch (e) {
+        if (rec.hashes.length) throw new SendUnknown(rec.hashes, signer);
+        throw e;
+      }
       return { hash: r.hash, ok: r.ok, block: r.block, logs: r.logs, status: r.status, signer };
     },
     async relay(url, mp) {
       const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signed: [mp] }), signal: AbortSignal.timeout(60_000) });
       const body: any = await res.json().catch(() => ({}));
+      if (res.status === 202) throw new SendUnknown(Array.isArray(body.txHashes) ? body.txHashes.map(String) : [], body.sender ?? undefined, body.until);
       if (!res.ok) throw new Error(`relay answered ${res.status}: ${body.error ?? "?"}${body.detail ? ` · ${body.detail}` : ""}`);
       const health: any = await fetch(url, { signal: AbortSignal.timeout(30_000) }).then((r) => r.json()).catch(() => ({}));
       return { hash: String(body.txHash), ok: true, logs: [], signer: String(health.relayer ?? "") };
@@ -124,6 +149,8 @@ export interface SealedFile {
   cm: string;
   escrow: string; // micro-USDC
   origin: string | null;
+  seq?: number; // how many bids the signer had in this sale when the bid was sealed
+  intents_salt?: string; // the Intents salt the bid's nonce was derived with (8 hex)
   salt?: string;
   p?: string;
   q?: string;
@@ -145,6 +172,10 @@ export function loadSealedFile(path: string, want: { sale: string; escrow: bigin
   if (f.contract !== undefined && f.contract !== want.contract) throw new Error(`--sealed file is for contract ${f.contract}, not ${want.contract}`);
   if (typeof f.ct !== "string" || fromBase64(f.ct).length !== 160 || f.ct.length !== 216) throw new Error("--sealed ct must be base64 (standard, padded) of exactly 160 bytes");
   if (typeof f.cm !== "string" || !/^[0-9a-f]{64}$/.test(f.cm)) throw new Error("--sealed cm must be 64 lowercase hex characters");
+  if (f.seq === undefined) throw new Error("--sealed file has no seq: it was made by an older seal:bid; re-run pnpm seal:bid");
+  if (!Number.isInteger(f.seq) || f.seq < 0 || f.seq > 0xffff) throw new Error("--sealed seq must be an integer from 0 to 65535");
+  if (f.intents_salt === undefined) throw new Error("--sealed file has no intents_salt: it was made by an older seal:bid; re-run pnpm seal:bid");
+  if (typeof f.intents_salt !== "string" || !/^[0-9a-f]{8}$/.test(f.intents_salt)) throw new Error("--sealed intents_salt must be 8 lowercase hex characters");
   if (f.p !== undefined && f.q !== undefined && f.salt !== undefined) {
     const again = commitmentHex({ sale: BigInt(want.sale), bidder: want.signer, B: want.escrow, p: BigInt(f.p), q: BigInt(f.q), salt: Uint8Array.from(Buffer.from(f.salt, "hex")) });
     if (again !== f.cm) throw new Error("--sealed file: cm does not match (sale, signer, escrow, p, q, salt); refusing to send a bid that cannot be revealed");
@@ -152,17 +183,23 @@ export function loadSealedFile(path: string, want: { sale: string; escrow: bigin
   return f;
 }
 
-/** The bid transfer, with the msg the contract parses (op, sale, ct, cm, origin). */
+/**
+ * The bid transfer, with the msg the contract parses (op, sale, ct, cm, origin, seq).
+ * With `closeNs` the nonce is the one nonce of this sealed bid (bidNonce) and the payload deadline never passes its deadline (close - 60 s);
+ * without it (a deliberate --late bid) the nonce is random and the deadline is 10 minutes.
+ */
 export async function buildBidPayload(o: {
   signer: string; intents: string; contract: string; token: string; amount: bigint; sale: string; ct: string; cm: string; origin: string;
-  saltHex: string; nowMs?: number; closeMs?: number;
+  saltHex: string; seq?: number; nowMs?: number; closeNs?: bigint;
 }): Promise<{ payload: DefusePayload; nonce32: Uint8Array; msg: string }> {
-  const msg = bidMsg({ sale: o.sale, ct: o.ct, cm: o.cm, origin: o.origin as BidOrigin });
+  const msg = bidMsg({ sale: o.sale, ct: o.ct, cm: o.cm, origin: o.origin as BidOrigin, seq: o.seq });
   if (Buffer.byteLength(msg) > 512) throw new Error("bid msg is longer than 512 bytes");
-  // 10 minutes from `nowMs` (chain time; the local clock only when the caller gives none), and never past a minute before close
+  // 10 minutes from `nowMs` (chain time; the local clock only when the caller gives none), and never past the nonce deadline
   const nowMs = o.nowMs ?? Date.now();
-  const { deadlineMs, deadlineIso } = makeDeadline(nowMs, o.closeMs === undefined ? 600_000 : Math.min(600_000, o.closeMs - CLOSE_MARGIN_MS - nowMs));
-  const nonce32 = buildVersionedNonce({ saltHex: o.saltHex, deadlineMs });
+  const { deadlineMs, deadlineIso } = makeDeadline(nowMs, 600_000, o.closeNs === undefined ? Infinity : bidNonceDeadlineMs(o.closeNs));
+  const nonce32 = o.closeNs === undefined
+    ? buildVersionedNonce({ saltHex: o.saltHex, deadlineMs })
+    : bidNonce({ saltHex: o.saltHex, closeNs: o.closeNs, contract: o.contract, sale: o.sale, signer: o.signer, cm: o.cm });
   const intent = transferIntent({ receiverId: o.contract, tokenId: o.token, amount: o.amount, msg });
   const payload = buildPayload({ signerId: o.signer, verifyingContract: o.intents, deadlineIso, nonce: nonce32, intents: [intent] });
   return { payload, nonce32, msg };
@@ -199,7 +236,7 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
   try {
     parsed = parseCommon(argv, {
       sale: { type: "string" }, price: { type: "string" }, size: { type: "string" }, escrow: { type: "string" }, signer: { type: "string" },
-      origin: { type: "string" }, sealed: { type: "string" }, "via-relay": { type: "string" }, late: { type: "boolean" }, tag: { type: "string" },
+      origin: { type: "string" }, sealed: { type: "string" }, "via-relay": { type: "string" }, late: { type: "boolean" }, additional: { type: "boolean" }, tag: { type: "string" },
     });
   } catch (e) {
     io.err(`error: ${(e as Error).message}\n${usage}`);
@@ -244,24 +281,36 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     const unit = 10n ** BigInt(sale.lot_exp);
     io.out(`sale ${saleId} on ${common.contract}: ${sale.state}, closes ${new Date(Number(BigInt(sale.close_ns) / 1_000_000n)).toISOString()}${late ? " (LATE bid on purpose)" : ""}`);
 
-    // ct / cm
+    // ct / cm / seq / the Intents salt the nonce is derived with
     let ct: string;
     let cm: string;
     let bidOrigin = origin;
     let savedTo: string;
+    let seq: number;
+    let saltHex: string;
+    const closeNs = BigInt(sale.close_ns);
     if (sealedPath) {
       const f = loadSealedFile(sealedPath, { sale: saleId, escrow: B, signer, contract: common.contract });
       ct = f.ct;
       cm = f.cm;
+      seq = f.seq as number;
+      saltHex = f.intents_salt as string;
       if (str("origin") === undefined && f.origin) bidOrigin = f.origin;
       savedTo = sealedPath;
     } else {
+      // the signer's bids already stored in this sale: a second, different bid is allowed only on purpose
+      seq = (await env.bids(saleId)).filter((b) => b.bidder === signer).length;
+      saltHex = await env.currentSalt(config.intents);
+      if (seq > 0 && !late) {
+        io.out(`NOTE ${signer} already has ${seq} bid(s) in sale ${saleId}; this would be an additional bid (seq ${seq})`);
+        if (!common.dryRun && parsed.values.additional !== true) throw new Error(`${signer} already has ${seq} bid(s) in sale ${saleId}: to place a second bid on purpose pass --additional; to send the bid you sealed before, pass --sealed <file>`);
+      }
       const sealed = sealBid({ mpk: config.mpc_public_key, contract: common.contract, path: sale.path, sale: BigInt(saleId), bidder: signer, B, p, q });
       ct = sealed.ct_b64;
       cm = sealed.cm_hex;
       savedTo = writeBidFile(deps.bidsDir ?? defaultBidsDir(), `${saleId}-${signer}-${utcStamp()}.json`, {
         sale: saleId, contract: common.contract, network: common.network, signer, ct, cm, salt: sealed.salt_hex,
-        p: p.toString(), q: q.toString(), escrow: B.toString(), origin: bidOrigin,
+        p: p.toString(), q: q.toString(), escrow: B.toString(), origin: bidOrigin, seq, intents_salt: saltHex,
       });
       io.out(`p = ${p} micro-USDC per ${unit} token(s) · q = ${q} micro-USDC · escrow = ${B} micro-USDC (${fromUnits(B, 6)} USDC)`);
       if (q === B) io.out("note: --escrow equals --size: the escrow is public the moment the bid lands, so the size is public too; use an escrow above the size");
@@ -269,6 +318,25 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     }
     io.out(`sealed bid file (plaintext p, q, salt; local only, never commit): ${savedTo}`);
     if (!sealedPath) io.out(`to send exactly this bid later: re-run with --sealed ${savedTo}`);
+
+    // What the chain already shows comes before anything else: after the bid landed the escrow is spent, and the nonce is used.
+    if (sealedPath && !late) {
+      if (!(await env.saltValid(config.intents, saltHex))) {
+        const fresh = await env.currentSalt(config.intents);
+        io.out(`NOTE the file's Intents salt ${saltHex} is no longer valid; signing with the current salt ${fresh}, so the nonce differs from any earlier signature (the contract's dup_bid still refuses a second copy)`);
+        saltHex = fresh;
+      }
+      const nonceB64 = toBase64(bidNonce({ saltHex, closeNs, contract: common.contract, sale: saleId, signer, cm }));
+      const used = await env.nonceUsed(config.intents, signer, nonceB64);
+      const rows = (await env.bids(saleId)).filter((b) => b.bidder === signer);
+      const stored = rows.find((b) => b.cm === cm);
+      if (stored) {
+        io.out(`OK already stored as bid idx ${stored.idx}; nothing sent`);
+        return 0;
+      }
+      if (used) throw new Error(`the nonce of this bid was already used, but no bid of yours with this commitment is stored in sale ${saleId}: an earlier send is still running, or intents.near ran it and ${common.contract} refunded it. Do not send it again; look its transaction up, then re-run to see what the chain shows`);
+      if (rows.length > seq) throw new Error(`you already have ${rows.length} bid(s) in sale ${saleId}; this bid was prepared when you had ${seq}, so the contract would refund it (bid_seq). Run pnpm seal:bid again: it takes the current count`);
+    }
 
     // funding and key registration
     const have = await env.balance(config.intents, signer, sale.quote_token);
@@ -286,11 +354,12 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     // payload, signature, simulate
     const { payload, nonce32 } = await buildBidPayload({
       signer, intents: config.intents, contract: common.contract, token: sale.quote_token, amount: B, sale: saleId, ct, cm, origin: bidOrigin,
-      saltHex: await env.currentSalt(config.intents),
+      saltHex, seq,
       nowMs: Number((await env.nowNs()) / 1_000_000n), // chain time, not the local clock (X12-01)
-      ...(late ? {} : { closeMs: Number(BigInt(sale.close_ns) / 1_000_000n) }),
+      ...(late ? {} : { closeNs }),
     });
     io.out(`payload (unsigned): ${payloadString(payload)}`);
+    if (!late) io.out(`nonce (one per sealed bid, the same on every signing): ${toBase64(nonce32)}`);
     let mp: MultiPayload | null = null;
     if (secret) {
       mp = await signNep413(secret, signer, payload, nonce32);
@@ -318,7 +387,15 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
     if (!mp) throw new Error("internal: no signed payload");
 
     const bidsBefore = (await env.bids(saleId)).length;
-    const r = relayUrl ? await env.relay(relayUrl, mp) : await env.execute(signer, config.intents, mp);
+    let r: Submitted;
+    try {
+      r = relayUrl ? await env.relay(relayUrl, mp) : await env.execute(signer, config.intents, mp);
+    } catch (e) {
+      if (!(e instanceof SendUnknown)) throw e;
+      io.err(`UNKNOWN the send may have landed: ${e.hashes.map((h) => `${h} (${explorer(common.network, h)})`).join(", ") || "no hash"}${e.sender ? ` · sender ${e.sender}` : ""}`);
+      io.err(`do not re-run before ${e.until ?? payload.deadline}: the signed payload can still be executed until then. Re-running with --sealed ${savedTo} is safe (same nonce, intents.near runs it once); the bid is stored when get_bids shows its cm`);
+      return 1;
+    }
     io.out(`tx=${r.hash} status=${r.ok ? "SuccessValue" : "Failure"}${r.block !== undefined ? ` block=${r.block}` : ""} url=${explorer(common.network, r.hash)}`);
     const tag = saleTag(str("tag"), saleId, common.contract);
     // What the chain shows, before anything is recorded: a tx that succeeded at top level can still be a refund (S-05).

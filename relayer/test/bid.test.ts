@@ -2,10 +2,10 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KeyPair } from "near-api-js";
-import { describe, expect, it } from "vitest";
-import { b58decode, fromBase64, nep413Prehash, type MultiPayload } from "@tender/intents";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { b58decode, bidNonce, fromBase64, nep413Prehash, toBase64, type MultiPayload } from "@tender/intents";
 import { MPC_DOMAIN2_PK, commitmentHex, sealBid } from "@tender/seal";
-import { buildBidPayload, loadSealedFile, main, refundProblem, signNep413, windowProblem, type BidEnv, type Submitted } from "../scripts/bid-nep413.js";
+import { SendUnknown, buildBidPayload, liveEnv, loadSealedFile, main, refundProblem, signNep413, windowProblem, type BidEnv, type Submitted } from "../scripts/bid-nep413.js";
 import type { BidView, SaleView } from "../scripts/lib/views.js";
 import { bidView, configView, saleView } from "./helpers/views.js";
 
@@ -19,15 +19,18 @@ const baseSale = (over: Partial<SaleView> = {}): SaleView => saleView({
   id: "3", close_ns: (NOW_NS + 3_600_000_000_000n).toString(), path: "tender/3/00112233445566778899aabbccddeeff", lot_exp: 0, ...over,
 });
 
-interface Fake { env: BidEnv; calls: string[]; sent: MultiPayload[]; bids: BidView[]; balance: { v: bigint }; keys: { v: string[] }; recorded: Array<Parameters<BidEnv["record"]>[0]> }
+interface Fake { env: BidEnv; calls: string[]; sent: MultiPayload[]; bids: BidView[]; balance: { v: bigint }; keys: { v: string[] }; recorded: Array<Parameters<BidEnv["record"]>[0]>; now: { ns: bigint }; usedNonces: Set<string>; salt: { valid: boolean } }
 
-function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; native?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean; foreignAfter?: boolean } = {}): Fake {
+function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: bigint; native?: bigint; registered?: boolean; simulateFails?: boolean; refund?: boolean; foreignAfter?: boolean; executeUnknown?: string[]; relayUnknown?: string[] } = {}): Fake {
   const kp = o.secret === undefined ? KeyPair.fromRandom("ed25519") : o.secret;
   const calls: string[] = [];
   const sent: MultiPayload[] = [];
   const bids: BidView[] = [];
   const recorded: Fake["recorded"] = [];
   const balance = { v: o.balance ?? 10_000_000n };
+  const now = { ns: NOW_NS };
+  const usedNonces = new Set<string>();
+  const salt = { valid: true };
   const keys = { v: kp && o.registered !== false ? [kp.getPublicKey().toString()] : [] };
   const cmOf = (mp: MultiPayload) => {
     if (mp.standard !== "nep413") throw new Error("expected nep413");
@@ -37,11 +40,13 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
     config: async () => configView({ mpc_public_key: MPC_DOMAIN2_PK.mainnet }),
     sale: async () => baseSale(o.sale),
     bids: async () => bids,
-    nowNs: async () => NOW_NS,
+    nowNs: async () => now.ns,
     balance: async () => balance.v,
     spendable: async () => o.native ?? 5n * 10n ** 24n,
     intentsKeys: async () => keys.v,
     currentSalt: async () => "252812b3",
+    saltValid: async () => salt.valid,
+    nonceUsed: async (_i, _a, nonce) => usedNonces.has(nonce),
     simulate: async (_i, mp) => {
       calls.push("simulate");
       sent.push(mp);
@@ -50,6 +55,8 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
     secretKey: () => (kp ? (kp.toString() as `ed25519:${string}`) : null),
     execute: async (signer, _i, mp): Promise<Submitted> => {
       calls.push("execute");
+      if (o.executeUnknown) throw new SendUnknown(o.executeUnknown, signer);
+      if (mp.standard === "nep413") usedNonces.add(mp.payload.nonce);
       if (o.refund) balance.v = balance.v; // escrow debited, then refunded: balance unchanged
       else bids.push(bidView({ idx: bids.length, bidder: signer, ct: "", cm: cmOf(mp), origin: "near" }));
       if (o.foreignAfter) bids.push(bidView({ idx: bids.length, bidder: "someone.near", ct: "", cm: "f".repeat(64), origin: "near" })); // another bidder lands right after ours
@@ -57,6 +64,7 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
     },
     relay: async () => {
       calls.push("relay");
+      if (o.relayUnknown) throw new SendUnknown(o.relayUnknown, "relayer.tenderseal.near", "2026-11-07T08:10:00.000Z");
       return { hash: "HASH2", ok: true, logs: [], signer: "relayer.tenderseal.near" };
     },
     record: async (row) => {
@@ -65,7 +73,7 @@ function fake(o: { sale?: Partial<SaleView>; secret?: KeyPair | null; balance?: 
     },
     sleep: async () => {},
   };
-  return { env, calls, sent, bids, balance, keys, recorded };
+  return { env, calls, sent, bids, balance, keys, recorded, now, usedNonces, salt };
 }
 
 async function run(args: string[], f: Fake, dir = mkdtempSync(join(tmpdir(), "bid-"))) {
@@ -120,7 +128,8 @@ describe("bid payload", () => {
     expect(t.min_gas).toBe("30000000000000");
     expect(typeof t.msg).toBe("string");
     const msg = JSON.parse(t.msg);
-    expect(Object.keys(msg)).toEqual(["op", "sale", "ct", "cm", "origin"]);
+    expect(Object.keys(msg)).toEqual(["op", "sale", "ct", "cm", "origin", "seq"]);
+    expect(msg.seq).toBe(0);
     expect(msg.op).toBe("bid");
     expect(msg.sale).toBe("3");
     expect(msg.origin).toBe("near");
@@ -230,7 +239,7 @@ describe("--sealed", () => {
     const salt = Uint8Array.from({ length: 16 }, (_, i) => i + 1);
     const s = sealBid({ mpk: MPC_DOMAIN2_PK.mainnet, contract: CONTRACT, path: "tender/v1/3", sale: 3n, bidder: SIGNER, B: 3_000_000n, p: 3_600_000n, q: 2_000_000n, salt });
     const file = join(dir, "bid.json");
-    writeFileSync(file, JSON.stringify({ sale: "3", contract: CONTRACT, signer: SIGNER, ct: s.ct_b64, cm: s.cm_hex, salt: s.salt_hex, p: "3600000", q: "2000000", escrow: "3000000", origin: null, ...over }));
+    writeFileSync(file, JSON.stringify({ sale: "3", contract: CONTRACT, signer: SIGNER, ct: s.ct_b64, cm: s.cm_hex, salt: s.salt_hex, p: "3600000", q: "2000000", escrow: "3000000", origin: null, seq: 0, intents_salt: "252812b3", ...over }));
     return { file, s };
   };
 
@@ -397,5 +406,205 @@ describe("what is recorded, and when (S-05, SC-06)", () => {
     const r = await run(["--sale", "3", "--price", "1", "--size", "1", "--escrow", "3", "--signer", SIGNER, "--contract", CONTRACT], fake({ sale: { reserve: "3000000" } }));
     expect(r.out).toMatch(/refunded in full once it is revealed/);
     expect(r.out).not.toMatch(/the bid is refunded in full but/);
+  });
+});
+
+describe("one nonce per sealed bid, and no second send of a bid the chain shows (DOUBLE-PLAN vectors 5, 6; layer 5)", () => {
+  const CLOSE_NS = NOW_NS + 3_600_000_000_000n;
+  const sealedFile = (over: Record<string, unknown> = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), "sealed-"));
+    const s = sealBid({ mpk: MPC_DOMAIN2_PK.mainnet, contract: CONTRACT, path: "tender/v1/3", sale: 3n, bidder: SIGNER, B: 3_000_000n, p: 3_600_000n, q: 2_000_000n, salt: Uint8Array.from({ length: 16 }, (_, i) => i + 1) });
+    const file = join(dir, "bid.json");
+    writeFileSync(file, JSON.stringify({ sale: "3", contract: CONTRACT, signer: SIGNER, ct: s.ct_b64, cm: s.cm_hex, salt: s.salt_hex, p: "3600000", q: "2000000", escrow: "3000000", origin: "near", seq: 0, intents_salt: "252812b3", ...over }));
+    return { file, cm: s.cm_hex };
+  };
+  const SEALED = (file: string) => ["--sale", "3", "--escrow", "3", "--signer", SIGNER, "--contract", CONTRACT, "--sealed", file];
+  const nonceOf = (mp: MultiPayload) => (mp.standard === "nep413" ? mp.payload.nonce : "");
+  const expectedNonce = (cm: string, salt = "252812b3") => toBase64(bidNonce({ saltHex: salt, closeNs: CLOSE_NS, contract: CONTRACT, sale: "3", signer: SIGNER, cm }));
+
+  it("the Intents nonce is derived from (contract, sale, signer, cm) and the pinned salt, so every signing of one sealed bid has it", async () => {
+    const { file, cm } = sealedFile();
+    const f = fake();
+    expect((await run(SEALED(file), f)).code).toBe(0);
+    expect(nonceOf(f.sent[0]!)).toBe(expectedNonce(cm));
+  });
+
+  it("buildBidPayload gives the nonce of the shared vector file (fixtures/intents/bid-nonce.json, incl. the Rust sandbox case)", async () => {
+    const file = JSON.parse(readFileSync(new URL("../../fixtures/intents/bid-nonce.json", import.meta.url), "utf8"));
+    expect(file.cases.length).toBeGreaterThanOrEqual(3);
+    for (const c of file.cases) {
+      const { nonce32 } = await buildBidPayload({
+        signer: c.signer, intents: INTENTS, contract: c.contract, token: USDC, amount: 5_000_000n, sale: c.sale, ct: "A".repeat(216), cm: c.cm, origin: "near",
+        saltHex: c.intents_salt, seq: 0, nowMs: c.nonce_deadline_ms - 3_600_000, closeNs: BigInt(c.close_ns),
+      });
+      expect(Buffer.from(nonce32).toString("hex"), c.name).toBe(c.nonce_hex);
+    }
+  });
+
+  it("11 minutes later the same sealed file gives the same nonce and a later payload deadline", async () => {
+    const { file, cm } = sealedFile();
+    const f = fake();
+    const first = await run(SEALED(file), f);
+    f.now.ns += 11n * 60n * 1_000_000_000n;
+    const second = await run(SEALED(file), f);
+    expect(nonceOf(f.sent[0]!)).toBe(nonceOf(f.sent[1]!));
+    expect(nonceOf(f.sent[1]!)).toBe(expectedNonce(cm));
+    const deadline = (out: string) => JSON.parse(out.split("\n").find((l) => l.startsWith("payload (unsigned): "))!.slice(20)).deadline as string;
+    expect(deadline(second.out) > deadline(first.out)).toBe(true);
+  });
+
+  it("the payload deadline never passes the nonce deadline (close - 60 s)", async () => {
+    const { file } = sealedFile();
+    const f = fake({ sale: { close_ns: (NOW_NS + 300_000_000_000n).toString() } });
+    const r = await run(SEALED(file), f);
+    const p = JSON.parse(r.out.split("\n").find((l) => l.startsWith("payload (unsigned): "))!.slice(20));
+    expect(Date.parse(p.deadline)).toBe(Number((NOW_NS + 240_000_000_000n) / 1_000_000n));
+  });
+
+  it("re-running --yes with the same file after the bid landed sends nothing: 'already stored'", async () => {
+    const { file } = sealedFile();
+    const f = fake();
+    expect((await run([...SEALED(file), "--yes", "--no-record"], f)).code).toBe(0);
+    expect(f.calls.filter((c) => c === "execute")).toHaveLength(1);
+    const again = await run([...SEALED(file), "--yes", "--no-record"], f);
+    expect(again.code).toBe(0);
+    expect(again.out).toMatch(/already stored as bid idx 0/);
+    expect(f.calls.filter((c) => c === "execute")).toHaveLength(1);
+    expect(f.calls.filter((c) => c === "simulate")).toHaveLength(1);
+  });
+
+  it("the nonce is used but no row shows it: not sent again, the earlier send may still be running", async () => {
+    const { file, cm } = sealedFile();
+    const f = fake();
+    f.usedNonces.add(expectedNonce(cm));
+    const r = await run([...SEALED(file), "--yes", "--no-record"], f);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/nonce of this bid was already used/);
+    expect(r.err).toMatch(/do not send it again/i);
+    expect(f.calls).not.toContain("execute");
+    expect(f.calls).not.toContain("simulate");
+  });
+
+  it("the account has more bids than the file's seq says (another bid took the slot): refused before signing, with the way out", async () => {
+    const { file } = sealedFile({ seq: 0 });
+    const f = fake();
+    f.bids.push(bidView({ idx: 0, bidder: SIGNER, cm: "e".repeat(64) }));
+    const r = await run([...SEALED(file), "--yes", "--no-record"], f);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/you already have 1 bid\(s\) in sale 3; this bid was prepared when you had 0/);
+    expect(r.err).toMatch(/pnpm seal:bid/);
+    expect(f.calls).not.toContain("execute");
+  });
+
+  it("a seq equal to the account's bids goes through; other accounts' bids do not count", async () => {
+    const { file } = sealedFile({ seq: 1 });
+    const f = fake();
+    f.bids.push(bidView({ idx: 0, bidder: SIGNER, cm: "e".repeat(64) }), bidView({ idx: 1, bidder: "someone.near", cm: "d".repeat(64) }));
+    expect((await run([...SEALED(file), "--yes", "--no-record"], f)).code).toBe(0);
+    expect(f.calls).toContain("execute");
+    const msg = JSON.parse(JSON.parse((f.sent[0] as any).payload.message).intents[0].msg);
+    expect(msg.seq).toBe(1);
+  });
+
+  it("a file from the old seal:bid (no seq or intents_salt) is refused with 'run pnpm seal:bid again'", async () => {
+    for (const drop of ["seq", "intents_salt"]) {
+      const { file } = sealedFile({ [drop]: undefined });
+      const f = fake();
+      const r = await run(SEALED(file), f);
+      expect(r.code).toBe(1);
+      expect(r.err).toMatch(new RegExp(`no ${drop}.*re-run pnpm seal:bid`));
+      expect(f.calls).toEqual([]);
+    }
+  });
+
+  it("a file with a malformed seq or intents_salt is refused", () => {
+    const want = { sale: "3", escrow: 3_000_000n, signer: SIGNER, contract: CONTRACT };
+    expect(() => loadSealedFile(sealedFile({ seq: -1 }).file, want)).toThrow(/seq/);
+    expect(() => loadSealedFile(sealedFile({ seq: 1.5 }).file, want)).toThrow(/seq/);
+    expect(() => loadSealedFile(sealedFile({ intents_salt: "xyz" }).file, want)).toThrow(/intents_salt/);
+  });
+
+  it("a salt the DAO has invalidated falls back to the current salt, says the nonce changes, and still signs", async () => {
+    const { file, cm } = sealedFile({ intents_salt: "11111111" });
+    const f = fake();
+    f.salt.valid = false;
+    const r = await run(SEALED(file), f);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/salt 11111111 is no longer valid.*252812b3.*dup_bid/);
+    expect(nonceOf(f.sent[0]!)).toBe(expectedNonce(cm, "252812b3"));
+  });
+
+  it("sealing here writes seq (the account's current bids) and intents_salt into the file and sends seq", async () => {
+    const f = fake();
+    f.bids.push(bidView({ idx: 0, bidder: SIGNER, cm: "e".repeat(64) }), bidView({ idx: 1, bidder: "someone.near", cm: "d".repeat(64) }));
+    const r = await run([...BASE, "--additional"], f);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(readFileSync(/sealed bid file .*: (\S+\.json)/.exec(r.out)![1] as string, "utf8"));
+    expect(j).toMatchObject({ seq: 1, intents_salt: "252812b3" });
+    const msg = JSON.parse(JSON.parse((f.sent[0] as any).payload.message).intents[0].msg);
+    expect(msg.seq).toBe(1);
+    expect(nonceOf(f.sent[0]!)).toBe(expectedNonce(j.cm));
+  });
+
+  it("a second, different bid from an account that already has one needs --additional to be sent; a dry-run only says so", async () => {
+    const f = fake();
+    f.bids.push(bidView({ idx: 0, bidder: SIGNER, cm: "e".repeat(64) }));
+    const dry = await run(BASE, f);
+    expect(dry.code).toBe(0);
+    expect(dry.out).toMatch(/NOTE bidder\.tenderseal\.near already has 1 bid\(s\) in sale 3; this would be an additional bid/);
+    const sent = await run([...BASE, "--yes", "--no-record"], f);
+    expect(sent.code).toBe(1);
+    expect(sent.err).toMatch(/pass --additional/);
+    expect(f.calls).not.toContain("execute");
+    expect((await run([...BASE, "--yes", "--no-record", "--additional"], f)).code).toBe(0);
+  });
+
+  it("a send that threw after signing prints every tx hash and 'do not re-run before <payload deadline>'", async () => {
+    const { file } = sealedFile();
+    const f = fake({ executeUnknown: ["HASHA", "HASHB"] });
+    const r = await run([...SEALED(file), "--yes", "--no-record"], f);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/UNKNOWN the send may have landed/);
+    expect(r.err).toContain("HASHA");
+    expect(r.err).toContain("HASHB");
+    expect(r.err).toContain("nearblocks.io/txns/HASHA");
+    expect(r.err).toContain(`do not re-run before ${new Date(Number(NOW_NS / 1_000_000n) + 600_000).toISOString()}`); // the payload deadline: chain time + 10 minutes
+    expect(f.recorded).toEqual([]);
+  });
+
+  it("a relay 202 execute_unknown reads the same way, with the relayer's own deadline", async () => {
+    const { file } = sealedFile();
+    const f = fake({ relayUnknown: ["RELAYHASH"] });
+    const r = await run([...SEALED(file), "--yes", "--no-record", "--via-relay", "http://localhost:8787/relay"], f);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("RELAYHASH");
+    expect(r.err).toContain("do not re-run before 2026-11-07T08:10:00.000Z");
+  });
+
+  it("--late keeps a random nonce (close - 60 s is already in the past) and does not look for a stored copy", async () => {
+    const { file } = sealedFile();
+    const f = fake({ sale: { close_ns: (NOW_NS - 1n).toString() }, refund: true });
+    const a = await run([...SEALED(file), "--late", "--yes", "--no-record"], f);
+    const b = await run([...SEALED(file), "--late", "--yes", "--no-record"], f);
+    expect(a.code).toBe(0);
+    expect(b.code).toBe(0);
+    expect(nonceOf(f.sent[0]!)).not.toBe(nonceOf(f.sent[1]!));
+  });
+});
+
+describe("--via-relay reads the relayer's answers (202 execute_unknown, 409 already_stored)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const env = () => liveEnv({ network: "mainnet", contract: CONTRACT, yes: true, dryRunFlag: false, dryRun: false, noRecord: true });
+  const mp = {} as MultiPayload;
+  const answer = (status: number, body: object) => vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+  it("202 becomes SendUnknown with the relayer's hashes, sender and deadline", async () => {
+    answer(202, { status: "execute_unknown", txHashes: ["HA", "HB"], sender: "relayer.tenderseal.near", until: "2026-11-17T11:59:00.000Z", detail: "timeout" });
+    const e = await env().relay("http://localhost:8787/relay", mp).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(SendUnknown);
+    expect(e).toMatchObject({ hashes: ["HA", "HB"], sender: "relayer.tenderseal.near", until: "2026-11-17T11:59:00.000Z" });
+  });
+  it("409 already_stored is an error that names the relayer's answer, not a transaction", async () => {
+    answer(409, { error: "already_stored", detail: "this sealed bid is already stored in sale 2 as your bid #1" });
+    await expect(env().relay("http://localhost:8787/relay", mp)).rejects.toThrow(/relay answered 409: already_stored · this sealed bid is already stored/);
   });
 });

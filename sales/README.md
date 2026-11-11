@@ -23,6 +23,7 @@ A spec holds sale parameters only. It never holds a bid, a price a bidder chose,
 ## Sale fields
 
 - `id`: the id the contract will give the sale. Ids follow creation order, so sales are created in order #0, #1, #2, #3. The script refuses a mismatch unless `--allow-id-mismatch` is given.
+- Re-running a create after a timeout: the script reads the contract's sales and refuses to create a sale that is identical to one still Open (same seller, token, supply, close and terms; a rehearsal's relative close is not compared), because the bids would split between the two. `--again` creates it on purpose.
 - `seller`, `token_id`, `amount`: the seller transfers `amount` of `token_id` from its Intents balance to the contract with `mt_transfer_call`; the transfer `msg` is the create message below. `amount: "intents_balance"` means the seller's whole Intents balance of the token at creation time. `wrap_near` is the NEAR to wrap when the token is wNEAR and the Intents balance is short.
 - `close`: `relative_secs` (from now), or `utc` with an optional `utc_fallback` used by `--close fallback`. The contract needs `now + 300 s <= close <= now + 30 days`.
 - `create_at_utc`: when the human creates the sale (informational).
@@ -34,4 +35,4 @@ A spec holds sale parameters only. It never holds a bid, a price a bidder chose,
 
 ## `new()` arguments
 
-`mpc`, `intents`, `domain_id`, `mpc_public_key` (must equal the live `public_key({domain_id})` of the MPC contract), `quote_tokens`, `sellers`, and `app_pk_mode`, one of `identity`, `generator`, `plain`. The mode is fixed by `new()` and is decided by gate S1. Gate S1 passed on mainnet in `identity` mode (first PASS; `generator` also passed, see `evidence/spikes.json`), so the files carry `identity`. `birth.ts` refuses a mode that differs from the S1 row's `chosen_path`.
+`mpc`, `intents`, `domain_id`, `mpc_public_key` (must equal the live `public_key({domain_id})` of the MPC contract), `quote_tokens`, `sellers`, and `app_pk_mode`, one of `identity`, `generator`, `plain`. The mode is fixed by `new()`. Gate S1 passed on mainnet in both `identity` and `generator` mode (`evidence/spikes.json`); v1 runs `generator` (CRYPTO-07: `identity` only passes the upstream pairing check as the degenerate case of two points at infinity, `generator` is the documented case), so the files carry `generator`. `birth.ts` refuses a mode that differs from the S1 row's `chosen_path`.

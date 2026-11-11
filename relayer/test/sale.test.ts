@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { closeNs, loadSpec, parseDecimal, planSale, reserveFromPrice, type SaleOpts, type SaleState } from "../scripts/sale.js";
+import { saleView } from "./helpers/views.js";
 
 const NOW = Date.parse("2026-11-10T08:00:00Z");
 const opts = (over: Partial<SaleOpts> = {}): SaleOpts => ({
@@ -147,6 +148,12 @@ describe("sales/README.md states the rules the script enforces (X12-05, X12A-01,
     expect(readme).toMatch(/20 <= decimals \+ lot_exp/);
     expect(readme).toMatch(/0\.18 USDC/);
   });
+  it("--again and the Open-twin refusal are explained; v1 runs generator (CRYPTO-07)", () => {
+    expect(readme).toMatch(/--again/);
+    expect(readme).toMatch(/identical to one still Open/);
+    expect(readme).toMatch(/v1 runs `generator`/);
+    expect(readme).not.toMatch(/so the files carry `identity`/);
+  });
   it("sale 0's min_escrow above the escrow cap is explained, and the ft_metadata check is named", () => {
     expect(readme).toMatch(/1000000000001/);
     expect(readme).toMatch(/ft_metadata/);
@@ -177,4 +184,43 @@ describe("twin sale 0 stays unopenable (X12A-01)", () => {
     expect(planSale(loadSpec("0"), opts(), state({ nextId: "0" })).notes.join("\n")).toMatch(/min_escrow 1000000000001 is above the contract's per-sale escrow cap 1000000000000: this sale can never open/);
     expect(planSale(loadSpec("1"), opts(), state()).notes.join("\n")).not.toMatch(/escrow cap/);
   });
+});
+
+describe("a sale identical to an Open one is refused unless --again (double map vector 23)", () => {
+  // what sale #1 asks for, as the contract stores it after a create whose answer was lost
+  const stored = (over: Record<string, unknown> = {}) => {
+    const spec = loadSpec("1");
+    const created = planSale(spec, opts(), state()).createMsg as Record<string, unknown>;
+    return saleView({
+      id: "1", seller: spec.seller, token: "nep141:wrap.near", supply: spec.amount, decimals: spec.msg.decimals, lot_exp: spec.msg.lot_exp, reserve: String(created.reserve),
+      min_escrow: spec.msg.min_escrow, min_bidders: spec.msg.min_bidders, max_bids: spec.msg.max_bids, quote_token: spec.msg.quote_token, close_ns: String(created.close_ns),
+      reveal_secs: spec.msg.reveal_secs, ...over,
+    });
+  };
+  const plan = (existing: ReturnType<typeof stored>[], o: Partial<SaleOpts> = {}) =>
+    planSale(loadSpec("1"), opts(o), state({ nextId: "1", existing }));
+  it("an Open sale with the same seller, token, supply, close and terms blocks the create and names its id", () => {
+    const p = plan([stored()]);
+    expect(p.problems.join()).toMatch(/sale 1 on v1\.tenderseal\.near is already Open with the same seller, token, supply, close and terms; pass --again to create another/);
+  });
+  it("--again goes ahead and says so", () => {
+    const p = plan([stored()], { again: true });
+    expect(p.problems).toEqual([]);
+    expect(p.notes.join("\n")).toMatch(/--again: sale 1 is already Open with the same terms/);
+  });
+  it("a Keyed, Finalized or Cancelled twin does not block (a cancelled sale may be created again)", () => {
+    for (const state of ["Cancelled", "Finalized", "Keyed"] as const) expect(plan([stored({ state })]).problems).toEqual([]);
+  });
+  it("any different term (close, supply, seller, reserve) is a different sale", () => {
+    for (const over of [{ close_ns: "1794542400000000001" }, { supply: "1" }, { seller: "other.near" }, { reserve: "1" }]) expect(plan([stored(over)]).problems).toEqual([]);
+  });
+  it("a relative close (rehearsal) is compared without its close time, which moves with every run", () => {
+    const spec = loadSpec("R");
+    const twin = saleView({
+      id: "0", seller: spec.seller, token: "nep141:wrap.near", supply: spec.amount, decimals: spec.msg.decimals, lot_exp: spec.msg.lot_exp, reserve: spec.msg.reserve,
+      min_escrow: spec.msg.min_escrow, min_bidders: spec.msg.min_bidders, max_bids: spec.msg.max_bids, quote_token: spec.msg.quote_token, close_ns: "1", reveal_secs: spec.msg.reveal_secs,
+    });
+    expect(planSale(spec, opts({ contract: "rehearsal.tenderseal.near" }), state({ nextId: "0", existing: [twin] })).problems.join()).toMatch(/already Open with the same/);
+  });
+  it("no reading of the existing sales (unit callers) changes nothing", () => expect(planSale(loadSpec("1"), opts(), state()).problems).toEqual([]));
 });

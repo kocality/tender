@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { KeyPair, actions, teraToGas, type Account } from "near-api-js";
-import { RPCS, UnknownAccessKey, ViewPanic, accessKeyInfo, makeAccount, spendableBalance, viewFunction, type Network } from "./near.js";
+import { RPCS, UnknownAccessKey, ViewPanic, accessKeyInfo, makeAccount, recordSigned, spendableBalance, viewFunction, type Network } from "./near.js";
 import { SlidingWindowLimiter } from "./rate-limit.js";
 
 // Permissionless relay (R3): simulate_intents, then execute_intents, never altering the signed payload.
@@ -29,7 +29,9 @@ export interface RelayHealth {
 
 export interface RelayDeps {
   simulate(signed: unknown[]): Promise<{ ok: true } | { ok: false; error: string }>; // view simulate_intents({signed})
-  execute(signed: unknown[]): Promise<{ txHash: string; ok: boolean; error?: string }>; // execute_intents, 300 Tgas, 0 deposit
+  execute(signed: unknown[]): Promise<{ txHash: string; ok: boolean; error?: string; sent?: string[] }>; // execute_intents, 300 Tgas, 0 deposit; sent = hash of every transaction signed (each may have been broadcast)
+  relayerId?: string; // the NEAR account that signs: the sender_account_id of a tx lookup
+  bidsOf?(sale: string, signer: string): Promise<{ cm: string }[]>; // the signer's stored bids in a sale, at final
   health(): Promise<RelayHealth>;
   now(): number;
   limiter: SlidingWindowLimiter;
@@ -48,8 +50,31 @@ const FAILED_TTL_MS = 10 * 60_000; // a body that failed on chain is not execute
 const HEALTH_TTL_MS = 30_000;
 const MAX_DEADLINE_AHEAD_MS = 15 * 60_000; // the app and the CLI sign 10 minutes ahead; Intents itself sets no upper bound
 
+type BidRef = { signer: string; sale: string; cm: string; seq?: number };
+
+/**
+ * Tender refuses these on chain anyway (dup_bid, bid_seq), but only after intents.near committed the nonce, moved the escrow and the
+ * relayer paid for the call. simulate_intents never runs mt_on_transfer, so the relayer reads Tender itself. It acts only on facts that
+ * can only grow (bids are never deleted); a failed read refuses nothing. The contract and intents.near are what decide.
+ */
+async function tenderRefusal(bids: BidRef[], deps: RelayDeps): Promise<{ code: string; detail: string; extra: object } | undefined> {
+  if (!deps.bidsOf) return undefined;
+  for (const b of bids) {
+    let mine: { cm: string }[];
+    try {
+      mine = await deps.bidsOf(b.sale, b.signer);
+    } catch {
+      continue; // unknown is not "refuse"
+    }
+    const i = mine.findIndex((x) => x.cm === b.cm);
+    if (i >= 0) return { code: "already_stored", detail: `this sealed bid is already stored in sale ${b.sale} as your bid #${i + 1}`, extra: { sale: b.sale, n: i + 1 } };
+    if (b.seq !== undefined && mine.length > b.seq) return { code: "bid_seq", detail: `you already have ${mine.length} bid(s) in sale ${b.sale}; this bid was prepared when you had ${b.seq}`, extra: { sale: b.sale, have: mine.length, seq: b.seq } };
+  }
+  return undefined;
+}
+
 /** R3 + D4-04 + I2: shape, standard, recipient / verifying contract, future deadline, transfer-only intents. */
-export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Check & { signed?: unknown[]; signers?: string[] } {
+export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Check & { signed?: unknown[]; signers?: string[]; bids?: BidRef[] } {
   if (Buffer.byteLength(raw) > cfg.maxBodyBytes) return { ok: false, status: 413, code: "body_too_large", detail: `body is larger than ${cfg.maxBodyBytes} bytes` };
   let body: unknown;
   try {
@@ -61,6 +86,7 @@ export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Chec
   if (!Array.isArray(signed)) return bad("signed_required", 'body must be {"signed": [...]}');
   if (signed.length < 1 || signed.length > cfg.maxSigned) return bad("bad_signed_count", `signed must hold 1 to ${cfg.maxSigned} items, got ${signed.length}`);
   const signers: string[] = [];
+  const bids: BidRef[] = [];
   for (const [i, item] of signed.entries()) {
     const at = `signed[${i}]`;
     if (!isObj(item)) return bad("bad_item", `${at} is not an object`);
@@ -100,10 +126,13 @@ export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Chec
         return bad("msg_not_allowed", `${at} msg is not valid JSON`);
       }
       if (!isObj(op) || (op.op !== "bid" && op.op !== "reveal")) return bad("msg_not_allowed", `${at} msg.op must be bid or reveal`);
+      if (op.op === "bid" && typeof op.sale === "string" && typeof op.cm === "string" && typeof inner.signer_id === "string") {
+        bids.push({ signer: inner.signer_id, sale: op.sale, cm: op.cm, seq: typeof op.seq === "number" ? op.seq : undefined });
+      }
     }
     if (typeof inner.signer_id === "string") signers.push(inner.signer_id);
   }
-  return { ok: true, signed, signers };
+  return { ok: true, signed, signers, bids };
 }
 
 export const defaultIpOf = (req: Request): string => req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
@@ -193,6 +222,8 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
 
         const sim = await deps.simulate(signed);
         if (!sim.ok) return failBody(400, "simulate_failed", sim.error);
+        const refusal = await tenderRefusal(v.bids ?? [], deps);
+        if (refusal) return failBody(409, refusal.code, refusal.detail, refusal.extra);
         // The signer id is only proven by simulate: a forged body naming someone must not use up or lock their slot.
         for (const id of signers) if (!deps.limiter.hit(`signer:${id}`, deps.now())) return failBody(429, "rate_limited", "too many requests for this signer, try again in a minute");
         if (signers.some((id) => busySigners.has(id))) return failBody(409, "signer_busy", "another payload of this signer is being relayed, retry in a few seconds");
@@ -202,6 +233,11 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
         const out = await deps.execute(signed);
         log(`relay signers=${signers.join(",")} tx=${out.txHash || "none"} ok=${out.ok}`); // never the payload or signature
         if (out.ok) return { status: 200, body: { txHash: out.txHash } };
+        if (!out.txHash && out.sent?.length) {
+          // Signed and handed to an RPC, the answer lost: it may still land until the payload deadline. Never "retry".
+          const until = new Date(Math.max(...payloadDeadlines(signed))).toISOString();
+          return { status: 202, body: { status: "execute_unknown", txHashes: out.sent, sender: deps.relayerId ?? null, until, detail: out.error ?? "the send may have landed" } };
+        }
         if (!out.txHash) return failBody(503, "execute_unavailable", out.error ?? "the relayer could not send the transaction, retry", { retry: true });
         failed.set(key, deps.now() + FAILED_TTL_MS);
         return { status: 502, body: { error: "execute_failed", txHash: out.txHash, detail: out.error ?? "execute_intents failed" } };
@@ -221,6 +257,14 @@ export function createRelayHandler(cfg: RelayConfig, deps: RelayDeps): (req: Req
   };
 }
 
+function payloadDeadlines(signed: unknown[]): number[] {
+  return signed.map((s) => {
+    const it = s as { standard: string; payload: unknown };
+    const inner = it.standard === "nep413" ? JSON.parse((it.payload as { message: string }).message) : JSON.parse(it.payload as string);
+    return Date.parse(inner.deadline);
+  });
+}
+
 const oneLine = (e: unknown) => String((e as Error)?.message ?? e).split("\n")[0]?.slice(0, 200) ?? "";
 
 function yoctoToNear(y: bigint): string {
@@ -229,19 +273,24 @@ function yoctoToNear(y: bigint): string {
   return frac ? `${s.slice(0, -24)}.${frac}` : s.slice(0, -24);
 }
 
-/** One execute_intents call, 300 Tgas, 0 deposit. Account drops its cached nonce and retries on InvalidNonce (the failover provider hands that error through). */
-export async function sendExecute(account: Account, intentsId: string, signed: unknown[]): Promise<{ txHash: string; ok: boolean; error?: string }> {
+/**
+ * One execute_intents call, 300 Tgas, 0 deposit. Account drops its cached nonce and retries on InvalidNonce (the failover provider hands that error through).
+ * A transaction's hash is fixed when it is signed, before any RPC sees it: `sent` lists every one (the InvalidNonce retry signs again), so a lost answer can still be looked up.
+ */
+export async function sendExecute(account: Account, intentsId: string, signed: unknown[]): Promise<{ txHash: string; ok: boolean; error?: string; sent: string[] }> {
+  const { signer, hashes: sent } = recordSigned(account);
   try {
     const res: any = await account.signAndSendTransaction({
       receiverId: intentsId,
       actions: [actions.functionCall("execute_intents", { signed }, teraToGas(300), 0n)],
       waitUntil: "EXECUTED_OPTIMISTIC",
       throwOnFailure: false,
+      signer,
     });
     const ok = "SuccessValue" in (res.status ?? {});
-    return { txHash: res.transaction.hash as string, ok, error: ok ? undefined : failureText(res.status) };
+    return { txHash: res.transaction.hash as string, ok, error: ok ? undefined : failureText(res.status), sent };
   } catch (e) {
-    return { txHash: "", ok: false, error: String((e as Error).message).slice(0, 300) };
+    return { txHash: "", ok: false, error: String((e as Error).message).slice(0, 300), sent };
   }
 }
 
@@ -252,9 +301,9 @@ export function nearDepsFromEnv(env: NodeJS.ProcessEnv, account?: Account): { cf
   const tenderId = env.TENDER_CONTRACT_ID || (network === "mainnet" ? "v1.tenderseal.near" : "");
   if (!tenderId) throw new Error("TENDER_CONTRACT_ID is required on testnet");
   const relayerId = env.RELAYER_ACCOUNT_ID || "relayer.tenderseal.near";
-  const urls = network === "testnet"
+  const urls = [...new Set(network === "testnet"
     ? [env.NEAR_TESTNET_RPC_URL, ...RPCS.testnet].filter((u): u is string => !!u)
-    : [env.NEAR_RPC_URL, ...(env.NEAR_RPC_FALLBACKS ?? "").split(","), ...RPCS.mainnet].map((u) => u?.trim()).filter((u): u is string => !!u);
+    : [env.NEAR_RPC_URL, ...(env.NEAR_RPC_FALLBACKS ?? "").split(","), ...RPCS.mainnet].map((u) => u?.trim()).filter((u): u is string => !!u))];
   const key = env.RELAYER_PRIVATE_KEY?.startsWith("ed25519:") ? (env.RELAYER_PRIVATE_KEY as `ed25519:${string}`) : undefined;
   // Health, the allowance guard and signing must describe one key: the public key always comes from the private key.
   const derived = key ? KeyPair.fromString(key).getPublicKey().toString() : undefined;
@@ -275,7 +324,7 @@ export function nearDepsFromEnv(env: NodeJS.ProcessEnv, account?: Account): { cf
   // Transactions of one instance go through one queue (nonce).
   let queue: Promise<unknown> = Promise.resolve();
   const signer = account ?? (key ? makeAccount(relayerId, key, network, urls) : undefined);
-  const send = async (signed: unknown[]) => (signer ? sendExecute(signer, intentsId, signed) : { txHash: "", ok: false, error: "relayer key is not configured" });
+  const send = async (signed: unknown[]) => (signer ? sendExecute(signer, intentsId, signed) : { txHash: "", ok: false, error: "relayer key is not configured", sent: [] });
 
   // Allowance and balance of the signing key, read at most once per 30 s (and again after every execute).
   const readHealth = async (): Promise<RelayHealth> => {
@@ -316,6 +365,11 @@ export function nearDepsFromEnv(env: NodeJS.ProcessEnv, account?: Account): { cf
       cached = entry;
       void value.then((h) => { if (h.unknown && cached === entry) cached = undefined; });
       return value;
+    },
+    relayerId,
+    async bidsOf(sale, bidder) {
+      const all = await viewFunction<{ bidder: string; cm: string }[]>(urls, tenderId, "get_bids", { id: sale, from: 0, limit: 64 });
+      return all.filter((b) => b.bidder === bidder);
     },
     now: () => Date.now(),
     limiter: new SlidingWindowLimiter(20, 60_000),

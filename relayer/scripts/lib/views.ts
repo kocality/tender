@@ -109,6 +109,7 @@ export interface KeyLogView {
 }
 
 export const BIDS_PAGE = 64;
+const SALES_PAGE = 50;
 const KEY_LOG_PAGE = 100;
 
 export function getConfig(network: Network, contract: string, rpc?: string): Promise<ConfigView> {
@@ -118,6 +119,16 @@ export function getConfig(network: Network, contract: string, rpc?: string): Pro
 /** `null` when the sale id does not exist. */
 export function getSale(network: Network, contract: string, id: string, rpc?: string): Promise<SaleView | null> {
   return view<SaleView | null>(network, contract, "get_sale", { id }, { rpc });
+}
+
+/** All sales of the contract in id order, paged (get_sales caps a page at 50). `from` is a string here. */
+export async function getSales(network: Network, contract: string, rpc?: string): Promise<SaleView[]> {
+  const out: SaleView[] = [];
+  for (let from = 0; ; from += SALES_PAGE) {
+    const page = (await view<SaleView[]>(network, contract, "get_sales", { from: String(from), limit: SALES_PAGE }, { rpc })) ?? [];
+    out.push(...page);
+    if (page.length < SALES_PAGE) return out;
+  }
 }
 
 /** `null` until the sale is finalized or cancelled. */

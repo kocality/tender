@@ -1,4 +1,4 @@
-import { Account, FailoverRpcError, FailoverRpcProvider, JsonRpcProvider, type Provider } from "near-api-js";
+import { Account, FailoverRpcError, FailoverRpcProvider, JsonRpcProvider, baseEncode, type Provider, type Signer } from "near-api-js";
 import { InvalidNonceError } from "near-api-js/rpc-errors";
 
 // Relayer runtime: near-api-js and Node built-ins only (D4-03), no @tender/* imports.
@@ -6,10 +6,10 @@ import { InvalidNonceError } from "near-api-js/rpc-errors";
 export type Network = "mainnet" | "testnet";
 type KeyPairString = `ed25519:${string}`;
 
-// rpc.mainnet.near.org and rpc.testnet.near.org are deprecated (they answer -429 DEPRECATED under load): fastnear first, then two live public providers.
+// rpc.mainnet.near.org and rpc.testnet.near.org are deprecated (they answer -429 DEPRECATED under load): fastnear first, then two independent public providers.
 export const RPCS: Record<Network, string[]> = {
   mainnet: ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.shitzuapes.xyz"],
-  testnet: ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://near-testnet.drpc.org"],
+  testnet: ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://testnet-rpc.intea.rs"],
 };
 
 /** The contract panicked: `panicMsg` is its own text (for example "insufficient balance or overflow"). */
@@ -36,7 +36,26 @@ export class NonceAwareFailoverProvider extends FailoverRpcProvider {
 }
 
 export function makeProvider(network: Network, urls: string[] = RPCS[network]): FailoverRpcProvider {
-  return new NonceAwareFailoverProvider(urls.map((url) => new JsonRpcProvider({ url })));
+  return new NonceAwareFailoverProvider(urls.map((url) => new JsonRpcProvider({ url }, { retries: 3 }))); // a 503 moves to the next URL in about a second, not after 12 backed-off tries (about 86 s, past the 60 s function limit)
+}
+
+/**
+ * A transaction's hash is fixed when it is signed, before any RPC sees it. Pass `signer` to `signAndSendTransaction`:
+ * `hashes` then lists every transaction signed (an InvalidNonce retry signs again), so a send whose answer is lost can still be looked up.
+ */
+export function recordSigned(account: Account): { signer: Signer | undefined; hashes: string[] } {
+  const hashes: string[] = [];
+  const base: any = account.getSigner();
+  const signer = base && new Proxy(base, {
+    get: (t, k) => k === "signTransaction"
+      ? async (tx: unknown) => {
+        const r = await t.signTransaction(tx);
+        hashes.push(baseEncode(r.txHash));
+        return r;
+      }
+      : typeof t[k] === "function" ? t[k].bind(t) : t[k],
+  });
+  return { signer, hashes };
 }
 
 export function makeAccount(accountId: string, keyPairString: KeyPairString, network: Network, urls?: string[], provider: Provider = makeProvider(network, urls)): Account {

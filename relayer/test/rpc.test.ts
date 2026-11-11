@@ -23,13 +23,27 @@ afterEach(() => {
 });
 
 describe("rpcCall", () => {
-  it("backs off on 429 and moves to the second URL", async () => {
+  it("moves to the second URL at once on a 429, without waiting", async () => {
     mockFetch((url) => (url === N1 ? json({}, 429) : json({ jsonrpc: "2.0", id: "x", result: { ok: 1 } })));
+    const out = await rpcCall<{ ok: number }>("mainnet", "status", []);
+    expect(out).toEqual({ result: { ok: 1 }, url: N2 });
+    expect(calls.filter((u) => u === N1)).toHaveLength(1);
+    expect(rpcHooks.sleep).not.toHaveBeenCalled();
+  });
+
+  it("backs off on a 503 and then moves to the second URL", async () => {
+    mockFetch((url) => (url === N1 ? json({}, 503) : json({ jsonrpc: "2.0", id: "x", result: { ok: 1 } })));
     const out = await rpcCall<{ ok: number }>("mainnet", "status", []);
     expect(out).toEqual({ result: { ok: 1 }, url: N2 });
     expect(calls.filter((u) => u === N1)).toHaveLength(3);
     expect(rpcHooks.sleep).toHaveBeenCalledWith(1000);
     expect(rpcHooks.sleep).toHaveBeenCalledWith(2000);
+  });
+
+  it("every URL rate limited: one try each, then the last 429 is thrown", async () => {
+    mockFetch(() => json({}, 429));
+    await expect(rpcCall("mainnet", "status", [])).rejects.toThrow(/HTTP 429/);
+    expect(calls).toEqual([...RPC.mainnet.normal, ...RPC.mainnet.archival]);
   });
 
   it("falls through to archival on UNKNOWN_TRANSACTION and reports the source", async () => {
@@ -73,11 +87,11 @@ describe("decodeSuccessValue", () => {
 
 describe("RPC providers", () => {
   const deprecated = /\/\/rpc\.(mainnet|testnet)\.near\.org/;
-  it("the normal lists start with fastnear, have 3 distinct hosts and no deprecated near.org node", () => {
+  it("the normal lists start with fastnear, have 3 different providers (registrable domains) and no deprecated near.org node", () => {
     for (const net of ["mainnet", "testnet"] as const) {
       const urls = RPC[net].normal;
       expect(urls[0]).toMatch(/fastnear\.com/);
-      expect(new Set(urls.map((u) => new URL(u).host)).size).toBeGreaterThanOrEqual(3);
+      expect(new Set(urls.map((u) => new URL(u).hostname.split(".").slice(-2).join("."))).size).toBeGreaterThanOrEqual(3);
       expect(urls.filter((u) => deprecated.test(u))).toEqual([]);
     }
   });

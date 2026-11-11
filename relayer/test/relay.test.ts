@@ -442,7 +442,8 @@ describe("nonce retry through the failover provider (OPS-02)", () => {
   const account = () => makeAccount("relayer.tenderseal.near", KeyPair.fromRandom("ed25519").toString() as `ed25519:${string}`, "mainnet", undefined, new NonceAwareFailoverProvider([fake("fastnear"), fake("second")] as never));
   it("an InvalidNonce from both providers drops the nonce cache and the send succeeds: execute resolves ok, the nonce is read twice", async () => {
     const out = await sendExecute(account(), "intents.near", [{}]);
-    expect(out).toEqual({ txHash: "TXOK", ok: true, error: undefined });
+    expect(out).toMatchObject({ txHash: "TXOK", ok: true, error: undefined });
+    expect(out.sent).toHaveLength(2); // the InvalidNonce copy and the one that landed
     expect(counters.viewAccessKey).toBe(2);
   });
   it("the stock FailoverRpcProvider hides the InvalidNonce in a FailoverRpcError (the bug the subclass works around)", async () => {

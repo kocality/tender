@@ -1,4 +1,4 @@
-import { Account, JsonRpcProvider, actions, teraToGas } from "near-api-js";
+import { Account, JsonRpcProvider, actions, teraToGas, type Signer } from "near-api-js";
 import type { CallStep } from "./cli.js";
 import { NonceAwareFailoverProvider } from "../../src/near.js";
 import { loadKeyPair } from "./keys.js";
@@ -31,13 +31,14 @@ export function gasBalanceProblem(signer: string, spendable: bigint, gasTgas: nu
 
 export interface Sent { hash: string; ok: boolean; block: number; status: unknown; logs: string[] }
 
-/** Sends one function-call step, waits for FINAL. Never throws on a failed transaction (returns ok=false). */
-export async function sendStep(account: Account, s: CallStep, rpc?: string): Promise<Sent> {
+/** Sends one function-call step, waits for FINAL. Never throws on a failed transaction (returns ok=false). `signer` (from recordSigned) lets the caller see the hash of a send that throws. */
+export async function sendStep(account: Account, s: CallStep, rpc?: string, signer?: Signer): Promise<Sent> {
   const res: any = await account.signAndSendTransaction({
     receiverId: s.receiver,
     actions: [actions.functionCall(s.method, s.args, teraToGas(s.gasTgas), depositToYocto(s.deposit))],
     waitUntil: "FINAL",
     throwOnFailure: false,
+    ...(signer ? { signer } : {}),
   });
   const hash: string = res.transaction.hash;
   const logs: string[] = (res.receipts_outcome ?? []).flatMap((r: any) => r?.outcome?.logs ?? []);

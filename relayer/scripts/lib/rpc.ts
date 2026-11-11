@@ -8,7 +8,7 @@ export const RPC: Record<Network, { normal: string[]; archival: string[] }> = {
     archival: ["https://archival-rpc.mainnet.fastnear.com", "https://archival-rpc.mainnet.near.org"],
   },
   testnet: {
-    normal: ["https://test.rpc.fastnear.com", "https://rpc.testnet.fastnear.com", "https://near-testnet.drpc.org"],
+    normal: ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://testnet-rpc.intea.rs"],
     archival: ["https://archival-rpc.testnet.fastnear.com", "https://archival-rpc.testnet.near.org"],
   },
 };
@@ -48,7 +48,11 @@ export async function rpcCall<T>(
           body: JSON.stringify({ jsonrpc: "2.0", id: "tender", method, params }),
           signal: AbortSignal.timeout(30_000),
         });
-        if (res.status === 429 || res.status >= 500) throw new RpcError(`HTTP ${res.status} from ${url}`, false, url);
+        if (res.status === 429) {
+          last = new RpcError(`HTTP 429 from ${url}`, false, url);
+          break; // rate limited: waiting 7 s here costs more than asking the next provider
+        }
+        if (res.status >= 500) throw new RpcError(`HTTP ${res.status} from ${url}`, false, url);
         if (!res.ok) {
           last = new RpcError(`HTTP ${res.status} from ${url}`, false, url);
           break; // 4xx: this node will not answer, next URL

@@ -6,7 +6,7 @@ import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep } from "./
 import { SALE_TAGS, type SaleTag, type Step } from "./lib/evidence.js";
 import { makeAccount, sendStep, explorer } from "./lib/send.js";
 import { view, type Network } from "./lib/rpc.js";
-import { getConfig, getSale } from "./lib/views.js";
+import { getConfig, getSale, getSales, type SaleView } from "./lib/views.js";
 import { fromUnits, toUnits } from "./lib/units.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -39,6 +39,7 @@ export interface SaleOpts {
   fallback: boolean;
   allowIdMismatch: boolean;
   reserveOverride?: string;
+  again?: boolean; // create a sale identical to an Open one on purpose
 }
 
 export interface SaleState {
@@ -49,6 +50,7 @@ export interface SaleState {
   wrapRegistered: boolean; // storage_balance_of(seller) is not null
   price?: { price: string; updatedAt: string }; // JAMBO USD price from 1Click, decimal string
   decimals?: { token: number | null; quote: number | null }; // ft_metadata().decimals of the sale token and of the quote token; null = unreadable; absent = not checked
+  existing?: SaleView[]; // the contract's sales; absent = not checked
 }
 
 export interface SalePlan {
@@ -193,6 +195,17 @@ export function planSale(spec: SaleSpec, o: SaleOpts, st: SaleState): SalePlan {
   });
   stepKinds.push("create");
   const saleId = o.allowIdMismatch && st.nextId !== null ? st.nextId : spec.id;
+
+  // A create whose answer was lost and is then re-run makes a second sale with the same terms; the bids split between the two.
+  const twin = (st.existing ?? []).find((s) =>
+    (s.state === "Open" || s.state === "Opening") && s.seller === spec.seller && s.token === tokenId && s.supply === amount.toString()
+    && (spec.close.relative_secs !== undefined || s.close_ns === close.toString())
+    && s.reserve === reserve && s.min_escrow === m.min_escrow && s.min_bidders === m.min_bidders && s.max_bids === m.max_bids
+    && s.quote_token === createMsg.quote_token && s.decimals === m.decimals && s.lot_exp === m.lot_exp && s.reveal_secs === m.reveal_secs);
+  if (twin) {
+    if (o.again) notes.push(`--again: sale ${twin.id} is already Open with the same terms; creating another on purpose`);
+    else problems.push(`sale ${twin.id} on ${o.contract} is already Open with the same seller, token, supply, close and terms; pass --again to create another`);
+  }
   return { steps, stepKinds, createMsg, saleId, closeNs: close, amount, tokenId, problems, notes };
 }
 
@@ -228,13 +241,13 @@ async function jamboPrice(): Promise<{ price: string; updatedAt: string } | unde
 }
 
 const usage = `usage:
-  tsx scripts/sale.ts --sale <R|0|1|2|3> [--network mainnet|testnet] [--contract <override>] [--close fallback] [--allow-id-mismatch] [--yes]
+  tsx scripts/sale.ts --sale <R|0|1|2|3> [--network mainnet|testnet] [--contract <override>] [--close fallback] [--allow-id-mismatch] [--again] [--yes]
     [--seller <id>] [--intents <id>] [--wrap <id>] [--quote-token <nep141:...>] [--reserve <n>]
   Dry-run unless --yes. Testnet needs --seller, --intents, --wrap and --quote-token for the M3 copies.`;
 
 export async function main(argv: string[]): Promise<number> {
   const { common, values } = parseCommon(argv, {
-    sale: { type: "string" }, close: { type: "string" }, "allow-id-mismatch": { type: "boolean" }, seller: { type: "string" },
+    sale: { type: "string" }, close: { type: "string" }, "allow-id-mismatch": { type: "boolean" }, again: { type: "boolean" }, seller: { type: "string" },
     intents: { type: "string" }, wrap: { type: "string" }, "quote-token": { type: "string" }, reserve: { type: "string" },
   });
   const str = (k: string) => values[k] as string | undefined;
@@ -254,6 +267,7 @@ export async function main(argv: string[]): Promise<number> {
       quoteToken: str("quote-token"),
       fallback: str("close") === "fallback",
       allowIdMismatch: values["allow-id-mismatch"] === true,
+      again: values.again === true,
       reserveOverride: str("reserve"),
     };
     if (!o.intents || (network === "testnet" && o.intents === "intents.near")) throw new Error("--intents <testnet Intents copy> is required on testnet");
@@ -281,7 +295,7 @@ export async function main(argv: string[]): Promise<number> {
     const decimals = { token: await decimalsOf(tokenId), quote: await decimalsOf(o.quoteToken ?? spec.msg.quote_token) };
     const needsPrice = o.reserveOverride === undefined && spec.msg.reserve.startsWith("auto:");
     const plan = planSale(spec, o, {
-      nowMs: Date.now(), nextId, intentsBalance: intentsBalance as bigint, wrapFtBalance, wrapRegistered, price: needsPrice ? await jamboPrice() : undefined, decimals,
+      nowMs: Date.now(), nextId, existing: nextId === null ? [] : await getSales(network, o.contract, common.rpc), intentsBalance: intentsBalance as bigint, wrapFtBalance, wrapRegistered, price: needsPrice ? await jamboPrice() : undefined, decimals,
     });
 
     for (const n of plan.notes) console.log(n);

@@ -11,6 +11,7 @@ import { RPCS, accessKeyInfo, makeAccount, type AccessKeyInfo } from "./near.js"
 
 // Keeper for a sale: open at close, reveal every bid that decrypts and matches its commitment, finalize, retry failed payouts.
 // Stateless and idempotent: every run reads the chain, decides, acts, and can be repeated or interrupted at any point.
+// It never resends a pending payout: finalize only retries items that failed, the contract skips the ones in flight (relayer/README.md, keeper rules).
 
 export interface RevealItem { idx: number; p: string; q: string; salt: string /* 32 lowercase hex */ }
 
