@@ -5,7 +5,7 @@ import { CopyButton } from '../components/CopyButton';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
-import { NEAR_INTENTS } from '../copy';
+import { NEAR_INTENTS, WITHDRAW_TESTNET } from '../copy';
 import { canRegisterKey, recoveryFor, type Recovery } from '../lib/bidFlow';
 import { useChainOffset } from '../lib/chainClock';
 import { liveQuoteToken } from '../lib/bidPayload';
@@ -280,15 +280,15 @@ export function Withdraw() {
         <p className="eyebrow">After a sale</p>
         <h1>Withdraw to chain</h1>
         <p className="lead">
-          Got a refund or tokens from a sale? They wait in your {NEAR_INTENTS} account, a balance on NEAR that your own wallet controls. This page sends them back to
-          your wallet on Base, Arbitrum or Solana.
+          Got a refund or tokens from a sale? They wait in your {NEAR_INTENTS} account, a balance on NEAR that your own wallet controls.{' '}
+          {WITHDRAW_TESTNET ?? 'This page sends them back to your wallet on Base, Arbitrum or Solana.'}
         </p>
         <p className="small muted">You only need it after a sale. If you never bid, there is nothing to withdraw.</p>
       </header>
       <details className="fold tech page-intro-tech">
         <summary>How it works</summary>
         <p className="small">
-          It moves tokens from your {NEAR_INTENTS} account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
+          {WITHDRAW_TESTNET ? 'On mainnet it moves' : 'It moves'} tokens from your {NEAR_INTENTS} account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
           relayer only pays gas and cannot change it. Each token needs its own quote and signature.
         </p>
       </details>

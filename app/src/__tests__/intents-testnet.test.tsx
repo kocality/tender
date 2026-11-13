@@ -99,6 +99,27 @@ describe('Withdraw wording follows the network', () => {
     }
   });
 
+  test('the Withdraw page lead says cross-chain withdrawal is mainnet-only on testnet', async () => {
+    vi.resetModules();
+    for (const [k, v] of Object.entries(TESTNET)) vi.stubEnv(k, v);
+    vi.stubGlobal('window', { location: { hash: '#/' }, addEventListener: () => {}, removeEventListener: () => {} });
+    const { Withdraw } = await import('../pages/Withdraw');
+    const t = text(renderToString(<Withdraw />));
+    expect(t).toContain(`Withdrawals to other chains work on mainnet through 1Click; on testnet your funds stay in ${LABEL}.`);
+    expect(t).not.toContain('sends them back to your wallet');
+    expect(t).not.toContain('Base, Arbitrum or Solana');
+  });
+
+  test('the Withdraw page mainnet lead is unchanged', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_NETWORK', 'mainnet');
+    vi.stubGlobal('window', { location: { hash: '#/' }, addEventListener: () => {}, removeEventListener: () => {} });
+    const { Withdraw } = await import('../pages/Withdraw');
+    const t = text(renderToString(<Withdraw />));
+    expect(t).toContain('This page sends them back to your wallet on Base, Arbitrum or Solana.');
+    expect(t).toContain('It moves tokens from your NEAR Intents account');
+  });
+
   test('mainnet wording is unchanged', async () => {
     const [page, card] = await money({ VITE_NETWORK: 'mainnet' });
     expect(page).toContain('Withdraw moves it to a wallet on Base, Arbitrum or Solana. 1Click fees are not refunded.');
