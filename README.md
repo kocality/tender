@@ -336,7 +336,7 @@ Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | What | Result |
 |---|---|
-| Tests | clearing 13, intents 65, seal 37, relayer 421, app 503, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Counted on `main` on 2026-11-13 UTC; `COUNTS=1 node --test docs/scripts/docs-checks.test.mjs` compares the pnpm counts with a fresh run. The contract and its tests are unchanged since step 9's commit |
+| Tests | clearing 13, intents 65, seal 37, relayer 425, app 505, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Counted on `main` on 2026-11-13 UTC; `COUNTS=1 node --test docs/scripts/docs-checks.test.mjs` compares the pnpm counts with a fresh run. The contract and its tests are unchanged since step 9's commit |
 | Wasm RC3 | the release candidate from the step 9 commit: 281,895 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
 | Entry points | integrators: `packages/seal/src/index.ts` (workspace package, not on npm); evidence file formats: `evidence/README.md` |
 
