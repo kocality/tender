@@ -71,6 +71,12 @@ describe('twin view', () => {
     expect(html).toContain('00:00:05');
   });
 
+  test('the sale page of the team-configured failing sale says so outside any fold, next to its huge threshold', () => {
+    const visible = (h: string) => h.replace(/<details[\s\S]*?<\/details>/g, '');
+    expect(visible(renderToString(<SaleView bundle={bundle0} nowNs={NOW} />))).toContain('configured by us to miss its open thresholds');
+    expect(renderToString(<SaleView bundle={bundle1} nowNs={NOW} />)).not.toContain('configured by us to miss');
+  });
+
   test('sale page lists the ciphertext wall with truncated ciphertext only', () => {
     const html = renderToString(<SaleView bundle={bundle1} nowNs={NOW} />);
     expect(html.split('class="cipher ').length - 1).toBe(6);

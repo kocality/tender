@@ -56,6 +56,12 @@ describe('the twin heading promises only what happened', () => {
     expect(twinHeading([keyed, planned], ['0'], keyed.closeNs, 'testnet').lead).toContain('set up to');
     expect(twinHeading([keyed, { ...planned, state: 'Finalized' as const }], ['0'], NOW, 'testnet').lead).not.toMatch(/never asked for/);
   });
+  test('a live contract with no sale yet promises no "real sales, read live" above two empty cards', () => {
+    expect(twinHeading([], ['0'], NOW, 'mainnet').before + twinHeading([], ['0'], NOW, 'mainnet').accent).not.toMatch(/read live/i);
+    const html = text(renderToString(<HomeView data={[{ id: '1', sale: null, bids: [] }, { id: '0', sale: null, bids: [] }]} error={null} loading={false} nowNs={NOW} />));
+    expect(html).not.toContain('Real sales, read live.');
+    expect(html).toContain('not created yet');
+  });
   test('the home page renders the neutral heading for two opened sales', () => {
     const b = (s: typeof keyed, id: string) => ({ id, sale: { ...s, id }, bids: [] });
     const html = text(renderToString(<HomeView data={[b(keyed, '0'), b(keyed, '1')]} error={null} loading={false} nowNs={NOW} />));

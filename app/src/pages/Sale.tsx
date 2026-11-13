@@ -83,6 +83,7 @@ function SaleHead({ bundle, sale, nowNs }: { bundle: SaleBundle; sale: SaleT; no
           <p className="pills">
             <StatusPill tone={STATE_TONE[sale.state]}>{stateText(sale, nowNs)}</StatusPill>
             {config.teamAccounts.includes(sale.seller) ? <span className="pill quiet">team-funded demo sale (us)</span> : null}
+            {config.demoFailSales.includes(sale.id) ? <span className="pill quiet">configured by us to miss its open thresholds</span> : null}
             <span className="pill quiet mono">{`${takesBids ? 'closes' : 'closed'} ${formatNsUtc(sale.closeNs)}`}</span>
           </p>
         </div>

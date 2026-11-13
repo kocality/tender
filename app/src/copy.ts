@@ -206,6 +206,10 @@ export function twinHeading(
       lead: 'One is set up to open; the other to miss its conditions, so its key is never asked for.',
     };
   }
+  // The contract is live but no twin sale exists yet: the cards say "not created yet", so the heading promises nothing live.
+  if (sales.length === 0) {
+    return { before: 'Two real sales, once they are', accent: 'created.', after: '', lead: `The contract is live on NEAR ${network}; the sales shown here are not created yet.` };
+  }
   return { before: 'Real sales, read', accent: 'live.', after: '', lead: `${sales.length === 1 ? 'A sale' : 'Sales'} on NEAR ${network}, read live from the chain.` };
 }
 
