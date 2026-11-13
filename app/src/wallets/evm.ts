@@ -34,7 +34,7 @@ export async function pickEvmProvider(): Promise<EIP1193Provider> {
   if (found[0]) return found[0].provider;
   const injected = (window as unknown as { ethereum?: EIP1193Provider }).ethereum;
   if (injected) return injected;
-  throw new WalletError('No EVM wallet found. Install MetaMask and reload.');
+  throw new WalletError('No MetaMask or other Ethereum wallet found. Install MetaMask, then reload this page.');
 }
 
 export async function connectEvm(origin: 'base' | 'arb'): Promise<IntentSigner> {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { config } from '../config';
-import { PENALTY_RULE } from '../copy';
+import { NEAR_INTENTS, PENALTY_RULE } from '../copy';
 import { itemsFromBidFiles } from '../lib/bidFile';
 import type { DecryptResult } from '../lib/decrypt';
 import { formatCountdown, formatNsUtc } from '../lib/format';
@@ -79,7 +79,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
       if (r.to === 'register_key' && canRegisterKey(signed, signer?.signerId)) setNeedsKey({ signed, group });
       setError(
         r.to === 'fund'
-          ? 'This account holds no USDC in NEAR Intents. The gasless reveal needs 0.000001 USDC there; it is returned right away.'
+          ? `This account holds no USDC in ${NEAR_INTENTS}. The gasless reveal needs 0.000001 USDC there; it is returned right away.`
           : r.message,
       );
       return false;
@@ -211,7 +211,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
       {blocked.length > 0 ? (
         <p className="note" role="note">
           Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. If they are still unrevealed when the window ends, each loses 10% of its escrow. That 10%
-          stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included. If you sealed one of them yourself, reveal it from its bid file above.
+          stays in the contract&apos;s {NEAR_INTENTS} balance; no Tender method pays it to anyone, the seller included. If you sealed one of them yourself, reveal it from its bid file above.
         </p>
       ) : null}
       <div role="status">
@@ -229,7 +229,7 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
       {needsKey ? (
         <div style={{ marginTop: 8 }}>
           <button type="button" className="primary" onClick={() => void registerKey()} disabled={busy !== null}>
-            Register this key with NEAR Intents (1 yoctoNEAR)
+            Register this key with {NEAR_INTENTS} · 1 yoctoNEAR
           </button>
         </div>
       ) : null}

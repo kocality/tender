@@ -1,5 +1,30 @@
 import { describe, expect, test } from 'vitest';
-import { TRUST_LINE, cancelledLabel, originBadge, timelineStage, twinVerdict } from '../copy';
+import { HOME, MORE_LIMITS, TRUST_LINE, cancelledLabel, originBadge, timelineStage, twinVerdict } from '../copy';
+
+describe('the hero says who asks for the key and when', () => {
+  test('step 02: the locked sale contract asks, and only when the public conditions hold; the key network checks no conditions', () => {
+    const step = HOME.steps[1];
+    expect(step).toContain('The locked sale contract is the only account that can get that key');
+    expect(step).toContain("it asks only after close, if the sale's public conditions hold");
+    expect(step).not.toMatch(/network (gives|releases|hands)/i);
+  });
+  test('the caveat under the steps is plain, keeps both exceptions and former key holders, and is not worded as a threat', () => {
+    expect(HOME.heroCaveat).toContain('Your price stays sealed until the sale opens.');
+    expect(HOME.heroCaveat).toContain("11 of NEAR's key holders, past or present, working together");
+    expect(HOME.heroCaveat).toContain('a tampered copy of this page');
+    expect(HOME.heroCaveat).not.toMatch(/^Sealed unless/);
+  });
+});
+
+describe('limits: plain words first, the technical wording one click behind', () => {
+  const neverOpened = MORE_LIMITS.find((l) => l.title.startsWith('Bids in a sale that never opened'));
+  test('the never-opened limit says it plainly and keeps the README wording as its technical detail', () => {
+    expect(neverOpened?.text).toContain('its sealed bids are not erased');
+    expect(neverOpened?.text).not.toMatch(/ciphertext|MPC|domain-2|threshold/);
+    expect(neverOpened?.technical).toContain('so the MPC threshold still covers them');
+    expect(neverOpened?.technical).toContain("a future compromise of NEAR's domain-2 master key would decrypt every stored bid");
+  });
+});
 
 describe('originBadge (X12-03 unicode)', () => {
   test('declared origins get their chain name', () => {

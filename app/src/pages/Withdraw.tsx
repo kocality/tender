@@ -5,6 +5,7 @@ import { CopyButton } from '../components/CopyButton';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
+import { NEAR_INTENTS } from '../copy';
 import { canRegisterKey, recoveryFor, type Recovery } from '../lib/bidFlow';
 import { useChainOffset } from '../lib/chainClock';
 import { liveQuoteToken } from '../lib/bidPayload';
@@ -279,7 +280,7 @@ export function Withdraw() {
         <p className="eyebrow">After a sale</p>
         <h1>Withdraw to chain</h1>
         <p className="lead">
-          Got a refund or tokens from a sale? They wait in your NEAR Intents account, a balance on NEAR that your own wallet controls. This page sends them back to
+          Got a refund or tokens from a sale? They wait in your {NEAR_INTENTS} account, a balance on NEAR that your own wallet controls. This page sends them back to
           your wallet on Base, Arbitrum or Solana.
         </p>
         <p className="small muted">You only need it after a sale. If you never bid, there is nothing to withdraw.</p>
@@ -287,7 +288,7 @@ export function Withdraw() {
       <details className="fold tech page-intro-tech">
         <summary>How it works</summary>
         <p className="small">
-          It moves tokens from your NEAR Intents account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
+          It moves tokens from your {NEAR_INTENTS} account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
           relayer only pays gas and cannot change it. Each token needs its own quote and signature.
         </p>
       </details>
@@ -393,7 +394,7 @@ export function Withdraw() {
             ) : null}
             <dt>Deposit address</dt>
             <dd>
-              <span className="mono">{depositAddress}</span> (a NEAR Intents account, not a chain address)
+              <span className="mono">{depositAddress}</span> (a {NEAR_INTENTS} account, not a chain address)
             </dd>
           </dl>
           {!signed ? (
@@ -404,7 +405,7 @@ export function Withdraw() {
           {recovery?.to === 'register_key' ? (
             <div style={{ marginTop: 8 }}>
               <button type="button" className="primary" onClick={() => void doRegisterKey()} disabled={busy !== null}>
-                {busy === 'register' ? 'Waiting for wallet…' : 'Register this key with NEAR Intents (1 yoctoNEAR)'}
+                {busy === 'register' ? 'Waiting for wallet…' : `Register this key with ${NEAR_INTENTS} · 1 yoctoNEAR`}
               </button>
             </div>
           ) : null}
@@ -474,7 +475,7 @@ export function Withdraw() {
           {status && (status.status === 'REFUNDED' || status.status === 'FAILED' || status.status === 'INCOMPLETE_DEPOSIT') ? (
             <p className="result bad" role="alert">
               {humanStatus(status.status)}
-              {status.swapDetails?.refundReason ? ` (${status.swapDetails.refundReason})` : ''} The amount returns to your NEAR Intents account.
+              {status.swapDetails?.refundReason ? ` (${status.swapDetails.refundReason})` : ''} The amount returns to your {NEAR_INTENTS} account.
             </p>
           ) : null}
           {busy === null && !(verdict && (verdict.kind === 'pending' || verdict.kind === 'unknown')) ? (

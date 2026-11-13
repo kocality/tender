@@ -11,7 +11,7 @@ import { StepList } from '../components/StepList';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
-import { HOSTED_BUNDLE, NOT_STORED_CAUSES, UNRECOVERABLE_TRANSFER, originBadge } from '../copy';
+import { HOSTED_BUNDLE, NEAR_INTENTS, NOT_STORED_CAUSES, UNRECOVERABLE_TRANSFER, originBadge } from '../copy';
 import { buildBidPayload } from '../lib/bidPayload';
 import {
   SELF_REVEAL_RESERVE,
@@ -895,7 +895,7 @@ export function Wizard({
             </p>
             {balance !== null && isFunded(balance, plan.B) ? (
               <>
-                <p className="result ok">Already funded in NEAR Intents ({formatUsdc(balance)} USDC) · skipping deposit</p>
+                <p className="result ok">Already funded in {NEAR_INTENTS}: {formatUsdc(balance)} USDC · skipping deposit</p>
                 {fundOnly ? <p className="small muted">Funding check complete (fund-only mode).</p> : null}
               </>
             ) : signer.origin === 'near' ? (
@@ -1031,7 +1031,7 @@ export function Wizard({
             {recovery?.to === 'register_key' && signed && canRegisterKey(signed, signer.signerId) ? (
               <div style={{ marginTop: 8 }}>
                 <button type="button" className="primary" onClick={doRegisterKey} disabled={busy !== null}>
-                  {busy === 'register' ? 'Waiting for wallet…' : 'Register this key with NEAR Intents (1 yoctoNEAR)'}
+                  {busy === 'register' ? 'Waiting for wallet…' : `Register this key with ${NEAR_INTENTS} · 1 yoctoNEAR`}
                 </button>
               </div>
             ) : null}

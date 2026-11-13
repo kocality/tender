@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { payloadString, simulateIntents, type MultiPayload } from '@tender/intents';
 import { CopyButton } from '../components/CopyButton';
 import { config } from '../config';
+import { NEAR_INTENTS } from '../copy';
 import { buildTryBid, liveQuoteToken } from '../lib/bidPayload';
 import { useChainOffset } from '../lib/chainClock';
 import { interpretSimulation, type TryOutcome } from '../lib/tryResult';
@@ -77,12 +78,12 @@ export function Try() {
         <p className="eyebrow">Free · nothing is sent</p>
         <h1>Try signing (free)</h1>
         <p className="lead">
-          Sign the same message a real bid uses, with your own wallet. NEAR Intents (the NEAR contract that holds balances your own wallet controls and checks
-          every signature) checks it and stops there: no deposit, no funds move.
+          Sign the same message a real bid uses, with your own wallet. {NEAR_INTENTS}, the NEAR contract that holds balances your own wallet controls and checks
+          every signature, checks it and stops there: no deposit, no funds move.
         </p>
         <p className="note info">
           <strong>This proves your wallet can place a real Tender bid, without spending anything.</strong> Success reads{' '}
-          <span className="mono">signature valid · insufficient balance</span>: NEAR Intents accepted your signature as a real bid, then stopped because the account
+          <span className="mono">signature valid · insufficient balance</span>: {NEAR_INTENTS} accepted your signature as a real bid, then stopped because the account
           holds no USDC there.
         </p>
       </header>
@@ -120,8 +121,8 @@ export function Try() {
         </li>
         <li>
           <span className="n mono">02</span>
-          <strong>Checked by NEAR Intents, not by us.</strong>
-          <span className="muted small">The check runs on NEAR Intents&apos; own contract, not on our server.</span>
+          <strong>Checked by the {NEAR_INTENTS} contract, not by our server.</strong>
+          <span className="muted small">The check is a view call to that contract on NEAR; our server is not involved.</span>
         </li>
         <li>
           <span className="n mono">03</span>

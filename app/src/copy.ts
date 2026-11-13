@@ -1,7 +1,11 @@
 // Persistent UI text. The honest-claims rule applies to every string in this app.
 
+import { config } from './config';
 import { formatUsdc } from './lib/format';
 import type { Sale } from './lib/views';
+
+/** How the app names NEAR Intents. Testnet has no intents.near: a testnet build talks to the project's own copy (JUDGES row T11), and says so wherever it names it. */
+export const NEAR_INTENTS = config.network === 'testnet' ? 'NEAR Intents (our testnet copy)' : 'NEAR Intents';
 
 export const TRUST_LINE =
   "Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs. Resharing does not revoke old shares, so the condition is fewer than 11 of the parties that hold or ever held a share of the domain-2 key.";
@@ -14,11 +18,11 @@ export const HOSTED_BUNDLE =
 
 /** The penalty as the contract applies it: the 10% stays in the contract's NEAR Intents balance and no Tender method pays it out. Every screen that mentions the penalty says this. */
 export const PENALTY_RULE =
-  "When at least one bid in the sale is revealed, an unrevealed bid gets 90% of its escrow back (100% if no bid is revealed). The other 10% stays in the contract's NEAR Intents balance. No Tender method pays it to anyone: not to the seller, not to other bidders, not to us. Like any Intents balance, intents.near's own admin roles could move it.";
+  `When at least one bid in the sale is revealed, an unrevealed bid gets 90% of its escrow back (100% if no bid is revealed). The other 10% stays in the contract's ${NEAR_INTENTS} balance. No Tender method pays it to anyone: not to the seller, not to other bidders, not to us. Like any Intents balance, intents.near's own admin roles could move it.`;
 
 /** Why a relayed bid can be missing from the sale: the contract refunds it with one of these reasons (the refund event is in the transaction logs). */
 export const NOT_STORED_CAUSES =
-  "Usual causes: the bid arrived after close, the sale is full (maximum bids or escrow cap), the bid came from the sale's own seller account (refund reason seller_bid), or the message is over 2048 bytes (refund reason msg_too_long; this page never sends one that long). A refund lands in your NEAR Intents balance; Withdraw moves it out.";
+  `Usual causes: the bid arrived after close, the sale is full (maximum bids or escrow cap), the bid came from the sale's own seller account (refund reason seller_bid), or the message is over 2048 bytes (refund reason msg_too_long; this page never sends one that long). A refund lands in your ${NEAR_INTENTS} balance; Withdraw moves it out.`;
 
 /** Intents balances credited to the contract outside a bid or reveal message cannot be moved again (the contract has no admin method). */
 export const UNRECOVERABLE_TRANSFER =
@@ -33,7 +37,10 @@ export const PRIVACY_PLAIN =
 /** The status line under the hero and in the footer. It follows the build's network, and says so when the sale contract cannot be found. */
 export function networkStatus(network: 'mainnet' | 'testnet', contractMissing = false): { label: string; text: string; footer: string } {
   const common = 'No audit. Only our team can create sales, and we are the seller in every one of them. The chain shown on a bid is declared by the bidder, not proven.';
-  if (network === 'testnet') return { label: 'Testnet demo', text: 'test tokens only, no real money', footer: `Test tokens only, no real money. ${common}` };
+  if (network === 'testnet') {
+    const intents = `NEAR Intents here is our own testnet copy, ${config.intentsContractId}, running the same intents 0.4.5 contract code.`;
+    return { label: 'Testnet demo', text: 'test tokens only, no real money', footer: `Test tokens only, no real money. ${intents} ${common}` };
+  }
   if (contractMissing) return { label: 'Mainnet', text: 'the sale contract is not live yet', footer: `The sale contract is not live yet; once it is, bids move real USDC. ${common}` };
   return { label: 'Mainnet', text: 'real USDC · no audit · team-funded demo sales', footer: `Bids move real USDC. ${common}` };
 }
@@ -57,7 +64,7 @@ export function cancelledLabel(state: string, keyRequests: string | number | big
 export const TRY_RESULT = {
   insufficientBalance: 'signature valid · insufficient balance (simulation only, nothing was sent)',
   notRegistered:
-    "signature valid · this NEAR key is not registered in NEAR Intents yet (named accounts register once; implicit and EVM/Solana accounts don't need to)",
+    `signature valid · this NEAR key is not registered in ${NEAR_INTENTS} yet (named accounts register once; implicit and EVM/Solana accounts don't need to)`,
   otherAccount: 'the signature was made by a different account than the one shown (switch the wallet back to it, or reconnect)',
   funded: 'signature valid · this account holds funds; simulation only, nothing was sent',
 } as const;
@@ -74,11 +81,12 @@ export const HOME = {
   lead: 'A token sale with sealed bids. Bid with USDC from Base, Arbitrum, Solana or NEAR. Other bidders and the seller see your deposit, not your price.',
   steps: [
     "Your browser seals your price with the sale's lock before you send it.",
-    "Only the sale's key opens it. NEAR's key network gives that key to the sale contract only after the sale closes and meets its public conditions.",
+    "Only the sale's key opens it. The locked sale contract is the only account that can get that key from NEAR's key network, and it asks only after close, if the sale's public conditions hold.",
     'Then anyone can open the bids, and every winner pays the same price.',
   ],
-  /** Under the three steps: the two exceptions to "sealed", one click from the full table. */
-  heroCaveat: "Sealed unless 11 of the parties that hold, or ever held, a piece of NEAR's key work together, or this page is a bad copy.",
+  /** Under the three steps: the two exceptions to "sealed" in plain words; `heroWhy` links to the exact wording on #/trust. */
+  heroCaveat: "Your price stays sealed until the sale opens. Two things could reveal it sooner: 11 of NEAR's key holders, past or present, working together, or a tampered copy of this page.",
+  heroWhy: 'Why these two',
   /** Mobile hero: the one-line cast above "What other bidders see". */
   castLine: 'In the example below, Bea bids 3.90 from Base; Sam bids later from Solana.',
   cast: [
@@ -193,7 +201,7 @@ export const TOP_LIMITS: { title: string; text: string }[] = [
   },
   {
     title: 'A bidder can keep a last look.',
-    text: "Someone can seal a bid our keeper cannot open, watch the other bids open, then reveal it from their own copy or not. It costs 10% of their deposit, which stays in the contract's balance on NEAR Intents (the NEAR contract that holds every deposit); no Tender method pays it out. On a big sale with few bids it can still pay: the penalty prices it, it does not prevent it.",
+    text: `Someone can seal a bid our keeper cannot open, watch the other bids open, then reveal it from their own copy or not. It costs 10% of their deposit, which stays in the contract's balance on ${NEAR_INTENTS}, the NEAR contract that holds every deposit; no Tender method pays it out. On a big sale with few bids it can still pay: the penalty prices it, it does not prevent it.`,
   },
   {
     title: 'A seller can bid on their own sale.',
@@ -201,15 +209,17 @@ export const TOP_LIMITS: { title: string; text: string }[] = [
   },
 ];
 
-/** The other eight limits of README "Trust and limits", plain first, the README wording as the detail. */
-export const MORE_LIMITS: { title: string; text: string }[] = [
+/** The other eight limits of README "Trust and limits", plain first; `technical` keeps the README wording where the plain text leaves it out. */
+export const MORE_LIMITS: { title: string; text: string; technical?: string }[] = [
   {
     title: 'A bidder can prove their bid to someone else.',
     text: 'The salt (the random part sealed with each bid) lets a bidder prove a bid to someone who pays for it (no receipt-freeness, unlike MACI).',
   },
   {
-    title: 'The bids of a sale that never opened stay on chain.',
-    text: "\"Never requested\" means the contract never asked for the key. The ciphertexts stay on chain, so the MPC threshold still covers them, cancelled sales included, and a future compromise of NEAR's domain-2 master key would decrypt every stored bid. A sale cancelled after a request is an exception.",
+    title: 'Bids in a sale that never opened are not deleted.',
+    text: "When a sale misses its conditions, its key is never asked for, but its sealed bids are not erased: they stay public, still locked. 11 of NEAR's key holders, past or present, working together could still open them, and so could anyone who one day breaks NEAR's master key.",
+    technical:
+      "\"Never requested\" means the contract never asked for the key. The ciphertexts stay on chain, so the MPC threshold still covers them, cancelled sales included, and a future compromise of NEAR's domain-2 master key would decrypt every stored bid. A sale cancelled after a request is an exception.",
   },
   {
     title: "NEAR can change its key network's master key.",
@@ -266,19 +276,19 @@ export const RELY_ON: { plain: string; breaks: string; technical: string }[] = [
     technical: 'Someone revealing within the window: bids get revealed.',
   },
   {
-    plain: 'NEAR Intents, the NEAR contract that holds your balance, checks every signature.',
+    plain: `${NEAR_INTENTS}, the NEAR contract that holds your balance, checks every signature.`,
     breaks: 'Bids or transfers could be forged.',
     technical: 'intents.near signature checks: bidder identity and amounts.',
   },
   {
-    plain: "NEAR Intents' admins leave balances where the contract put them.",
+    plain: `The admins of ${NEAR_INTENTS} leave balances where the contract put them.`,
     breaks: 'They could move any Intents balance, the penalty pool included.',
     technical: 'intents.near admin roles: the penalty pool and escrow stay where the contract put them.',
   },
   {
     plain: '1Click, the bridge service that moves USDC between chains, does its job.',
     breaks: "A stuck swap follows 1Click's own refund flow, outside the contract.",
-    technical: '1Click and its bridges: cross-chain in and out; fees are recorded in docs/protocol.md.',
+    technical: '1Click and its bridges: cross-chain in and out; fees are recorded in `docs/protocol.md`.',
   },
   {
     plain: 'This page seals your bid honestly.',

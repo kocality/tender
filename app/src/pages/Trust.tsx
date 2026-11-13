@@ -83,7 +83,7 @@ export function Trust() {
           <ol className="rows tech-rows">
             {RELY_ON.map((r) => (
               <li key={r.technical} className="small">
-                {r.technical}
+                <Rich text={r.technical} />
               </li>
             ))}
           </ol>
@@ -94,10 +94,10 @@ export function Trust() {
         <p className="eyebrow">{`04 · Limits · ${TOP_LIMITS.length + MORE_LIMITS.length}`}</p>
         <h2 id="t-limits">What Tender does not protect against.</h2>
         <p className="muted measure">
-          What an attacker can still do, and what we do not claim. The mechanics are in the protocol notes, <code>docs/protocol.md</code> in the source code.
+          What an attacker can still do, and what we do not claim. The mechanics are in the protocol notes, <Rich text="`docs/protocol.md`" /> in the source code.
         </p>
         <ol className="rows limits-all">
-          {[...TOP_LIMITS, ...MORE_LIMITS].map((l) => (
+          {[...TOP_LIMITS, ...MORE_LIMITS].map((l: { title: string; text: string; technical?: string }) => (
             <li key={l.title}>
               {/* Open: the three a visitor reads first, and the counterweight to "its key was never asked for". */}
               <details className="fold" open={TOP_LIMITS.includes(l) || l === MORE_LIMITS[1]}>
@@ -105,6 +105,14 @@ export function Trust() {
                 <p className="small">
                   <Rich text={l.text} />
                 </p>
+                {l.technical ? (
+                  <details className="fold tech">
+                    <summary>In technical words</summary>
+                    <p className="small">
+                      <Rich text={l.technical} />
+                    </p>
+                  </details>
+                ) : null}
               </details>
             </li>
           ))}

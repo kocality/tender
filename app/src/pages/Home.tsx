@@ -3,7 +3,7 @@ import { Loading, ReadError } from '../components/Feedback';
 import { Rich } from '../components/Rich';
 import { PublicList, RoleList, TopLimits } from '../components/Trust';
 import { config } from '../config';
-import { HOME, heroSalePhrase, networkStatus, twinHeading } from '../copy';
+import { HOME, NEAR_INTENTS, heroSalePhrase, networkStatus, twinHeading } from '../copy';
 import { isNotDeployed } from '../lib/errors';
 import { useChainClock } from '../lib/chainClock';
 import { loadSaleBundle, type SaleBundle } from '../lib/loaders';
@@ -105,7 +105,8 @@ function Hero({ missing, sales, nowNs }: { missing: boolean; sales: Sale[]; nowN
           <p className="hero-caveat small">
             {HOME.heroCaveat}{' '}
             <a href="#/trust">
-              Who can see your bid<span aria-hidden="true">{'\u00a0→'}</span>
+              {HOME.heroWhy}
+              <span aria-hidden="true">{'\u00a0→'}</span>
             </a>
           </p>
           <div className="hero-cta">
@@ -369,7 +370,7 @@ function PathRows({ bundles, nowNs, checks }: { bundles: SaleBundle[] | null; no
   const rows: { title: string; text: string; href: string; button: string; primary?: boolean; more?: { href: string; label: string } }[] = [
     {
       title: 'Sign a bid with your own wallet.',
-      text: 'MetaMask, Phantom or a NEAR wallet signs the same message a real bid uses. NEAR Intents (the NEAR contract that holds balances your own wallet controls) checks the signature and stops there: free, nothing is sent.',
+      text: `MetaMask, Phantom or a NEAR wallet signs the same message a real bid uses. ${NEAR_INTENTS}, the NEAR contract that holds balances your own wallet controls, checks the signature and stops there: free, nothing is sent.`,
       href: '#/try',
       button: 'Try signing (free)',
       primary: true,

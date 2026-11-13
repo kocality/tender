@@ -1,16 +1,18 @@
 // One place that turns every failure the app can meet into one sentence: what happened and what to do next.
 // Errors are matched by shape (name, code, status), so this file imports no wallet, relay or 1Click module.
 
+import { NEAR_INTENTS } from '../copy';
+
 /** Intents panics (`classifyIntentsError`) and relay outcomes. Same names as `IntentsErrorKind` and `RelayError.kind`. */
 const KIND_TEXT: Record<string, string> = {
   insufficient_balance: 'The Intents account does not hold enough USDC for this escrow. Add funds, then sign again.',
-  invalid_signature: 'NEAR Intents did not accept the wallet signature. Sign again; if it repeats, reconnect the wallet.',
-  public_key_not_registered: 'Register this key with NEAR Intents (one-time, 1 yoctoNEAR), then continue.',
+  invalid_signature: `${NEAR_INTENTS} did not accept the wallet signature. Sign again; if it repeats, reconnect the wallet.`,
+  public_key_not_registered: `Register this key with ${NEAR_INTENTS} once (it costs 1 yoctoNEAR), then continue.`,
   deadline_expired: 'The signature expired before it was sent. Sign again and send it right away.',
   deadline_gt_nonce: 'The signature deadline is later than its nonce allows. Sign again.',
   nonce_used: 'This signed bid was already sent and cannot run twice. The page checks the chain for it and will not ask for a second signature.',
   nonce_expired: 'The nonce of this signature expired. Sign again.',
-  invalid_nonce: 'NEAR Intents rejected the nonce of this signature. Sign again; if it repeats, reload the page.',
+  invalid_nonce: `${NEAR_INTENTS} rejected the nonce of this signature. Sign again; if it repeats, reload the page.`,
   invalid_salt: 'The Intents salt changed while you were signing. Sign again.',
   wrong_verifying_contract: 'The payload was signed for another Intents contract than this page uses. Check the network and sign again.',
   execute_unknown: 'The relayer sent the bid but the answer was lost, so it may still land until its signature expires. The page checks the chain; do not fund or seal again meanwhile.',
@@ -107,7 +109,7 @@ export function humanError(input: unknown, detail?: string): string {
   if (typeof input === 'string') {
     if (Object.hasOwn(KIND_TEXT, input)) return KIND_TEXT[input]!;
     if (Object.hasOwn(STATUS_TEXT, input)) return STATUS_TEXT[input]!;
-    if (input === 'other') return detail && detail !== '' ? detail : 'NEAR Intents refused the request. Reload the page and try again.';
+    if (input === 'other') return detail && detail !== '' ? detail : `${NEAR_INTENTS} refused the request. Reload the page and try again.`;
   }
   if (isUserRejection(input)) return WALLET_DECLINED;
   if (typeof input === 'object' && input !== null) {

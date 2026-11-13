@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NEAR_INTENTS } from '../copy';
 import { connectEvm } from '../wallets/evm';
 import { connectNear, nearReady } from '../wallets/near';
 import { connectPhantom } from '../wallets/phantom';
@@ -82,7 +83,7 @@ export function WalletPicker({
       </div>
       {signer ? (
         <p className="small" style={{ margin: '8px 0 0' }}>
-          Your NEAR Intents account: <span className="mono">{signer.signerId}</span>
+          Your {NEAR_INTENTS} account: <span className="mono">{signer.signerId}</span>
         </p>
       ) : null}
       {error ? (

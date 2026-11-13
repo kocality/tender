@@ -73,7 +73,7 @@ describe('wallet rejection', () => {
   test('a pending wallet request and ordinary errors', () => {
     expect(humanError({ code: -32002, message: 'Request of type personal_sign already pending' })).toBe(WALLET_BUSY);
     expect(isUserRejection(new Error('Sale cancelled by seller'))).toBe(false);
-    expect(humanError(new Error('No EVM wallet found. Install MetaMask and reload.'))).toBe('No EVM wallet found. Install MetaMask and reload.');
+    expect(humanError(new Error('No MetaMask or other Ethereum wallet found.'))).toBe('No MetaMask or other Ethereum wallet found.');
     expect(humanError(undefined)).toContain('Try again');
   });
 });

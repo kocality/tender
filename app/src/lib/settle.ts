@@ -1,5 +1,6 @@
 import { classifyTx, fetchTx, isNonceUsed, rpcRequest, type TxOutcome } from '@tender/intents';
 import { config } from '../config';
+import { NEAR_INTENTS } from '../copy';
 import { ticketNonceB64, type Ticket } from './ticket';
 import { getAllBids } from './views';
 
@@ -89,7 +90,7 @@ export function pendingText(v: Settled, hhmm: (ms: number) => string): string {
     case 'pending':
       return `Your signed bid may still land until ${hhmm(v.untilMs)}. Funding, sealing and a second bid stay off until the chain says what became of it. Signing again is safe: it repeats the same nonce.`;
     case 'executed':
-      return 'The bid was executed in NEAR Intents and the contract has not logged it yet. This page keeps checking; do not fund or seal again.';
+      return `The bid was executed in ${NEAR_INTENTS} and the contract has not logged it yet. This page keeps checking; do not fund or seal again.`;
     case 'dead':
       return 'The signature expired without running, so nothing was spent. Sign again (it repeats the same nonce) or start over.';
     case 'unknown':

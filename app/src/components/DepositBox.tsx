@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NEAR_INTENTS } from '../copy';
 import { ORIGIN_CHAIN_NAME, ORIGIN_TOKEN_ADDRESS, isTerminal, quoteShortfall, type DepositOrigin, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
 import { humanStatus } from '../lib/errors';
 import { formatUsdc } from '../lib/format';
@@ -91,7 +92,7 @@ export function DepositBox({
         ) : null}
         <dt>You receive</dt>
         <dd>
-          at least {formatUsdc(BigInt(q.minAmountOut))} USDC in your NEAR Intents account (about {q.timeEstimate ?? '?'} s)
+          at least {formatUsdc(BigInt(q.minAmountOut))} USDC in your {NEAR_INTENTS} account (about {q.timeEstimate ?? '?'} s)
         </dd>
         {left ? (
           <>

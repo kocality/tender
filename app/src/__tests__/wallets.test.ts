@@ -95,6 +95,11 @@ describe('MetaMask account switch (X12A-02)', () => {
     const signer = await connectEvm('base');
     expect((await signer.sign(payload(signer.signerId))).standard).toBe('erc191');
   });
+  test('no wallet at all: the message names MetaMask in plain words, not "EVM"', async () => {
+    vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true });
+    const err = await connectEvm('base').catch((e: Error) => e);
+    expect(err.message).toBe('No MetaMask or other Ethereum wallet found. Install MetaMask, then reload this page.');
+  });
 });
 
 describe('NEAR wallet manifest is pinned (X12-02 supply)', () => {

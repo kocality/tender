@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { priceUnitLabel } from '../lib/amounts';
 import { fieldOfError, submitDecision, validateBid, type BidValidation } from '../lib/bidFlow';
-import { PENALTY_RULE } from '../copy';
+import { NEAR_INTENTS, PENALTY_RULE } from '../copy';
 import { tokenSymbol } from '../lib/format';
 import type { Sale } from '../lib/views';
 
@@ -111,7 +111,7 @@ export function BidForm({
         <summary>If your bid is never revealed</summary>
         <p className="small">
           Whatever you do not spend at the clearing price is refunded. If no one reveals your bid before the deadline (the keeper normally does; you can too,
-          gasless), 10% stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included.
+          gasless), 10% stays in the contract&apos;s {NEAR_INTENTS} balance; no Tender method pays it to anyone, the seller included.
         </p>
         <p className="small muted">{PENALTY_RULE}</p>
       </details>
