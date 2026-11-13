@@ -77,6 +77,35 @@ describe('NEAR Intents on testnet', () => {
   });
 });
 
+// 1Click is mainnet only (JUDGES P1): on testnet the sale page and the cancelled card must not promise a withdrawal to another chain.
+describe('Withdraw wording follows the network', () => {
+  async function money(env: Record<string, string>) {
+    vi.resetModules();
+    for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+    vi.stubGlobal('window', { location: { hash: '#/' }, addEventListener: () => {}, removeEventListener: () => {} });
+    const { SaleView } = await import('../pages/Sale');
+    const { CancelledCard } = await import('../components/CancelledCard');
+    const cancelled = parseSale(sale0);
+    const bids = [parseBid(bids1[0]!)];
+    const nowNs = cancelled.closeNs + 60_000_000_000n;
+    return [renderToString(<SaleView bundle={{ id: '0', sale: cancelled, bids }} nowNs={nowNs} />), renderToString(<CancelledCard sale={cancelled} bids={bids} />)].map(text);
+  }
+
+  test('testnet says withdrawals to other chains are mainnet-only and funds stay in the testnet copy', async () => {
+    const [page, card] = await money(TESTNET);
+    for (const t of [page!, card!]) {
+      expect(t).toContain(`Withdrawals to other chains work on mainnet through 1Click; on testnet your funds stay in ${LABEL}.`);
+      expect(t).not.toMatch(/Base, Arbitrum or Solana|moves it to/);
+    }
+  });
+
+  test('mainnet wording is unchanged', async () => {
+    const [page, card] = await money({ VITE_NETWORK: 'mainnet' });
+    expect(page).toContain('Withdraw moves it to a wallet on Base, Arbitrum or Solana. 1Click fees are not refunded.');
+    expect(card).toContain('Withdraw moves it to another chain; 1Click fees are not refunded.');
+  });
+});
+
 describe('one home for the name', () => {
   const src = join(__dirname, '..');
   const files = readdirSync(src, { recursive: true, withFileTypes: true })

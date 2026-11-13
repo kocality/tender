@@ -10,7 +10,7 @@ import { ResultTable } from '../components/ResultTable';
 import { RevealPanel } from '../components/RevealPanel';
 import { SaleCard } from '../components/SaleCard';
 import { SupplyDemandChart } from '../components/SupplyDemandChart';
-import { NEAR_INTENTS, OPEN_RULE, PENALTY_RULE } from '../copy';
+import { NEAR_INTENTS, OPEN_RULE, PENALTY_RULE, WITHDRAW_TESTNET } from '../copy';
 import { priceUnitLabel } from '../lib/amounts';
 import { useChainClock } from '../lib/chainClock';
 import type { DecryptResult } from '../lib/decrypt';
@@ -194,8 +194,11 @@ function SaleAside({ sale }: { sale: SaleT }) {
       <section className="card pad">
         <p className="eyebrow">Your money</p>
         <p className="small" style={{ margin: 0 }}>
-          If you bid in this sale, your refund or tokens land in your {NEAR_INTENTS} account. <a href="#/withdraw">Withdraw</a> moves it to a wallet on Base, Arbitrum or Solana.
-          1Click fees are not refunded.
+          If you bid in this sale, your refund or tokens land in your {NEAR_INTENTS} account. {WITHDRAW_TESTNET ?? (
+            <>
+              <a href="#/withdraw">Withdraw</a> moves it to a wallet on Base, Arbitrum or Solana. 1Click fees are not refunded.
+            </>
+          )}
         </p>
       </section>
       <section className="card pad">

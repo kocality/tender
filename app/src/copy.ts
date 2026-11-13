@@ -7,6 +7,10 @@ import type { Sale } from './lib/views';
 /** How the app names NEAR Intents. Testnet has no intents.near: a testnet build talks to the project's own copy (JUDGES row T11), and says so wherever it names it. */
 export const NEAR_INTENTS = config.network === 'testnet' ? 'NEAR Intents (our testnet copy)' : 'NEAR Intents';
 
+/** Testnet only (null on mainnet): 1Click is mainnet only, so on testnet funds cannot leave the project's testnet copy. Replaces the "Withdraw moves it to another chain" sentence. */
+export const WITHDRAW_TESTNET: string | null =
+  config.network === 'testnet' ? `Withdrawals to other chains work on mainnet through 1Click; on testnet your funds stay in ${NEAR_INTENTS}.` : null;
+
 export const TRUST_LINE =
   "Privacy rests on NEAR's MPC threshold (11 of 16 nodes on 2026-11-10; `pnpm verify` prints the live value). We add no TEE and no committee of our own; the MPC nodes additionally run in attested TEEs. Resharing does not revoke old shares, so the condition is fewer than 11 of the parties that hold or ever held a share of the domain-2 key.";
 

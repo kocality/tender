@@ -1,4 +1,4 @@
-import { NEAR_INTENTS } from '../copy';
+import { NEAR_INTENTS, WITHDRAW_TESTNET } from '../copy';
 import { formatUsdc } from '../lib/format';
 import type { Bid, Sale } from '../lib/views';
 
@@ -15,8 +15,11 @@ export function CancelledCard({ sale, bids }: { sale: Sale; bids: Bid[] }) {
       <h2>Every bid refunded in full</h2>
       <p>
         Every bid is refunded in full: {formatUsdc(total)} USDC across {n} {n === 1 ? 'bid' : 'bids'}, to each bidder&apos;s {NEAR_INTENTS} account (transfers
-        sent {sale.payoutsDone} of {sale.payoutsTotal}: one per bid, plus the seller&apos;s tokens back). <a href="#/withdraw">Withdraw</a> moves it to another
-        chain; 1Click fees are not refunded.
+        sent {sale.payoutsDone} of {sale.payoutsTotal}: one per bid, plus the seller&apos;s tokens back). {WITHDRAW_TESTNET ?? (
+          <>
+            <a href="#/withdraw">Withdraw</a> moves it to another chain; 1Click fees are not refunded.
+          </>
+        )}
       </p>
     </section>
   );
