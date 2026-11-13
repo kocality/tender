@@ -14,9 +14,14 @@ const state = (over: Partial<SaleState> = {}): SaleState => ({
 
 describe("close_ns", () => {
   it("fixed UTC times match the cards", () => {
-    expect(closeNs(loadSpec("0"), NOW, false)).toBe(1794542400000000000n);
-    expect(closeNs(loadSpec("1"), NOW, false)).toBe(1794542400000000000n);
-    expect(closeNs(loadSpec("0"), NOW, true)).toBe(1794628800000000000n);
+    // #0 and #1 get tonight's close written into the spec right before the creates (runbook step 5), so they are read from the spec
+    const ns = (utc?: string) => BigInt(Date.parse(utc as string)) * 1_000_000n;
+    for (const tag of ["0", "1"]) {
+      const spec = loadSpec(tag);
+      expect(closeNs(spec, NOW, false)).toBe(ns(spec.close.utc));
+      expect(closeNs(spec, NOW, true)).toBe(ns(spec.close.utc_fallback));
+      expect(closeNs(spec, NOW, true) > closeNs(spec, NOW, false)).toBe(true);
+    }
     expect(closeNs(loadSpec("2"), NOW, false)).toBe(1794916800000000000n);
     expect(closeNs(loadSpec("3"), NOW, false)).toBe(1794564000000000000n);
   });
@@ -50,7 +55,7 @@ describe("planSale", () => {
     expect(last.gasTgas).toBe(100);
     const msg = JSON.parse((last.args as any).msg);
     expect(Object.keys(msg)).toEqual(["op", "close_ns", "reveal_secs", "reserve", "min_escrow", "min_bidders", "quote_token", "max_bids", "decimals", "lot_exp"]);
-    expect(msg.close_ns).toBe("1794542400000000000");
+    expect(msg.close_ns).toBe(String(BigInt(Date.parse(loadSpec("1").close.utc as string)) * 1_000_000n));
     expect(typeof msg.reserve).toBe("string");
     for (const k of ["min_bidders", "max_bids", "decimals", "lot_exp"]) expect(typeof msg[k]).toBe("number");
     expect((last.args as any).approval).toBeNull();
@@ -221,6 +226,16 @@ describe("a sale identical to an Open one is refused unless --again (double map 
       min_escrow: spec.msg.min_escrow, min_bidders: spec.msg.min_bidders, max_bids: spec.msg.max_bids, quote_token: spec.msg.quote_token, close_ns: "1", reveal_secs: spec.msg.reveal_secs,
     });
     expect(planSale(spec, opts({ contract: "rehearsal.tenderseal.near" }), state({ nextId: "0", existing: [twin] })).problems.join()).toMatch(/already Open with the same/);
+  });
+  it("the seller compared is the one that signs (--seller), not the spec's (testnet sales 3 and 4 on rc3 were such a pair)", () => {
+    const o = { network: "testnet" as const, contract: "v1.tsr-aaaaaa.testnet", seller: "tsr-aaaaaa.testnet", intents: "intents-aaaaaa.testnet", wrap: "wrap.testnet", quoteToken: "nep141:usdc-aaaaaa.testnet" };
+    const spec = loadSpec("1");
+    const created = planSale(spec, opts(o), state()).createMsg as Record<string, unknown>;
+    const twin = saleView({
+      id: "1", seller: o.seller, token: "nep141:wrap.testnet", supply: spec.amount, decimals: spec.msg.decimals, lot_exp: spec.msg.lot_exp, reserve: String(created.reserve),
+      min_escrow: spec.msg.min_escrow, min_bidders: spec.msg.min_bidders, max_bids: spec.msg.max_bids, quote_token: o.quoteToken, close_ns: String(created.close_ns), reveal_secs: spec.msg.reveal_secs,
+    });
+    expect(planSale(spec, opts(o), state({ nextId: "2", existing: [twin] })).problems.join()).toMatch(/sale 1 on v1\.tsr-aaaaaa\.testnet is already Open with the same/);
   });
   it("no reading of the existing sales (unit callers) changes nothing", () => expect(planSale(loadSpec("1"), opts(), state()).problems).toEqual([]));
 });

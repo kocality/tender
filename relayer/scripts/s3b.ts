@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { KeyPair } from "near-api-js";
 import { ftBalance, nearNative } from "./lib/chain.js";
-import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep, type Common } from "./lib/cli.js";
+import { formatDryRunStep, parseCommon, planHeader, type CallStep, type Common } from "./lib/cli.js";
 import { EVIDENCE_DIR, type Step } from "./lib/evidence.js";
 import { TOKEN } from "./lib/oneclick.js";
 import { view } from "./lib/rpc.js";
@@ -225,7 +225,7 @@ export async function main(argv: string[], deps: S3bDeps = {}): Promise<number> 
     if (!secret && !common.dryRun) plan.problems.push(`no key for ${t.signer} on ${network} (looked in the near-credentials directory)`);
 
     for (const n of plan.notes) out(n);
-    out(DRY_RUN_HEADER);
+    out(planHeader(common.dryRun));
     const total = plan.prereqs.length + SCENARIOS.length;
     let i = 0;
     for (const p of plan.prereqs) out(formatDryRunStep(++i, total, p.step));

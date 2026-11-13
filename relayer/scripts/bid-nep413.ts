@@ -9,7 +9,7 @@ import {
 import { MPC_DOMAIN2_PK, commitmentHex, sealBid } from "@tender/seal";
 import { bidsDir as defaultBidsDir, consoleIo, utcStamp, writeBidFile, type Io } from "./lib/bidfiles.js";
 import { intentsPublicKeys } from "./lib/chain.js";
-import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep, type Common } from "./lib/cli.js";
+import { formatDryRunStep, parseCommon, planHeader, type CallStep, type Common } from "./lib/cli.js";
 import type { SaleTag, Step } from "./lib/evidence.js";
 import { loadKeyPair, type KeyPairString } from "./lib/keys.js";
 import { RPC } from "./lib/rpc.js";
@@ -381,7 +381,7 @@ export async function main(argv: string[], deps: BidDeps = {}): Promise<number> 
       }
     }
     const step: CallStep = { signer, receiver: config.intents, method: "execute_intents", args: { signed: ["<nep413 MultiPayload, printed only when sent>"] }, deposit: "0 NEAR", gasTgas: 300, network: common.network };
-    io.out(DRY_RUN_HEADER);
+    io.out(planHeader(common.dryRun));
     io.out(relayUrl ? `[1/1] POST ${relayUrl}\n      body={"signed":["<nep413 MultiPayload, printed only when sent>"]}` : formatDryRunStep(1, 1, step).split("\n").slice(0, 2).join("\n"));
     if (common.dryRun) return 0;
     if (!mp) throw new Error("internal: no signed payload");

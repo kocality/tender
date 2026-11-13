@@ -6,7 +6,7 @@ import {
   Account, FailoverRpcProvider, JsonRpcProvider, PublicKey, actions, baseEncode, nearToYocto, teraToGas,
 } from "near-api-js";
 import { nearNative } from "./lib/chain.js";
-import { DRY_RUN_HEADER, parseCommon } from "./lib/cli.js";
+import { parseCommon, planHeader } from "./lib/cli.js";
 import { EVIDENCE_DIR } from "./lib/evidence.js";
 import { loadKeyPair, writeNewKeyPair } from "./lib/keys.js";
 import { RPC, rpcCall, view, type Network } from "./lib/rpc.js";
@@ -140,7 +140,7 @@ export function formatPlan(o: BirthOpts, specs: ActionSpec[]): string {
   const method = `batch(${specs.map(describe).join("+")})`;
   const fc = specs.find((a): a is Extract<ActionSpec, { type: "FunctionCall" }> => a.type === "FunctionCall") as Extract<ActionSpec, { type: "FunctionCall" }>;
   return [
-    DRY_RUN_HEADER,
+    planHeader(!o.yes),
     `[1/1] signer=${o.signer} receiver=${o.account} method=${method} deposit=${o.balance} NEAR gas=${fc.gasTgas} Tgas`,
     `      args=${JSON.stringify(fc.args)}`,
     `      near-cli: ${nearCliFallback(o, specs)}`,

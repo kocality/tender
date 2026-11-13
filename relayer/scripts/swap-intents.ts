@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { KeyPair } from "near-api-js";
 import { ftBalance, nearNative } from "./lib/chain.js";
-import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep, type Common } from "./lib/cli.js";
+import { formatDryRunStep, parseCommon, planHeader, type CallStep, type Common } from "./lib/cli.js";
 import type { Step } from "./lib/evidence.js";
 import {
   TOKEN, approx, listTokens, pollStatus, postQuote, swapQuoteBody, type Fetch, type Quote, type StatusBody, type TokenInfo,
@@ -177,7 +177,7 @@ export async function main(argv: string[], deps: SwapDeps = {}): Promise<number>
         if (!sim.ok) problems.push(`simulate_intents failed (${sim.kind})`);
       }
       for (const n of notes) out(n);
-      out(DRY_RUN_HEADER);
+      out(planHeader(common.dryRun));
       out(`[1/1] signer=${signer} receiver=${intents} method=execute_intents deposit=0 NEAR gas=300 Tgas`);
       out(`      transfer=${amount} of ${tokenId} to ${transferTo} (no msg), nep413-signed by ${signer}`);
       for (const p of problems) out(`BLOCKED: ${p}`);
@@ -217,7 +217,7 @@ export async function main(argv: string[], deps: SwapDeps = {}): Promise<number>
     const dry = await postQuote(swapQuoteBody({ from: from.assetId, to: to.assetId, amount, account: signer, dry: true, nowMs: await env.nowMs() }), env.fetch);
     for (const n of plan.notes) out(n);
     out(dryQuoteLine(dry, from, to, amount));
-    out(DRY_RUN_HEADER);
+    out(planHeader(common.dryRun));
     const total = plan.steps.length + 1;
     plan.steps.forEach((s, i) => out(formatDryRunStep(i + 1, total, s)));
     out(`[${total}/${total}] signer=${signer} receiver=${intents} method=execute_intents deposit=0 NEAR gas=300 Tgas`);

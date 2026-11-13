@@ -76,6 +76,11 @@ describe("dry-run format", () => {
     expect(l2).toMatch(/^ {6}args=/);
     expect(l3).toMatch(/^ {6}near-cli: near transaction construct-transaction tenderseal\.near v1\.tenderseal\.near add-action create-account/);
   });
+  it("--yes prints SENDING, never 'nothing sent', above the irreversible birth", () => {
+    const yes = { ...base, yes: true };
+    const [h] = formatPlan(yes, planBirth(yes, wasm(250_000)).actions).split("\n");
+    expect(h).toMatch(/^SENDING · --yes/);
+  });
 });
 
 describe("configDiff", () => {

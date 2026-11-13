@@ -288,6 +288,8 @@ describe("--yes", () => {
     expect(r.code).toBe(0);
     expect(f.calls).toEqual(["simulate", "execute"]);
     expect(r.out).toContain("OK bid idx 0 sealed");
+    expect(r.out).not.toContain("nothing sent");
+    expect(r.out).toContain("SENDING · --yes");
   });
 
   it("records on mainnet with the sale tag", async () => {

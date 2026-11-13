@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ftBalance, intentsBalances } from "./lib/chain.js";
-import { DRY_RUN_HEADER, formatDryRunStep, parseCommon, type CallStep } from "./lib/cli.js";
+import { formatDryRunStep, parseCommon, planHeader, type CallStep } from "./lib/cli.js";
 import { SALE_TAGS, type SaleTag, type Step } from "./lib/evidence.js";
 import { makeAccount, sendStep, explorer } from "./lib/send.js";
 import { view, type Network } from "./lib/rpc.js";
@@ -198,7 +198,7 @@ export function planSale(spec: SaleSpec, o: SaleOpts, st: SaleState): SalePlan {
 
   // A create whose answer was lost and is then re-run makes a second sale with the same terms; the bids split between the two.
   const twin = (st.existing ?? []).find((s) =>
-    (s.state === "Open" || s.state === "Opening") && s.seller === spec.seller && s.token === tokenId && s.supply === amount.toString()
+    (s.state === "Open" || s.state === "Opening") && s.seller === o.seller && s.token === tokenId && s.supply === amount.toString()
     && (spec.close.relative_secs !== undefined || s.close_ns === close.toString())
     && s.reserve === reserve && s.min_escrow === m.min_escrow && s.min_bidders === m.min_bidders && s.max_bids === m.max_bids
     && s.quote_token === createMsg.quote_token && s.decimals === m.decimals && s.lot_exp === m.lot_exp && s.reveal_secs === m.reveal_secs);
@@ -300,7 +300,7 @@ export async function main(argv: string[]): Promise<number> {
 
     for (const n of plan.notes) console.log(n);
     console.log(`close_ns ${plan.closeNs} (${new Date(Number(plan.closeNs / 1_000_000n)).toISOString()}), amount ${plan.amount}, token ${plan.tokenId}`);
-    console.log(DRY_RUN_HEADER);
+    console.log(planHeader(!common.yes || common.dryRunFlag));
     plan.steps.forEach((s, i) => console.log(formatDryRunStep(i + 1, plan.steps.length, s)));
     for (const p of plan.problems) console.log(`BLOCKED: ${p}`);
     if (!common.yes || common.dryRunFlag) return plan.problems.length ? 1 : 0;

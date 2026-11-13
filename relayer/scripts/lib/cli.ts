@@ -66,6 +66,11 @@ export function nearCliLine(s: CallStep): string {
 
 export const DRY_RUN_HEADER = "DRY-RUN · nothing sent · re-run with --yes to send";
 
+/** The line above a plan: a --yes run must never say "nothing sent" right before it sends. */
+export function planHeader(dryRun: boolean): string {
+  return dryRun ? DRY_RUN_HEADER : "SENDING · --yes · the step(s) below are sent now unless a BLOCKED line follows";
+}
+
 export function formatDryRunStep(i: number, n: number, s: CallStep): string {
   return [
     `[${i}/${n}] signer=${s.signer} receiver=${s.receiver} method=${s.method} deposit=${s.deposit} gas=${s.gasTgas} Tgas`,
