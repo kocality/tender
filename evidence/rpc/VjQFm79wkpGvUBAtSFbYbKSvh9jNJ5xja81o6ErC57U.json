@@ -1,0 +1,160 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-13T03:49:12.370Z",
+    "rpc_url": "https://test.rpc.fastnear.com",
+    "method": "EXPERIMENTAL_tx_status",
+    "label": "snapshot, not live",
+    "source": "rpc"
+  },
+  "result": {
+    "final_execution_status": "FINAL",
+    "receipts": [
+      {
+        "predecessor_id": "system",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              {
+                "Transfer": {
+                  "deposit": "189277137266400000000"
+                }
+              }
+            ],
+            "gas_price": "0",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "relayer.tender-09bdfe.testnet",
+            "signer_public_key": "ed25519:3QQpTje5W9R1sR3GxExqm2LRfo261cCcR6YmfwV47mRr"
+          }
+        },
+        "receipt_id": "AUPuqdWytapscdRBmUDDumrsYL9GtqjFd4WdX22TR15p",
+        "receiver_id": "relayer.tender-09bdfe.testnet"
+      }
+    ],
+    "receipts_outcome": [
+      {
+        "block_hash": "7pu5n6v3LLZJX873L7uoCumMPnCzykAJSrb624KamGzh",
+        "id": "89LhZHf4oD3kwM179fZqG9LNNPHVCUU7Z3PdFi1c9Ef5",
+        "outcome": {
+          "executor_id": "relayer.tender-09bdfe.testnet",
+          "gas_burnt": 210307930296,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [
+            "AUPuqdWytapscdRBmUDDumrsYL9GtqjFd4WdX22TR15p"
+          ],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "21030793029600000000"
+        },
+        "proof": [
+          {
+            "direction": "Left",
+            "hash": "D1SpaA922HW7LTcvGk2vtQevA7b1JD9E8SwcFiSgT5Bq"
+          },
+          {
+            "direction": "Left",
+            "hash": "AWXGu8Y6fLcb4HFZsrEzSJF7Q2TkweLccsHk3LUN1eWc"
+          }
+        ]
+      },
+      {
+        "block_hash": "2eUGTcNtJRjavmXS44b2mnCth7EHMFdXx5ChPhtKHbhi",
+        "id": "AUPuqdWytapscdRBmUDDumrsYL9GtqjFd4WdX22TR15p",
+        "outcome": {
+          "executor_id": "relayer.tender-09bdfe.testnet",
+          "gas_burnt": 223182562500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "0"
+        },
+        "proof": [
+          {
+            "direction": "Left",
+            "hash": "C1ms2bJUNSfrco71QxFgQsj3HJHRyhC44nMF7zvAFR9o"
+          }
+        ]
+      }
+    ],
+    "status": {
+      "SuccessValue": ""
+    },
+    "transaction": {
+      "actions": [
+        {
+          "AddKey": {
+            "access_key": {
+              "nonce": 0,
+              "permission": {
+                "FunctionCall": {
+                  "allowance": "500000000000000000000000",
+                  "method_names": [
+                    "execute_intents"
+                  ],
+                  "receiver_id": "intents-09bdfe.testnet"
+                }
+              }
+            },
+            "public_key": "ed25519:EHQhQCDTukpgbJtCt38UHDwjw97GKEfcmFhfWXSRNT4n"
+          }
+        }
+      ],
+      "hash": "VjQFm79wkpGvUBAtSFbYbKSvh9jNJ5xja81o6ErC57U",
+      "nonce": 277054070000015,
+      "priority_fee": 0,
+      "public_key": "ed25519:3QQpTje5W9R1sR3GxExqm2LRfo261cCcR6YmfwV47mRr",
+      "receiver_id": "relayer.tender-09bdfe.testnet",
+      "signature": "ed25519:54xFfmQcR7cksJYtFBmbqFX8qTa47i9XxTMiPMcnC5UpBk1Fc3svfpCHNLHgZrciSLDNDJaFTkgxyv4BLd1uAqPa",
+      "signer_id": "relayer.tender-09bdfe.testnet"
+    },
+    "transaction_outcome": {
+      "block_hash": "7pu5n6v3LLZJX873L7uoCumMPnCzykAJSrb624KamGzh",
+      "id": "VjQFm79wkpGvUBAtSFbYbKSvh9jNJ5xja81o6ErC57U",
+      "outcome": {
+        "executor_id": "relayer.tender-09bdfe.testnet",
+        "gas_burnt": 210307930296,
+        "logs": [],
+        "metadata": {
+          "gas_profile": null,
+          "version": 1
+        },
+        "receipt_ids": [
+          "89LhZHf4oD3kwM179fZqG9LNNPHVCUU7Z3PdFi1c9Ef5"
+        ],
+        "status": {
+          "SuccessReceiptId": "89LhZHf4oD3kwM179fZqG9LNNPHVCUU7Z3PdFi1c9Ef5"
+        },
+        "tokens_burnt": "21030793029600000000"
+      },
+      "proof": [
+        {
+          "direction": "Right",
+          "hash": "2THRHttd9Hy4XtWCDRW21xkYBLgVuKMpVPXz8qb3hgsz"
+        },
+        {
+          "direction": "Left",
+          "hash": "AWXGu8Y6fLcb4HFZsrEzSJF7Q2TkweLccsHk3LUN1eWc"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-13T03:49:11.988Z",
+    "rpc_url": "https://test.rpc.fastnear.com",
+    "method": "EXPERIMENTAL_tx_status",
+    "label": "snapshot, not live",
+    "source": "rpc"
+  },
+  "result": {
+    "final_execution_status": "FINAL",
+    "receipts": [
+      {
+        "predecessor_id": "tender-c201d6.testnet",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              {
+                "Transfer": {
+                  "deposit": "1500000000000000000000000"
+                }
+              }
+            ],
+            "gas_price": "1000000000",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "tender-c201d6.testnet",
+            "signer_public_key": "ed25519:5SXkzNWL51X4VgpjMac5DCZiZ6EV2qZDASGyAEGkg47b"
+          }
+        },
+        "receipt_id": "DYCAafiw1gff7YVmj3iF26Vs27YqcQs9aVZwPxuAz5Ck",
+        "receiver_id": "relayer.tender-09bdfe.testnet"
+      },
+      {
+        "predecessor_id": "system",
+        "priority": 0,
+        "receipt": {
+          "Action": {
+            "actions": [
+              {
+                "Transfer": {
+                  "deposit": "200864306250000000000"
+                }
+              }
+            ],
+            "gas_price": "0",
+            "input_data_ids": [],
+            "is_promise_yield": false,
+            "output_data_receivers": [],
+            "signer_id": "tender-c201d6.testnet",
+            "signer_public_key": "ed25519:5SXkzNWL51X4VgpjMac5DCZiZ6EV2qZDASGyAEGkg47b"
+          }
+        },
+        "receipt_id": "FKZEHbYuqPWuGKBKcjkdgtEVWqv9XvrVY55ohFZrMM8a",
+        "receiver_id": "tender-c201d6.testnet"
+      }
+    ],
+    "receipts_outcome": [
+      {
+        "block_hash": "CutbYSHBFXYVy93S6jGhvbNcwKAJC1xbGE3rqZAnAHwj",
+        "id": "DYCAafiw1gff7YVmj3iF26Vs27YqcQs9aVZwPxuAz5Ck",
+        "outcome": {
+          "executor_id": "relayer.tender-09bdfe.testnet",
+          "gas_burnt": 223182562500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [
+            "FKZEHbYuqPWuGKBKcjkdgtEVWqv9XvrVY55ohFZrMM8a"
+          ],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "22318256250000000000"
+        },
+        "proof": [
+          {
+            "direction": "Right",
+            "hash": "CdvzGpq4vvAS6jKPWnE2X1HnQYipT8MB9FXDRPziHwzF"
+          },
+          {
+            "direction": "Right",
+            "hash": "6iuQnc7ZrWuaSgbpp3eYahryj73QaheKvLGVJufL8Vkm"
+          }
+        ]
+      },
+      {
+        "block_hash": "DUmtpSsQLz4cWB9kqfY6nuKcPd3GqkQTPs7f3DTWE9vU",
+        "id": "FKZEHbYuqPWuGKBKcjkdgtEVWqv9XvrVY55ohFZrMM8a",
+        "outcome": {
+          "executor_id": "tender-c201d6.testnet",
+          "gas_burnt": 223182562500,
+          "logs": [],
+          "metadata": {
+            "contracts": [
+              null
+            ],
+            "gas_profile": [],
+            "version": 4
+          },
+          "receipt_ids": [],
+          "status": {
+            "SuccessValue": ""
+          },
+          "tokens_burnt": "0"
+        },
+        "proof": [
+          {
+            "direction": "Right",
+            "hash": "A5ruPG1e5fvnVJMxup58AsbPdyS8RnJuimN65As7xcwi"
+          },
+          {
+            "direction": "Left",
+            "hash": "CSXQqQaESe5ouVDjXssswsGpQf6tvcriJdBR9huBBoFw"
+          }
+        ]
+      }
+    ],
+    "status": {
+      "SuccessValue": ""
+    },
+    "transaction": {
+      "actions": [
+        {
+          "Transfer": {
+            "deposit": "1500000000000000000000000"
+          }
+        }
+      ],
+      "hash": "6u8YnLY74TR8Z1zR2ZXcVozxoVDGfYtZDiJQqCbJJxXs",
+      "nonce": 277256857000002,
+      "priority_fee": 0,
+      "public_key": "ed25519:5SXkzNWL51X4VgpjMac5DCZiZ6EV2qZDASGyAEGkg47b",
+      "receiver_id": "relayer.tender-09bdfe.testnet",
+      "signature": "ed25519:xziEeQF3Ff51bMER6iSmGwc4yKMWpQ56XmqzyiyoNgvADMKw4tBTvUDH4L45Mcx3LymiGkPZ9Sf9gPsSKuS8GyS",
+      "signer_id": "tender-c201d6.testnet"
+    },
+    "transaction_outcome": {
+      "block_hash": "AQbUpDxskVoyDF8XywVv2gVY4CtxWUwdqhDqyjMRmxHA",
+      "id": "6u8YnLY74TR8Z1zR2ZXcVozxoVDGfYtZDiJQqCbJJxXs",
+      "outcome": {
+        "executor_id": "tender-c201d6.testnet",
+        "gas_burnt": 223182562500,
+        "logs": [],
+        "metadata": {
+          "gas_profile": null,
+          "version": 1
+        },
+        "receipt_ids": [
+          "DYCAafiw1gff7YVmj3iF26Vs27YqcQs9aVZwPxuAz5Ck"
+        ],
+        "status": {
+          "SuccessReceiptId": "DYCAafiw1gff7YVmj3iF26Vs27YqcQs9aVZwPxuAz5Ck"
+        },
+        "tokens_burnt": "22318256250000000000"
+      },
+      "proof": [
+        {
+          "direction": "Right",
+          "hash": "FozYSGRLpFoijhsmSupyfJK3Sw4Kr7J9NnHBHMEatjbB"
+        },
+        {
+          "direction": "Right",
+          "hash": "3NPRnpZrx9uwYDjxpPrqFAtbrnpD8cPBUuj4eqHqV7V4"
+        }
+      ]
+    }
+  }
+}

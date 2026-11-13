@@ -6,7 +6,7 @@ The steps: [README › Try it](README.md#try-it-free-no-wallet).
 
 | Claim | Check | Code | Rows |
 |---|---|---|---|
-| The key is requested only if the public open conditions hold | step 11; check #21 `key-ledger` | `contract/src/lib.rs` `open` | M05, M13 |
+| The key is requested only if the public open conditions hold | step 11; check #21 `key-ledger` | `contract/src/lib.rs` `open` | T14, T15, M05, M13 |
 | Only `v1.tenderseal.near` can get this key | steps 4-5; checks #4 `no-access-keys`, #5 `wasm-imports`, #8 `sale-identity` | `contract/src/seal.rs` | S6-ckd, T3, M01 |
 | The MPC key and live threshold are the ones [README › Trust and limits](README.md#trust-and-limits) cites | checks #1 `mpc-key`, #2 `mpc-network` | `cli/src/lib/verify-sale.ts` | |
 | Deployed wasm = repo wasm = source | steps 5 and 9; checks #3 `code-hash`, #6 `reproducible-build` | `contract/res/tender.wasm.sha256` | T3, M01 |
@@ -14,7 +14,7 @@ The steps: [README › Try it](README.md#try-it-free-no-wallet).
 | Each stored bid is decrypted and checked against its commitment | checks #12 `ciphertexts-decrypt`, #13 `plaintext-matches-commitment` | `contract/src/lib.rs` `reveal` | M15 |
 | One uniform, recomputable price | step 13; checks #15 `clearing-price` to #18 `uniform-price` | `contract/src/clearing.rs`, `packages/clearing` | M16 |
 | The penalty never goes to the seller's account ([rule](docs/protocol.md#clearing-and-penalty)) | step 15; check #17 `conservation` (and #16 `allocations`) | `contract/src/clearing.rs` | M31 |
-| A failed sale's key is never requested | step 14; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | M05 |
+| A failed sale's key is never requested | step 14; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | T15, M05 |
 | A sale goes Keyed only with a key that passes the pairing check against the pinned MPC key | step 10; checks #11 `key-pairing`, #21 `key-ledger` | `contract/src/seal.rs`; sandbox `x12f01_changed_key_refunds_in_full` | T7, M13 |
 | One sealed bid is stored at most once per account in a sale, and of the copies our app, `pnpm seal:bid` or our bid script sign before close, intents.near runs at most one | step 10; checks #9 `bid-count`, #25 `archival-tx` | `contract/src/intents.rs`, `packages/intents/src/nonce.ts` | T10, T11 |
 | Bids from four chains with the bidder's own wallet | pending; testnet so far: row T2 | `packages/intents` | S5, M07-M12 |
@@ -97,6 +97,10 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 | T9 | RC3 copy: sale 0 `finalize`, P* 3.90, payouts 3/3 | [GZcQEyGc…](https://testnet.nearblocks.io/txns/GZcQEyGcjWKXrxJQN4ops2UwjKa1xiGx4L2DgwWwKNR6) |
 | T10 | RC3 copy: the T6 bidder sends the same sealed bid again by direct `mt_transfer_call`, which carries no Intents nonce, so the contract decides: refunded in full, reason `dup_bid`; the sale still holds 2 bids | [Akpa82uN…](https://testnet.nearblocks.io/txns/Akpa82uN2up2GsRYMX158nRVXcjeheJPRhXuxAqq8NjJ) |
 | T11 | RC3 copy: the T5 bid signed again with the same nonce and a later deadline; the Intents contract refuses it: nonce already used. Testnet has no `intents.near`: this is the project's copy `intents-09bdfe.testnet`, which runs the same intents 0.4.5 wasm (check #26 `upstream-code`) | [ADToD4ai…](https://testnet.nearblocks.io/txns/ADToD4aijCVcaxs6JXHqpfz5afJm3N6VNwgfDd7G3Zr9) |
+| T12 | the hosted demo's relayer `relayer.tender-09bdfe.testnet`: a 1.5 NEAR top-up, then a function-call key limited to `execute_intents` on `intents-09bdfe.testnet` (allowance 0.5 NEAR); the hosted relayer signs with that key only | top-up [6u8YnLY7…](https://testnet.nearblocks.io/txns/6u8YnLY74TR8Z1zR2ZXcVozxoVDGfYtZDiJQqCbJJxXs) · key [VjQFm79w…](https://testnet.nearblocks.io/txns/VjQFm79wkpGvUBAtSFbYbKSvh9jNJ5xja81o6ErC57U) |
+| T13 | RC3 copy: the twin, sales 1 and 2, created with the same terms and close time (0.5 wNEAR, reserve 3.00, `min_escrow` 2 USDC, `min_bidders` 2) after a 0.3 wNEAR seller deposit | deposit [48B6xbbK…](https://testnet.nearblocks.io/txns/48B6xbbKoeYFEs5D6Un2kcmncoJUJ6kfAzNA8e9PGBJH) · sale 1 [GiSDiTJ8…](https://testnet.nearblocks.io/txns/GiSDiTJ81BAQQYdvX8G62BJF4m8sPA9jVYKVXnntJA7F) · sale 2 [9z7T1GgH…](https://testnet.nearblocks.io/txns/9z7T1GgHa9unopAZAbe9EFMFJr7CdvuV8AAXxNrVpw1E) |
+| T14 | RC3 copy: sale 1 meets its conditions, 4 USDC from 2 bidders (one nep413 bid sent through the hosted relayer, one `mt_transfer_call`); `open` gets the key (key log entry 1 `Ok`, 8 blocks), `reveal` 2 bids, `finalize` P* 3.60, payouts 3/3; `pnpm verify --sale 1 --rebuild` prints `25/25 checks passed` (`evidence/verify/testnet-rc3.tender-c201d6-sale-1-*`) | bid [DWcyaoLu…](https://testnet.nearblocks.io/txns/DWcyaoLuWiLc6XVFyKCEkHxNcHyKyd9A49MZYmGyhaU) · bid [24D95hCH…](https://testnet.nearblocks.io/txns/24D95hCHr9cq7KQc7weU5E2LpZf4sXVA8vq3NueAx3NE) · open [6ayJ8gf3…](https://testnet.nearblocks.io/txns/6ayJ8gf3AH9WZsD7s42UstTf4aRJMN6FktYHbUrdn8EX) · reveal [gaDfB93Z…](https://testnet.nearblocks.io/txns/gaDfB93ZnMnBGFN2YjoRAuscezkJ6Yo3K7uqjVLpJY3) · finalize [2UmEPSMQ…](https://testnet.nearblocks.io/txns/2UmEPSMQjqrJSshCe1PqTq1y68mngY7DkKCRW8JNi1Ro) |
+| T15 | RC3 copy: sale 2 misses them, one 1 USDC bid from 1 bidder; `open` after close panics `escrow below min_escrow`; `cancel` makes it `Cancelled` with 0 key requests and refunds the bid in full; `pnpm verify --sale 2` passes #23 `cancelled-sealed` | bid [6ycS4HkS…](https://testnet.nearblocks.io/txns/6ycS4HkSoD8gda5Dat2D2p3QdDL9D43T5XsF2RE2mkuA) · open, refused [8ccWUc16…](https://testnet.nearblocks.io/txns/8ccWUc16v6VkF8isVsndHB3HyNL4NwBBkrGrurwbgqdp) · cancel [7yoRSnzL…](https://testnet.nearblocks.io/txns/7yoRSnzLgaKtibdq16DKe1xqvPWdp5etggwERt6RyNrz) |
 
 ### Off-chain
 

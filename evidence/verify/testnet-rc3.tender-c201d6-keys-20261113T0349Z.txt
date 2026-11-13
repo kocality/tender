@@ -1,0 +1,10 @@
+$ tsx src/verify.ts --keys --network testnet --contract rc3.tender-c201d6.testnet
+Tender verify · keys · rc3.tender-c201d6.testnet · testnet · block 277457340 (2026-11-13T03:49:33Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · domain 2 key = repo constant
+key log (contract state): 2 requests
+  sale 0   2026-11-11T19:24:45Z   ok      block 277257949
+  sale 1   2026-11-13T03:48:09Z   ok      block 277457192
+  sale 2   0 requests · Cancelled 2026-11-13T03:48:04Z · never requested (sealed unless the MPC threshold colludes) · open() unreachable (terminal state)
+NearBlocks: receipts rc3.tender-c201d6.testnet → v1.signer-prod.testnet.request_app_private_key = 2 (match)
+sale 2: 1 sealed bid · tried every released key: 0 decrypt

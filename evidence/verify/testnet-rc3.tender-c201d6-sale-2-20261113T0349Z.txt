@@ -1,0 +1,31 @@
+$ tsx src/verify.ts --network testnet --contract rc3.tender-c201d6.testnet --sale 2 --evidence evidence/testnet.json
+Tender verify · sale 2 · rc3.tender-c201d6.testnet · testnet · block 277457338 (2026-11-13T03:49:32Z)
+rpc https://test.rpc.fastnear.com · archival https://archival-rpc.testnet.fastnear.com
+PASS #1 mpc-key — domain 2 key bls12381g2:xeYho…R4kj = repo constant = live v1.signer-prod.testnet = contract config
+PASS #2 mpc-network — v1.signer-prod.testnet 3.18.0 · threshold 11 of 16 (live) · key epoch 27, participant ids issued 27 (next_id): resharing does not revoke old shares, so the threshold counts former share holders too · TEE accounts 16 · allowed images 2
+PASS #3 code-hash — ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y = sha256(contract/res/tender.wasm) https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #4 no-access-keys — rc3.tender-c201d6.testnet has no access keys: nobody can sign for it or redeploy it https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #5 wasm-imports — 30 imports, none can add a key, deploy code or delete the account
+WARN #6 reproducible-build — rebuild not performed; run with --rebuild (Docker + cargo-near 0.23.0) · source git+https://github.com/kocality/tender?rev=ab48e6690048e9b506c51c3667f852457758a706
+PASS #7 init-before-sale — init block 277256919 (2026-11-11T19:14:52Z) < sale created block 277456020 (2026-11-13T03:37:01Z)
+PASS #8 sale-identity — path tender/2/5a89f93fe8ab9aca035165b1927a4730 · app_id(rc3.tender-c201d6.testnet, path) = 568515bb11a59bf1a0df622ef19ba80f746bf60d05b3cfbb246a69b0cd185887
+PASS #9 bid-count — 1 bids (max 8) from 1 bidders · escrow 1.00 USDC
+PASS #10 key-after-close — no key; bids before close; cancelled at 2026-11-13T03:48:04Z ≥ close
+n/a #11 key-pairing — no key (state Cancelled, 0 key requests)
+n/a #12 ciphertexts-decrypt — no key (state Cancelled, 0 key requests)
+n/a #13 plaintext-matches-commitment — no key (state Cancelled, 0 key requests)
+n/a #14 reveal-states — no key (state Cancelled, 0 key requests)
+n/a #15 clearing-price — state Cancelled: no clearing
+n/a #16 allocations — state Cancelled: no clearing
+PASS #17 conservation — USDC in 1.00 = refunds + seller 0.00 + penalty pool 0.00; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller · bids from sub-accounts of the seller tender-09bdfe.testnet (only it can create them): #0 bidder2.tender-09bdfe.testnet
+n/a #18 uniform-price — state Cancelled: no clearing
+PASS #19 escrow-balance — 3 sale(s): nep141:usdc.tender-09bdfe.testnet 0 ≥ owed 0 · nep141:wnear.tender-09bdfe.testnet 0 ≥ owed 0 https://testnet.nearblocks.io/address/rc3.tender-c201d6.testnet
+PASS #20 payouts — 2/2 payouts ok (bids + seller)
+PASS #21 key-ledger — 0 requests for this sale (none) = key_requests; 2 in the contract's key log
+PASS #22 nearblocks-receipts — NearBlocks: 2 rc3.tender-c201d6.testnet → v1.signer-prod.testnet.request_app_private_key receipts = key log 2
+PASS #23 cancelled-sealed — Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)
+n/a #24 oneclick-status — 1Click runs on mainnet only
+PASS #25 archival-tx — 4/4 recorded transactions found with the recorded outcome
+PASS #26 upstream-code — intents-09bdfe.testnet code_hash BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk = the tested intents 0.4.5 wasm · v1.signer-prod.testnet 3.18.0 = tested version
+PASS #27 token-decimals — ft_metadata: wnear.tender-09bdfe.testnet 24 decimals = sale decimals 24 · quote token 6 decimals
+18/19 checks passed (1 warning)
