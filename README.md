@@ -1,4 +1,22 @@
-# Tender: sealed-bid token sales from any chain, opened by NEAR's MPC network
+<p align="center"><img src="assets/banner.png" alt="Tender: bid without showing your price, on NEAR mainnet" width="100%"></p>
+
+<h2 align="center">Deposits public. Prices sealed. One price for every winner.</h2>
+
+<p align="center">Tender is a <b>sealed-bid token sale on NEAR</b>. Bid in USDC from Base, Arbitrum, Solana or NEAR: other bidders and the seller see your deposit, not your price. After close, the locked sale contract asks NEAR’s MPC network for the key only if the sale’s public conditions hold; then anyone can open the bids and every winner pays the same price. Otherwise everyone is refunded and the key is never requested.</p>
+
+<p align="center">
+  <a href="https://github.com/kocality/tender/actions/workflows/ci.yml"><img src="https://github.com/kocality/tender/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://tender-sealed.vercel.app"><img src="https://img.shields.io/badge/try%20the%20app-tender--sealed.vercel.app-2f81f7" alt="Try the app: tender-sealed.vercel.app"></a>
+  <a href="#demo-sales"><img src="https://img.shields.io/badge/NEAR-mainnet-00c08b" alt="NEAR: mainnet"></a>
+  <a href="#trust-and-limits"><img src="https://img.shields.io/badge/keys-NEAR%20MPC-6e40c9" alt="Keys: NEAR MPC"></a>
+  <img src="https://img.shields.io/badge/Rust-1.99.1-b7410e" alt="Rust 1.99.1">
+  <img src="https://img.shields.io/badge/TypeScript-5.9.3-3178c6" alt="TypeScript 5.9.3">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-97ca00" alt="License: MIT"></a>
+</p>
+
+---
+
+**Status, 2026-11-13 UTC.** Runs today: steps 1-10 below ([`git clone` once the repo is public](JUDGES.md#off-chain)), [a full testnet sale of the step 9 build with a real MPC key](JUDGES.md#testnet), and the [hosted testnet demo](https://tender-sealed.vercel.app) with both endings side by side ([what it runs on](JUDGES.md#off-chain)). Not live yet: the mainnet contract `v1.tenderseal.near` and the [demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
 
 Problem: in most token sales every bid is public before close, so late bidders copy or snipe, and buyers on other chains must bridge first ([how others compare](#how-it-compares)).
 
@@ -15,11 +33,11 @@ flowchart TB
 
 [The story](#the-story) runs one sale down each branch.
 
-**Status, 2026-11-13 UTC.** Runs today: steps 1-10 below ([`git clone` once the repo is public](JUDGES.md#off-chain)), [a full testnet sale of the step 9 build with a real MPC key](JUDGES.md#testnet), and the [hosted testnet demo](https://tender-sealed.vercel.app) with both endings side by side ([what it runs on](JUDGES.md#off-chain)). Not live yet: the mainnet contract `v1.tenderseal.near` and the [demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
-
 ## The story
 
 **Priya lists a sale.** She wants to sell 3 NEAR (as wNEAR) to whoever values it most, at no less than 3.00 USDC per NEAR. She sets two public open conditions: at least 5 USDC escrowed (`min_escrow`) and at least 3 bidders (`min_bidders`). Bea, on Base, bids early; Sam, on Solana, bids later:
+
+<p align="center"><img src="assets/before-after-key.png" alt="Before and after the key: deposits public and prices sealed, then the key is released because the conditions hold, the prices open and every winner pays 3.60" width="100%"></p>
 
 | | In a public sale | In Tender |
 |---|---|---|
