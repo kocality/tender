@@ -129,6 +129,9 @@ export function validateBody(raw: string, cfg: RelayConfig, nowMs: number): Chec
       if (op.op === "bid" && typeof op.sale === "string" && typeof op.cm === "string" && typeof inner.signer_id === "string") {
         bids.push({ signer: inner.signer_id, sale: op.sale, cm: op.cm, seq: typeof op.seq === "number" ? op.seq : undefined });
       }
+    } else if (t.receiver_id === cfg.tenderId) {
+      // Without msg, mt_on_transfer never runs: the tokens land in the contract's Intents balance and no Tender method moves them out.
+      return bad("msg_required", `${at} a transfer to ${cfg.tenderId} must carry a bid or reveal msg`);
     }
     if (typeof inner.signer_id === "string") signers.push(inner.signer_id);
   }

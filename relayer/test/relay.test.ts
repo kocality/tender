@@ -193,6 +193,7 @@ describe("gas griefing: the relayer only pays for what the app sends (REL-01)", 
     ["msg op create", { msg: '{"op":"create"}' }, "msg_not_allowed"],
     ["min_gas above 30 Tgas", { msg: '{"op":"bid"}', min_gas: "300000000000000" }, "min_gas_too_high"],
     ["min_gas that is not a number", { msg: '{"op":"bid"}', min_gas: "lots" }, "min_gas_too_high"],
+    ["a plain transfer to the Tender contract (no msg: nothing would ever move it out again)", { msg: undefined }, "msg_required"],
   ];
   for (const [name, over, code] of rejected) {
     it(`400 ${code}: ${name}`, async () => {
