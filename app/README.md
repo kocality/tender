@@ -55,13 +55,15 @@ ORACLE=1 pnpm --filter @tender/app test          # also runs the payload test ag
 pnpm --filter @tender/app build                  # tsc + vite build into app/dist
 ```
 
-Against a testnet copy (swap in your own ids; run `pnpm relay:local` with the same network for bids):
+Against a testnet copy. These are the values of the hosted testnet build ([JUDGES row P1](../JUDGES.md#off-chain)); swap in your own ids, and `VITE_RELAYER_URL=http://localhost:8787/relay` with `pnpm relay:local` on the same network to relay bids yourself:
 
 ```sh
 VITE_NETWORK=testnet \
-VITE_NEAR_RPC_URL=https://test.rpc.fastnear.com VITE_NEAR_RPC_FALLBACKS=https://rpc.testnet.near.org \
-VITE_TENDER_CONTRACT_ID=v1.tender-<hex>.testnet VITE_INTENTS_CONTRACT_ID=intents-<hex>.testnet \
-VITE_MPC_CONTRACT_ID=v1.signer-prod.testnet VITE_TWIN_SALES=0,1 VITE_RELAYER_URL=http://localhost:8787/relay \
+VITE_NEAR_RPC_URL=https://test.rpc.fastnear.com VITE_NEAR_RPC_FALLBACKS=https://near-testnet.drpc.org,https://testnet-rpc.intea.rs \
+VITE_TENDER_CONTRACT_ID=rc3.tender-c201d6.testnet VITE_INTENTS_CONTRACT_ID=intents-09bdfe.testnet \
+VITE_MPC_CONTRACT_ID=v1.signer-prod.testnet VITE_TWIN_SALES=1,2 VITE_DEMO_FAIL_SALES=2 \
+VITE_TEAM_ACCOUNTS=tender-09bdfe.testnet VITE_RELAYER_URL=https://tender-sealed-relay.vercel.app/relay \
+VITE_REPO_URL=https://github.com/kocality/tender \
 pnpm --filter @tender/app dev
 ```
 

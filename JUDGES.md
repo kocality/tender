@@ -106,7 +106,7 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 
 | ID | What | Expected | State |
 |---|---|---|---|
-| P1 | hosted app URL | up at least until 2026-11-18 | pending |
+| P1 | hosted app URL | up at least until 2026-11-18 | [tender-sealed.vercel.app](https://tender-sealed.vercel.app), a testnet build: contract `rc3.tender-c201d6.testnet` with the twin, sales 1 and 2 (rows T13-T15); NEAR Intents is our copy `intents-09bdfe.testnet`; bids go through the relayer [tender-sealed-relay.vercel.app](https://tender-sealed-relay.vercel.app/relay) (row T12). Team-funded demo: test tokens only, the team is the seller and the bidders. 1Click runs on mainnet only, so here a visitor reads the sales, decrypts sale 1 and tries signing; bidding and withdrawing need test USDC in our copy |
 | P2 | demo video URL | unlisted video | pending |
 | P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | [run 43080695741](https://github.com/kocality/tender/actions/runs/43080695741), job `repro` |
 | P4 | tag `hackathon-submission` | tree link | pending |

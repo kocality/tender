@@ -15,7 +15,7 @@ flowchart TB
 
 [The story](#the-story) runs one sale down each branch.
 
-**Status, 2026-11-12 UTC.** Runs today: steps 1-10 below ([`git clone` once the repo is public](JUDGES.md#off-chain)) and [a full testnet sale of the step 9 build with a real MPC key](JUDGES.md#testnet). Not live yet: the mainnet contract `v1.tenderseal.near`, the [hosted app and demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
+**Status, 2026-11-13 UTC.** Runs today: steps 1-10 below ([`git clone` once the repo is public](JUDGES.md#off-chain)), [a full testnet sale of the step 9 build with a real MPC key](JUDGES.md#testnet), and the [hosted testnet demo](https://tender-sealed.vercel.app) with both endings side by side ([what it runs on](JUDGES.md#off-chain)). Not live yet: the mainnet contract `v1.tenderseal.near` and the [demo video](JUDGES.md#off-chain). Every claim and its proof: [JUDGES.md](JUDGES.md).
 
 ## The story
 
@@ -166,7 +166,7 @@ Node 18 does not work, nor Node 20: the install stops with `ERR_PNPM_UNSUPPORTED
 
 <details><summary>Steps 11-18: on chain, once the rows they need exist</summary>
 
-Steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-18 also need the hosted app. Until then, steps 11-15 stop with `UNKNOWN_ACCOUNT`.
+Steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-18 need the hosted app on those sales (today it runs the testnet twin, [row P1](JUDGES.md#off-chain)). Until then, steps 11-15 stop with `UNKNOWN_ACCOUNT`.
 
 | # | Do | See |
 |---|---|---|
