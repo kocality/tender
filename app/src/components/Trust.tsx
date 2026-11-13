@@ -1,18 +1,26 @@
 import { PUBLIC_FROM_START, ROLES, TOP_LIMITS } from '../copy';
 import { Rich } from './Rich';
 
-/** Who can see what, by role: the home band and `#/trust` show the same list. */
-export function RoleList() {
+/** Who can see what, by role: the home band and `#/trust` show the same list. `phoneShort` (home band): on a phone each
+ * role is one short sentence that keeps its exception; the full wording stays on `#/trust`. */
+export function RoleList({ phoneShort = false }: { phoneShort?: boolean }) {
   return (
-    <dl className="roles">
+    <dl className={phoneShort ? 'roles roles-phone' : 'roles'}>
       {ROLES.map((r) => (
         <div key={r.who} className="role">
           <dt>{r.who}</dt>
           <dd>
-            <Rich text={r.text} />
-            {r.small ? (
-              <span className="role-small">
-                <Rich text={r.small} />
+            <span className={phoneShort && (r.short || r.small) ? 'role-full' : undefined}>
+              <Rich text={r.text} />
+              {r.small ? (
+                <span className="role-small">
+                  <Rich text={r.small} />
+                </span>
+              ) : null}
+            </span>
+            {phoneShort && (r.short || r.small) ? (
+              <span className="role-short">
+                <Rich text={r.short ?? r.text} />
               </span>
             ) : null}
           </dd>

@@ -82,6 +82,13 @@ describe('seller and units on the sale card (SC-02, X12-02 numbers)', () => {
     expect(other).toContain('someone.near');
     expect(other).not.toContain('team-funded');
   });
+  test('on the twin cards the team label is short and the note under both cards says who runs the keeper, relayer and page', () => {
+    const html = text(renderToString(<TwinView bundles={[bundle(keyed), { ...bundle(cancelled), id: '0' }]} nowNs={NOW} />));
+    expect(html.split('team-funded demo sale (us)').length - 1).toBe(2);
+    expect(html).not.toContain('that is us, and we also run');
+    expect(html).toContain('we also run the keeper (the bot that reveals bids), the relayer (which pays the network fee for bids) and this page');
+    expect(text(renderToString(<SaleCard id="1" sale={keyed} nowNs={NOW} />))).toContain('that is us, and we also run the keeper');
+  });
   test('the reserve carries its per-lot unit (sale #2 reads "per 1,000 JAMBO")', () => {
     const jambo = { ...keyed, token: 'nep141:jambo-1679.meme-cooking.near', lotExp: 3, reserve: 174_000n, decimals: 18 };
     const html = text(renderToString(<SaleCard id="2" sale={jambo} nowNs={NOW} />));

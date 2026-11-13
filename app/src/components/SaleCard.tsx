@@ -118,7 +118,8 @@ export function SaleCard({
       ) : null}
       <p className="small muted facts">
         Seller <span className="mono">{sale.seller}</span>
-        {config.teamAccounts.includes(sale.seller) ? ' · team-funded demo sale: that is us, and we also run the keeper (the bot that reveals bids), the relayer (which pays the network fee for bids) and this page' : ''}
+        {/* Twin cards share one note under both cards that says the rest (Twin.tsx). */}
+        {config.teamAccounts.includes(sale.seller) ? (verdict ? ' · team-funded demo sale (us)' : ' · team-funded demo sale: that is us, and we also run the keeper (the bot that reveals bids), the relayer (which pays the network fee for bids) and this page') : ''}
       </p>
       {timeline ? <Timeline sale={sale} nowNs={nowNs} mini={timeline === 'mini'} facts={timeline === 'mini' ? undefined : timeline} /> : null}
       <ConditionBar sale={sale} />

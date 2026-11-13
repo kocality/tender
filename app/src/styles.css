@@ -2942,3 +2942,64 @@ tr.row-warn td {
 .pill.pill-block {
   max-width: 18ch;
 }
+
+/* ---------- /try spacing, section focus, a shorter phone home ---------- */
+/* The 01-03 row under the wallet cards is its own block: the same air as between the page head and the cards. */
+.proves {
+  margin-top: var(--s7);
+}
+
+/* A section heading reached by a section link holds focus (lib/sections.ts); the scroll offset clears the sticky header. */
+.sec h2[tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.role-short {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  /* Chapter 2's "public sale vs Tender" table shows the same peek. */
+  .hero .cast {
+    display: none;
+  }
+
+  .sec {
+    padding: var(--s6) 0;
+  }
+
+  .sec-head {
+    margin-bottom: var(--s5);
+  }
+
+  .chapter .txt {
+    padding: var(--s4);
+  }
+
+  .proves {
+    margin-top: var(--s6);
+  }
+
+  /* Home band on a phone: one sentence per role, each with its exception; #/trust keeps the full wording. */
+  .roles-phone .role {
+    display: block;
+    padding: var(--s3) 0;
+  }
+
+  .roles-phone .role dt {
+    display: inline;
+    margin-right: var(--s2);
+  }
+
+  .roles-phone .role dd {
+    display: inline;
+  }
+
+  .roles-phone .role-full {
+    display: none;
+  }
+
+  .roles-phone .role-short {
+    display: inline;
+  }
+}

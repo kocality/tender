@@ -124,7 +124,7 @@ export const HOME = {
   missingLead:
     'two sales will run here side by side: one set up to meet its public conditions and open, the other to miss them, so its key is never asked for.',
   noOpenSale: 'No sale is taking bids right now. You can still sign a practice bid with your own wallet: it is free and nothing is sent.',
-  liveNote: 'We are the seller in these sales, and we funded them.',
+  liveNote: 'We are the seller in these sales and funded them; we also run the keeper (the bot that reveals bids), the relayer (which pays the network fee for bids) and this page.',
   trustTitle: 'Who sees what,',
   trustAccent: 'and when.',
   trustLead: 'Your price and amount are sealed. Your deposit is not: it is public from the start, so the sale can check its conditions without opening anything.',
@@ -165,21 +165,23 @@ export function twinHeading(
   return { before: 'Real sales, read', accent: 'live.', after: '', lead: `${sales.length === 1 ? 'A sale' : 'Sales'} on NEAR ${network}. ${read}` };
 }
 
-/** Who can see what, by role. Shared by the home band and `#/trust`. */
-export const ROLES: { who: string; text: string; small?: string }[] = [
+/** Who can see what, by role. Shared by the home band and `#/trust`; `short` is the home band on a phone, with the same exceptions. */
+export const ROLES: { who: string; text: string; small?: string; short?: string }[] = [
   { who: 'You', text: '**Your price and amount, always.**' },
   { who: 'Other bidders', text: 'Your deposit, your account and the time. **Not your price.**' },
-  { who: 'The seller', text: 'The same as other bidders. The seller cannot open bids early either.' },
+  { who: 'The seller', text: 'The same as other bidders. The seller cannot open bids early either.', short: 'The same as other bidders. **Not your price.**' },
   {
     who: 'Tender (us)',
     text: "The same. **We cannot get the key**: if we ask, NEAR's network gives us a different key that opens nothing. Only the locked sale contract gets the right one, and nobody can change that contract, us included: it has no owner key and no upgrade method.",
     small:
       'One exception: this page is our code. A bad version could read your price before sealing it. Developers who would rather not trust it can seal on their own machine with `pnpm seal:bid`.',
+    short: 'The same. **We cannot get the key.** One exception: this page is our code, and a bad version could read your price before sealing it (`pnpm seal:bid` seals without it).',
   },
   {
     who: "NEAR's key network",
     text: "Holds, in pieces, the master key every sale's key comes from. Reading bids early would take 11 of the parties that hold, or ever held, a piece, working together.",
     small: "Technically an MPC (multi-party computation) network: 11 of 16 nodes on 2026-11-10; `pnpm verify` prints today's count. If they did work together, nothing on chain would show it.",
+    short: "**Not your price**, unless 11 of its key holders, past or present, work together. Nothing on chain would show it.",
   },
   { who: 'Everyone, later', text: 'Every bid, once the sale opens. That is how anyone can check the price.' },
 ];

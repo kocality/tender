@@ -320,7 +320,7 @@ function TrustBand() {
           <p className="lead">{HOME.trustLead}</p>
         </div>
         <div className="trust-grid">
-          <RoleList />
+          <RoleList phoneShort />
           <div>
             <p className="eyebrow">Public from the start</p>
             <PublicList />

@@ -73,3 +73,22 @@ describe('the home hero', () => {
     expect(hero).toMatch(/<a href="#\/trust">Why these two/);
   });
 });
+
+describe('the home band on a phone', () => {
+  test('a shortened role keeps its exception: the hosted page for us, former key holders for the key network', async () => {
+    const { ROLES } = await import('../copy');
+    const short = (who: string) => ROLES.find((r) => r.who === who)?.short ?? '';
+    expect(short('Tender (us)')).toContain('a bad version could read your price before sealing it');
+    expect(short('Tender (us)')).toContain('`pnpm seal:bid`');
+    expect(short("NEAR's key network")).toContain('11 of its key holders, past or present');
+    for (const r of ROLES) expect(r.short ?? r.text).toMatch(/\S/);
+  });
+  test('the home renders both wordings (CSS picks one by width); #/trust renders only the full one', async () => {
+    const { HomeView, Trust } = await load({});
+    const home = renderToString(<HomeView data={null} error={null} loading nowNs={0n} />);
+    expect(home).toContain('class="roles roles-phone"');
+    expect(home.split('class="role-short"').length - 1).toBe(3);
+    const trust = renderToString(<Trust />);
+    expect(trust).not.toContain('role-short');
+  });
+});
