@@ -2949,8 +2949,9 @@ tr.row-warn td {
   margin-top: var(--s7);
 }
 
-/* A section heading reached by a section link holds focus (lib/sections.ts); the scroll offset clears the sticky header. */
-.sec h2[tabindex='-1']:focus:not(:focus-visible) {
+/* A section heading reached by a section link holds focus (lib/sections.ts) so the next Tab and a screen reader continue
+   from there. It is not a control and the scroll already shows where the visitor is: no focus ring. */
+.sec h2[tabindex='-1']:focus {
   outline: none;
 }
 
