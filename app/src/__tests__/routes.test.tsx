@@ -14,6 +14,8 @@ describe('every route mounts', () => {
   const ROUTES: [string, string][] = [
     ['#/', 'Loading sales…'],
     ['#/?rec=1', 'Loading sales…'],
+    ['#/?at=live', 'Loading sales…'],
+    ['#/trust', 'Who can see your bid.'],
     ['#/sale/1', 'Loading sale…'],
     ['#/bid/1', 'Bid on sale #'],
     ['#/bid/1?mode=fund', 'Bid on sale #'],
@@ -34,7 +36,7 @@ describe('every route mounts', () => {
     for (const hash of ['#/nope', '#/sale/abc', '#/bid/1x', '#/sale/1/extra']) {
       const html = render(hash);
       expect(html, hash).toContain('Not found');
-      expect(html, hash).toContain('Back to the twin sales');
+      expect(html, hash).toContain('Back to the home page');
     }
   });
 });

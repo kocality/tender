@@ -23,6 +23,7 @@ import { withdrawMessages } from '../lib/withdrawFlow';
 import { BidView } from '../pages/Bid';
 import { KeysView } from '../pages/Keys';
 import { SaleView } from '../pages/Sale';
+import { HomeView } from '../pages/Home';
 import { TwinView } from '../pages/Twin';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -50,6 +51,15 @@ describe('bid page after the form (QA-03, X12-04 tabs)', () => {
       expect(html).not.toContain('Sign with wallet');
     }
   });
+  test('a sale past its close time that nobody opened yet shows no wallet step, and points to the sale page instead', () => {
+    const closed = { ...open, closeNs: NOW - 60_000_000_000n };
+    const html = text(view(closed));
+    expect(html).toContain('This sale is closed; it no longer takes bids.');
+    expect(html).toContain('href="#/sale/1"');
+    expect(html).toContain('href="#/try"');
+    expect(html).not.toContain('Seal here');
+    expect(html).not.toContain('Connect your wallet');
+  });
   test('an open sale shows its close time, a countdown, the reveal window and the seller', () => {
     const html = text(view(open));
     expect(html).toContain('Seal here');
@@ -75,7 +85,8 @@ describe('seller and units on the sale card (SC-02, X12-02 numbers)', () => {
   test('the reserve carries its per-lot unit (sale #2 reads "per 1,000 JAMBO")', () => {
     const jambo = { ...keyed, token: 'nep141:jambo-1679.meme-cooking.near', lotExp: 3, reserve: 174_000n, decimals: 18 };
     const html = text(renderToString(<SaleCard id="2" sale={jambo} nowNs={NOW} />));
-    expect(html).toMatch(/reserve 0\.174 USDC per 1,000 jambo-1679\.meme-cooking\.near/);
+    expect(html).toMatch(/minimum price \(reserve\) 0\.174 USDC per 1,000 JAMBO/);
+    expect(html).toContain('jambo-1679.meme-cooking.near'); // the full token id stays on the card
   });
   test('the twin view notes that the demo sale 0 was configured to miss its thresholds', () => {
     const html = renderToString(<TwinView bundles={[bundle(keyed), { ...bundle(cancelled), id: '0' }]} nowNs={NOW} />);
@@ -95,7 +106,10 @@ describe('every page has one h1 (X12A-07)', () => {
   test('sale, twin and key ledger pages', () => {
     expect(h1s(renderToString(<SaleView bundle={bundle(keyed)} nowNs={NOW} cfg={cfg} />))).toBe(1);
     expect(h1s(renderToString(<SaleView bundle={{ id: '9', sale: null, bids: [] }} nowNs={NOW} cfg={cfg} />))).toBe(1);
-    expect(h1s(renderToString(<TwinView bundles={[bundle(keyed), bundle(cancelled)]} nowNs={NOW} />))).toBe(1);
+    // The twin sales are a section of the home page now; the page's one h1 is the hero's.
+    expect(h1s(renderToString(<TwinView bundles={[bundle(keyed), bundle(cancelled)]} nowNs={NOW} />))).toBe(0);
+    expect(h1s(renderToString(<HomeView data={[bundle(keyed), bundle(cancelled)]} error={null} loading={false} nowNs={NOW} />))).toBe(1);
+    expect(h1s(renderToString(<HomeView data={null} error={null} loading nowNs={NOW} />))).toBe(1);
     const data: KeysData = { mpc: 'v1.signer', mpcVersion: '3.18.0', rows: [], receipts: [], sales: [keyed] };
     expect(h1s(renderToString(<KeysView data={data} />))).toBe(1);
   });

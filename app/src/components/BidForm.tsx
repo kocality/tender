@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { priceUnitLabel } from '../lib/amounts';
 import { fieldOfError, submitDecision, validateBid, type BidValidation } from '../lib/bidFlow';
-import { tokenLabel } from '../lib/format';
+import { PENALTY_RULE } from '../copy';
+import { tokenSymbol } from '../lib/format';
 import type { Sale } from '../lib/views';
 
 export interface BidFormValues {
@@ -19,11 +20,14 @@ export function BidForm({
   nowNs,
   disabled,
   onSubmit,
+  onDraft,
 }: {
   sale: Sale;
   nowNs: bigint;
   disabled: boolean;
   onSubmit: (v: BidFormValues) => void;
+  /** The raw field text as it is typed, for the "Who sees what" panel. Nothing is validated or sent. */
+  onDraft?: (d: { price: string; size: string; escrow: string }) => void;
 }) {
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('');
@@ -33,7 +37,15 @@ export function BidForm({
   const [attempt, setAttempt] = useState(0);
   const [warned, setWarned] = useState<string | null>(null);
   const inputs = { price: useRef<HTMLInputElement>(null), size: useRef<HTMLInputElement>(null), escrow: useRef<HTMLInputElement>(null) };
-  const unit = priceUnitLabel(tokenLabel(sale.token), sale.lotExp);
+  const token = tokenSymbol(sale.token);
+  const unit = priceUnitLabel(token, sale.lotExp);
+  const edit = (f: 'price' | 'size' | 'escrow', v: string) => {
+    const next = { price, size, escrow, [f]: v };
+    if (f === 'price') setPrice(v);
+    else if (f === 'size') setSize(v);
+    else setEscrow(v);
+    onDraft?.(next);
+  };
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -66,22 +78,43 @@ export function BidForm({
 
   return (
     <form onSubmit={submit} className="stack" autoComplete="off">
-      <label className="field">
-        <span>Price ({unit})</span>
-        <input {...fieldProps('price')} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="3.60" disabled={disabled} />
-      </label>
-      <label className="field">
-        <span>Size: most you will spend (USDC)</span>
-        <input {...fieldProps('size')} inputMode="decimal" value={size} onChange={(e) => setSize(e.target.value)} placeholder="3" disabled={disabled} />
-      </label>
-      <label className="field">
-        <span>Escrow: USDC locked with the bid (public; at least 1)</span>
-        <input {...fieldProps('escrow')} inputMode="decimal" value={escrow} onChange={(e) => setEscrow(e.target.value)} placeholder="5" disabled={disabled} />
-      </label>
-      <p className="small muted">
-        Whatever you do not spend at the clearing price is refunded. If no one reveals your bid before the deadline (the keeper normally does; you can too,
-        gasless), 10% stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included.
-      </p>
+      <div className="field">
+        <label htmlFor="bid-price" className="field-label">
+          <span>Your price</span>
+          <span className="tag sealed-tag">Sealed</span>
+        </label>
+        <input {...fieldProps('price')} inputMode="decimal" value={price} onChange={(e) => edit('price', e.target.value)} placeholder="3.60" disabled={disabled} />
+        <p className="help">
+          In {unit}. The most you would pay. Every winner pays the same final price, which can be lower.
+        </p>
+      </div>
+      <div className="field">
+        <label htmlFor="bid-size" className="field-label">
+          <span>Most you will spend (USDC)</span>
+          <span className="tag sealed-tag">Sealed</span>
+        </label>
+        <input {...fieldProps('size')} inputMode="decimal" value={size} onChange={(e) => edit('size', e.target.value)} placeholder="3" disabled={disabled} />
+        <p className="help">You get {token} worth up to this much, at the final price.</p>
+      </div>
+      <div className="field">
+        <label htmlFor="bid-escrow" className="field-label">
+          <span>Deposit, USDC (public; at least 1)</span>
+          <span className="tag public-tag">Public</span>
+        </label>
+        <input {...fieldProps('escrow')} inputMode="decimal" value={escrow} onChange={(e) => edit('escrow', e.target.value)} placeholder="5" disabled={disabled} />
+        <p className="help">
+          Everyone sees this number. Set it above what you will spend, so your amount stays sealed; anything you do not spend comes back to you once your bid is
+          revealed (the keeper normally does it). If your bid is never revealed, 10% of this deposit can stay in the contract; no Tender method pays it to anyone.
+        </p>
+      </div>
+      <details className="fold callout">
+        <summary>If your bid is never revealed</summary>
+        <p className="small">
+          Whatever you do not spend at the clearing price is refunded. If no one reveals your bid before the deadline (the keeper normally does; you can too,
+          gasless), 10% stays in the contract&apos;s NEAR Intents balance; no Tender method pays it to anyone, the seller included.
+        </p>
+        <p className="small muted">{PENALTY_RULE}</p>
+      </details>
       {errors.map((e) => {
         const f = fieldOfError(e);
         return (
@@ -97,10 +130,11 @@ export function BidForm({
             </p>
           ))
         : null}
-      <div>
+      <div className="row">
         <button type="submit" className="primary" disabled={disabled}>
           {confirming ? 'Continue anyway' : 'Continue'}
         </button>
+        <span className="small muted">Nothing is sent yet.</span>
       </div>
     </form>
   );

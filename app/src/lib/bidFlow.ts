@@ -19,11 +19,11 @@ const U64_MAX = (1n << 64n) - 1n;
 export type Step = 'wallet' | 'bid' | 'fund' | 'seal' | 'sign' | 'relay' | 'done';
 
 export const STEPS: { id: Step; label: string }[] = [
-  { id: 'wallet', label: 'Connect wallet' },
-  { id: 'bid', label: 'Price, size and escrow' },
-  { id: 'fund', label: 'Fund your Intents account' },
-  { id: 'seal', label: 'Seal in your browser' },
-  { id: 'sign', label: 'Sign one transfer' },
+  { id: 'wallet', label: 'Connect your wallet' },
+  { id: 'bid', label: 'Choose your price' },
+  { id: 'fund', label: 'Move USDC in' },
+  { id: 'seal', label: 'Seal your bid' },
+  { id: 'sign', label: 'Sign once' },
   { id: 'relay', label: 'Relay' },
   { id: 'done', label: 'Bid stored' },
 ];

@@ -8,8 +8,9 @@ The app has no send-transaction code for EVM or Solana deposits: a deposit is a 
 
 | Route | What |
 |---|---|
-| `#/` | Twin sales side by side: countdown, public open conditions, key-request counter, ciphertext wall |
-| `#/sale/:id` | One sale: Open, Decrypt, Reveal, Finalize, result table, supply and demand chart, ciphertext wall |
+| `#/` | Home: what Tender is (hero and a worked example), the two live twin sales (clock, verdict, public open conditions, key requests, timeline, Open / Cancel), who can see a bid, the 60-second path for judges. `#/?at=how`, `#/?at=live`, `#/?at=trust`, `#/?at=try` scroll to a section |
+| `#/trust` | Who can see your bid: what is sealed and what is public, by role, what you rely on, all 11 limits, the seller flow, how to check it yourself |
+| `#/sale/:id` | One sale: timeline, Open / Cancel, outcome, Decrypt, Reveal, Finalize, who got what, supply and demand chart; ciphertexts and rules folded |
 | `#/bid/:id` | Bid wizard: wallet, price and size, fund through 1Click, seal, sign, relay. `?mode=fund` stops after funding. "Paste a sealed bid" accepts the output of `pnpm seal:bid` |
 | `#/try` | Try signing (free): sign a real bid payload and ask `simulate_intents` to check it. Nothing is sent |
 | `#/keys` | Key ledger: every MPC key request, matched with NearBlocks receipts |
@@ -19,7 +20,7 @@ Any other address shows "Not found".
 
 ## Record mode
 
-`#/?rec=1` switches to the light theme, an 18 px root font and hides the debug panels (signed payloads, raw error text, evidence JSON). The choice is remembered in the browser; `#/?rec=0` turns it off. All numbers on screen stay real.
+`#/?rec=1` (or `#/?rec=1&at=live` to open on the twin sales) switches to the light theme, an 18 px root font and hides the debug panels (signed payloads, raw error text, evidence JSON). The choice is remembered in the browser; `#/?rec=0` turns it off. All numbers on screen stay real.
 
 ## Configuration
 
@@ -41,6 +42,8 @@ Read from the repository-root `.env` (`envDir: '..'`); only `VITE_*` variables r
 | `VITE_DEMO_FAIL_SALES` | `0` on mainnet, empty on testnet; sale ids labelled as configured by the team to miss their open thresholds |
 | `VITE_NEARBLOCKS_API_URL` | `https://api.nearblocks.io/v3` (testnet: `https://api-testnet.nearblocks.io/v3`) |
 | `VITE_EXPLORER_URL` | `https://nearblocks.io` (testnet: `https://testnet.nearblocks.io`) |
+| `VITE_REPO_URL` | empty; when set, the footer links the source code and JUDGES.md, and the home page links the README steps |
+| `VITE_EARLIER_BUILD` | empty; `1` labels the twin sales as running on an earlier build of the contract (the T1 testnet copy) |
 
 ## Run
 

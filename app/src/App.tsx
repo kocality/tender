@@ -4,8 +4,9 @@ import { Layout } from './components/Layout';
 import { Bid } from './pages/Bid';
 import { Keys } from './pages/Keys';
 import { Sale } from './pages/Sale';
+import { Home } from './pages/Home';
+import { Trust } from './pages/Trust';
 import { Try } from './pages/Try';
-import { Twin } from './pages/Twin';
 import { Withdraw } from './pages/Withdraw';
 import { titleFor, useHashRoute } from './router';
 
@@ -20,14 +21,23 @@ export function App() {
   const href = `${route.path}:${JSON.stringify(route.params)}`;
   useEffect(() => {
     document.title = titleFor(route);
-    // A hash navigation keeps focus on the link that was used: move it to the page, but not on the first load.
+    // A hash navigation keeps focus on the link that was used, and the scroll position of the page it left: move both to the
+    // new page, but not on the first load.
     if (first.current) first.current = false;
-    else document.querySelector<HTMLElement>('main')?.focus();
+    else {
+      window.scrollTo?.(0, 0);
+      document.querySelector<HTMLElement>('main')?.focus({ preventScroll: true });
+    }
   }, [href]);
+  // `#/?at=live` names a section of the home page (a `#live` fragment would be read as a route).
+  const at = route.path === '/' ? (route.query.get('at') ?? '') : '';
   let page;
   switch (route.path) {
     case '/':
-      page = <Twin />;
+      page = <Home at={at} />;
+      break;
+    case '/trust':
+      page = <Trust />;
       break;
     case '/sale/:id':
       page = isSaleId(route.params.id) ? <Sale id={route.params.id} /> : <NotFound what="sale" />;
@@ -47,5 +57,5 @@ export function App() {
     default:
       page = <NotFound />;
   }
-  return <Layout current={route.path}>{page}</Layout>;
+  return <Layout current={at ? `at:${at}` : route.path}>{page}</Layout>;
 }

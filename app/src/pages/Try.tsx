@@ -1,8 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { payloadString, simulateIntents, type MultiPayload } from '@tender/intents';
 import { CopyButton } from '../components/CopyButton';
-import { HonestNote } from '../components/HonestNote';
-import { StatusPill } from '../components/StatusPill';
 import { config } from '../config';
 import { buildTryBid, liveQuoteToken } from '../lib/bidPayload';
 import { useChainOffset } from '../lib/chainClock';
@@ -51,6 +49,7 @@ export function Try() {
 
   // Runs only from a click handler: a signature request must never be fired by an effect (StrictMode runs effects twice).
   const run = async (kind: Kind) => {
+    if (cards[kind].busy) return; // the button stays focusable while busy (aria-disabled), so a second press lands here
     patch(kind, { busy: true });
     try {
       const signer: IntentSigner =
@@ -73,26 +72,29 @@ export function Try() {
   };
 
   return (
-    <div>
-      <h1>Try signing (free)</h1>
-      <p className="muted">
-        Sign a real bid payload with your own wallet and ask <code>{config.intentsContractId}</code> to check it with{' '}
-        <code>simulate_intents</code>. The ciphertext is random, the receiver is <code className="mono">{config.tryReceiver}</code>, nothing is
-        sent to any relayer and no funds move.
-      </p>
-      <HonestNote>
-        A valid signature on an account with no funds ends in &quot;insufficient balance&quot;. That is the expected result: it shows the
-        signature was accepted before the balance check.
-      </HonestNote>
-      <div className="grid-2" style={{ marginTop: 16 }}>
+    <div className="wrap page">
+      <header className="page-head">
+        <p className="eyebrow">Free · nothing is sent</p>
+        <h1>Try signing (free)</h1>
+        <p className="lead">
+          Sign the same message a real bid uses, with your own wallet. NEAR Intents (the NEAR contract that holds balances your own wallet controls and checks
+          every signature) checks it and stops there: no deposit, no funds move.
+        </p>
+        <p className="note info">
+          <strong>This proves your wallet can place a real Tender bid, without spending anything.</strong> Success reads{' '}
+          <span className="mono">signature valid · insufficient balance</span>: NEAR Intents accepted your signature as a real bid, then stopped because the account
+          holds no USDC there.
+        </p>
+      </header>
+      <div className="grid-3">
         <WalletCard
-          title="MetaMask (Base/Arbitrum)"
+          title="MetaMask"
           standard="erc191"
           state={cards.evm}
           onRun={() => run('evm')}
           extra={
-            <label className="small">
-              Declared origin{' '}
+            <label className="small origin-select">
+              Funds would come from{' '}
               <select value={evmOrigin} onChange={(e) => setEvmOrigin(e.target.value as 'base' | 'arb')}>
                 <option value="base">Base</option>
                 <option value="arb">Arbitrum</option>
@@ -100,7 +102,7 @@ export function Try() {
             </label>
           }
         />
-        <WalletCard title="Phantom (Solana)" standard="raw_ed25519" state={cards.phantom} onRun={() => run('phantom')} />
+        <WalletCard title="Phantom" standard="raw_ed25519" state={cards.phantom} onRun={() => run('phantom')} />
         <WalletCard
           title="NEAR wallet"
           standard="nep413"
@@ -110,6 +112,41 @@ export function Try() {
           buttonLabel={nearLoading ? 'Loading wallets…' : nearUnavailable ? 'NEAR wallets unavailable' : undefined}
         />
       </div>
+      <ol className="proves">
+        <li>
+          <span className="n mono">01</span>
+          <strong>Your own wallet, on your own chain.</strong>
+          <span className="muted small">A wallet on Base, Arbitrum, Solana or NEAR signs a Tender bid directly.</span>
+        </li>
+        <li>
+          <span className="n mono">02</span>
+          <strong>Checked by NEAR Intents, not by us.</strong>
+          <span className="muted small">The check runs on NEAR Intents&apos; own contract, not on our server.</span>
+        </li>
+        <li>
+          <span className="n mono">03</span>
+          <strong>Not shown here: sealing.</strong>
+          <span className="muted small">
+            A real bid is sealed in the page before it is signed (developers can seal on their own machine with <code>pnpm seal:bid</code>). Here the sealed part
+            is random.
+          </span>
+        </li>
+      </ol>
+      <details className="fold tech">
+        <summary>Technical details</summary>
+        <ul className="small check-list">
+          <li>
+            The check is a view call, <code>simulate_intents</code>, to <code>{config.intentsContractId}</code>. Nothing is sent to any relayer.
+          </li>
+          <li>
+            The bid is addressed to <span className="mono">{config.tryReceiver}</span>; its sealed part is random, and its sale id does not exist.
+          </li>
+          <li>
+            Signature standards: MetaMask signs <code>erc191</code>, Phantom <code>raw_ed25519</code>, a NEAR wallet <code>nep413</code>. The chain you pick for
+            MetaMask is declared by you, not proven.
+          </li>
+        </ul>
+      </details>
     </div>
   );
 }
@@ -132,16 +169,20 @@ function WalletCard({
   buttonLabel?: string;
 }) {
   const { outcome } = state;
+  const headId = `try-${standard}`;
   return (
-    <section className="card" aria-label={title}>
+    <section className="card pad wallet-card" aria-label={title}>
       <div className="row">
-        <h2 className="sub" style={{ margin: 0 }}>
+        <h2 className="sub" id={headId} style={{ margin: 0 }}>
           {title}
         </h2>
-        <StatusPill>{standard}</StatusPill>
       </div>
+      <p className="small muted" style={{ margin: '4px 0 0' }}>
+        {standard === 'erc191' ? 'Base or Arbitrum' : standard === 'raw_ed25519' ? 'Solana' : 'NEAR'}
+      </p>
       <div className="row" style={{ margin: '12px 0' }}>
-        <button type="button" className="primary" onClick={onRun} disabled={state.busy || disabled}>
+        {/* Three equal choices: none is the page's one primary action. aria-disabled while busy keeps keyboard focus on it. */}
+        <button type="button" onClick={onRun} disabled={disabled} aria-disabled={state.busy || undefined} aria-describedby={headId}>
           {state.busy ? 'Waiting for wallet…' : (buttonLabel ?? (outcome?.signAgain ? 'Sign again' : 'Connect and sign'))}
         </button>
         {extra}

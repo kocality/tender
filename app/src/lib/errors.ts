@@ -81,6 +81,11 @@ export function isNetworkFailure(e: unknown): boolean {
   return NETWORK_RE.test(messageOf(e));
 }
 
+/** The sale contract account, or its code, is not on this network (yet): the RPC answers UNKNOWN_ACCOUNT or CodeDoesNotExist. */
+export function isNotDeployed(message: string): boolean {
+  return /UNKNOWN_ACCOUNT|CodeDoesNotExist|NO_CONTRACT_CODE|account \S+ does not exist|contract code .* not (deployed|found)/i.test(message);
+}
+
 /** The text a polled read shows when it fails. Contract-level problems (panic, missing account) are not "RPC unavailable". */
 export function isRpcUnavailable(message: string): boolean {
   return !/panic|wasm execution|does not exist|CodeDoesNotExist/i.test(message);

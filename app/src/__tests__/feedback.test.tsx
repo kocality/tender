@@ -1,11 +1,13 @@
 import { renderToString } from 'react-dom/server';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Loading, NotFound, ReadError } from '../components/Feedback';
 import { SaleCard } from '../components/SaleCard';
 import type { KeysData } from '../lib/loaders';
-import { KeysView } from '../pages/Keys';
+import { HomeView } from '../pages/Home';
+import { Keys, KeysView } from '../pages/Keys';
 
 describe('loading, error and empty states', () => {
+  afterEach(() => vi.unstubAllGlobals());
   test('loading placeholder is a status region that can be read (not aria-busy)', () => {
     const html = renderToString(<Loading what="sales" />);
     expect(html).toContain('role="status"');
@@ -31,6 +33,33 @@ describe('loading, error and empty states', () => {
     const html = renderToString(<ReadError error={'wasm execution failed with error: HostError(GuestPanic { panic_msg: "x" })'} />);
     expect(html).toContain('Could not read');
     expect(html).not.toContain('RPC unavailable');
+  });
+
+  test('a contract that is not deployed gets a plain empty state with a way forward; the raw RPC answer is folded', () => {
+    const raw = 'https://free.rpc.fastnear.com: {"name":"HANDLER_ERROR","cause":{"name":"UNKNOWN_ACCOUNT"},"data":"account v1.tenderseal.near does not exist while viewing"}';
+    const html = renderToString(<ReadError error={raw} />);
+    expect(html).toContain('The sale contract is not live on NEAR');
+    expect(html).toContain('href="#/try"');
+    expect(html).toMatch(/<details[^>]*debug-only[^>]*><summary>Technical details<\/summary>/);
+    expect(html.indexOf('UNKNOWN_ACCOUNT')).toBeGreaterThan(html.indexOf('Technical details'));
+    expect(html).not.toContain('RPC unavailable');
+  });
+
+  test('the home page does not promise live sales when the contract is missing', () => {
+    const raw = 'UNKNOWN_ACCOUNT: account v1.tenderseal.near does not exist while viewing';
+    const html = renderToString(<HomeView data={null} error={raw} loading={false} nowNs={0n} />).replace(/<!-- -->/g, '');
+    expect(html).toMatch(/once the contract is <span[^>]*>live\.<\/span>/);
+    expect(html).not.toContain('Both endings,');
+    expect(html).toContain('the sale contract is not live yet'); // the hero status line says so too
+  });
+
+  test('a failed read of the key ledger keeps the page title and its explanation', () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('UNKNOWN_ACCOUNT');
+    });
+    const html = renderToString(<Keys />);
+    expect(html).toContain('<h1>Key ledger</h1>');
+    expect(html).toContain('A sale that missed its public conditions has no');
   });
 
   test('no error renders nothing', () => {

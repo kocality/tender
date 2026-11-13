@@ -32,11 +32,12 @@ export function OpenPanel({ sale, nowNs, keyRequestBlock, keyRequestNs }: { sale
 
   const key = sale.key;
   return (
-    <div className="actions" aria-label="Open and cancel">
+    <div className="actions" role="group" aria-label="Open and cancel">
       {key ? (
         <p className="result ok" role="status">
-          Key released at block <BlockLink block={key.block.toString()} />
-          {keyRequestBlock != null ? ` (+${key.block - keyRequestBlock} blocks after the request)` : ''}
+          {`Key requested ${sale.keyRequests} ${sale.keyRequests === 1 ? 'time' : 'times'} · Key released at block `}
+          <BlockLink block={key.block.toString()} />
+          {keyRequestBlock != null ? `, ${key.block - keyRequestBlock} blocks after the request` : ''}
         </p>
       ) : null}
       {cond.requestDead ? (
@@ -59,7 +60,11 @@ export function OpenPanel({ sale, nowNs, keyRequestBlock, keyRequestNs }: { sale
         </button>
       ) : null}
       {cond.canCancel && cond.cancelReason === 'no_key_after_24h' ? (
-        <p className="small muted">More than 24 hours after close with no key and no request in flight.</p>
+        <p className="small muted">
+          {cond.canOpen
+            ? "Conditions met, so anyone can open it. Because more than 24 hours passed after close without a key, cancelling is also allowed. Open asks NEAR's key network for the real key and adds a line to the key ledger."
+            : 'More than 24 hours after close with no key and no request in flight.'}
+        </p>
       ) : null}
       <div role="status">
         {tx ? (

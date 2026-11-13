@@ -15,22 +15,28 @@ export function ConditionBar({ sale }: { sale: Sale }) {
   const escrowMet = sale.escrowTotal >= sale.minEscrow;
   const biddersMet = sale.bidders >= sale.minBidders;
   return (
-    <div>
+    <div className="conds">
       <div className="cond">
-        <div className="row small">
+        <div className="cond-label small">
+          <span>Deposits</span>
           <span>
-            escrow {formatUsdc(sale.escrowTotal)} / {formatUsdc(sale.minEscrow)} USDC min
+            <span className="mono">
+              {formatUsdc(sale.escrowTotal)} USDC · {formatUsdc(sale.minEscrow)} needed
+            </span>{' '}
+            <span className={escrowMet ? 'pill ok' : 'pill'}>{escrowMet ? 'met' : 'not met'}</span>
           </span>
-          <span className={escrowMet ? 'pill ok' : 'pill'}>{escrowMet ? 'met' : 'not met'}</span>
         </div>
         <Meter value={sale.escrowTotal} max={sale.minEscrow} met={escrowMet} />
       </div>
       <div className="cond">
-        <div className="row small">
+        <div className="cond-label small">
+          <span>Bidders</span>
           <span>
-            bidders {sale.bidders} / {sale.minBidders} min
+            <span className="mono">
+              {sale.bidders} · {sale.minBidders} needed
+            </span>{' '}
+            <span className={biddersMet ? 'pill ok' : 'pill'}>{biddersMet ? 'met' : 'not met'}</span>
           </span>
-          <span className={biddersMet ? 'pill ok' : 'pill'}>{biddersMet ? 'met' : 'not met'}</span>
         </div>
         <Meter value={BigInt(sale.bidders)} max={BigInt(sale.minBidders)} met={biddersMet} />
       </div>

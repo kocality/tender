@@ -215,7 +215,7 @@ describe('reconnecting starts over (QA-13)', () => {
     expect(has('Try the relayer again')).toBe(false);
     expect(has('Sign with wallet')).toBe(false);
     expect(alertText()).toBe('');
-    expect([...walk(render())].some((e) => e.type === 'details')).toBe(false); // no stale "Signed payload"
+    expect([...walk(render())].some((e) => e.type === 'details' && textOf(e).includes('Signed payload'))).toBe(false); // no stale "Signed payload"
     expect(child(BidForm)).toBeDefined(); // back at the form
   });
   test('a finished bid offers "Place another bid", which returns to the form', async () => {

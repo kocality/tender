@@ -176,7 +176,7 @@ Steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-
 | 14 | `pnpm verify --sale 0` | `#23 cancelled-sealed` PASS: `Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)` |
 | 15 | `pnpm verify --sale 3` | garbage and copied bids `Penalized`; `#17 conservation` PASS |
 | 16 | hosted app `#/try`: sign with MetaMask, Phantom or a NEAR wallet | `signature valid · insufficient balance` (a view call; nothing is spent) |
-| 17 | hosted app `#/`: press **Decrypt** on sale 1 (sales 1 and 0 side by side) | 6 bids decrypt in your browser and match their on-chain commitments |
+| 17 | hosted app `#/sale/1` (the home page links it under "Real sales", next to sale 0): press **Decrypt all bids in this browser** | 6 bids decrypt in your browser and match their on-chain commitments |
 | 18 | optional, costs at least 1 USDC: bid on sale 2 at hosted app `#/bid/2` before close | the bid is stored sealed |
 
 </details>
@@ -318,7 +318,7 @@ Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | What | Result |
 |---|---|
-| Tests | clearing 13, intents 63, seal 37, relayer 421, app 439, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. `main` at `271ebcd`, 2026-11-12 UTC; the contract and its tests are unchanged since step 9's commit |
+| Tests | clearing 13, intents 63, seal 37, relayer 421, app 457, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. `main` at `271ebcd`, 2026-11-12 UTC; the contract and its tests are unchanged since step 9's commit |
 | Wasm RC3 | the release candidate from the step 9 commit: 281,895 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
 | Entry points | integrators: `packages/seal/src/index.ts` (workspace package, not on npm); evidence file formats: `evidence/README.md` |
 

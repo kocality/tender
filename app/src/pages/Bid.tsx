@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { currentSalt, fromBase64, mtBalanceOf, simulateIntents, toHex, type MultiPayload } from '@tender/intents';
 import { BidForm, type BidFormValues } from '../components/BidForm';
-import { Countdown } from '../components/Countdown';
 import { CopyButton } from '../components/CopyButton';
 import { DepositBox } from '../components/DepositBox';
 import { Loading, ReadError } from '../components/Feedback';
-import { HonestNote } from '../components/HonestNote';
 import { PasteSealedBid } from '../components/PasteSealedBid';
-import { SaleCard } from '../components/SaleCard';
+import { Rich } from '../components/Rich';
+import { saleEyebrow } from '../components/SaleCard';
 import { StepList } from '../components/StepList';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
-import { HOSTED_BUNDLE, NOT_STORED_CAUSES, UNRECOVERABLE_TRANSFER } from '../copy';
+import { HOSTED_BUNDLE, NOT_STORED_CAUSES, UNRECOVERABLE_TRANSFER, originBadge } from '../copy';
 import { buildBidPayload } from '../lib/bidPayload';
 import {
   SELF_REVEAL_RESERVE,
@@ -32,7 +31,8 @@ import {
 } from '../lib/bidFlow';
 import { useChainClock } from '../lib/chainClock';
 import { humanError } from '../lib/errors';
-import { formatUsdc } from '../lib/format';
+import { formatCountdown, formatNsUtc, formatPrice, formatUnits, formatUsdc, shortId, tokenLabel, tokenSymbol } from '../lib/format';
+import { priceUnitLabel } from '../lib/amounts';
 import { loadSaleBundle, type SaleBundle } from '../lib/loaders';
 import { addIntentsKey } from '../lib/near-tx';
 import { getStatus, isTerminal, quoteDeposit, submitDeposit, type QuoteResponse, type StatusResponse } from '../lib/oneclick';
@@ -93,26 +93,74 @@ export function BidView({
 }) {
   const sale = data?.sale ?? null;
   return (
-    <div>
-      <h1>Bid on sale #{id}</h1>
-      <ReadError error={error} stale={data !== null} />
+    <div className="wrap page">
+      <p className="crumb">
+        <a href={`#/sale/${id}`}>← Sale #{id}</a>
+      </p>
+      <header className="page-head">
+        <p className="eyebrow">{saleEyebrow(id)}</p>
+        <h1>Bid on sale #{id}</h1>
+        {sale ? <SaleStrip sale={sale} nowNs={nowNs} /> : null}
+      </header>
+      <ReadError error={error} stale={data !== null} compact />
       {loading && !data ? <Loading what="sale" /> : null}
       {data && !sale ? <p className="note">Sale #{id} does not exist yet.</p> : null}
-      {sale ? (
-        <>
-          <SaleCard id={id} sale={sale} nowNs={nowNs} />
-          {sale.state === 'Open' ? (
-            <div className="card" style={{ marginTop: 16 }}>
-              <Countdown closeNs={sale.closeNs} nowNs={nowNs} />
-              <p className="small muted" style={{ marginBottom: 0 }}>
-                After close anyone can open the sale. Bids are revealed in a window of at least {Number(sale.revealSecs) / 3600} hours after the key is released.
-              </p>
-            </div>
-          ) : null}
-          <Wizard id={id} sale={sale} bids={data?.bids ?? []} nowNs={nowNs} synced={synced} fundOnly={fundOnly} />
-        </>
-      ) : null}
+      {sale ? <Wizard id={id} sale={sale} bids={data?.bids ?? []} nowNs={nowNs} synced={synced} fundOnly={fundOnly} /> : null}
     </div>
+  );
+}
+
+/** The sale in one line: what is sold, the lowest price, the clock and the public open conditions. */
+function SaleStrip({ sale, nowNs }: { sale: Sale; nowNs: bigint }) {
+  const token = tokenSymbol(sale.token);
+  const open = sale.state === 'Open' && nowNs < sale.closeNs;
+  return (
+    <>
+      <p className="sale-strip small">
+        <span>
+          <strong className="mono">
+            {formatUnits(sale.supply, sale.decimals)} {token}
+          </strong>{' '}
+          for sale
+        </span>
+        <span>
+          minimum price <strong className="mono">{formatPrice(sale.reserve)}</strong> {priceUnitLabel(token, sale.lotExp)}
+        </span>
+        <span>
+          {open ? (
+            <>
+              closes in{' '}
+              <strong className="countdown" aria-live="off">
+                {formatCountdown(sale.closeNs - nowNs)}
+              </strong>{' '}
+              · closes {formatNsUtc(sale.closeNs)}
+            </>
+          ) : (
+            <>closed {formatNsUtc(sale.closeNs)}</>
+          )}
+        </span>
+        <span>
+          opens if deposits reach <strong className="mono">{formatUsdc(sale.minEscrow)} USDC</strong> and <strong className="mono">{sale.minBidders}</strong>{' '}
+          {sale.minBidders === 1 ? 'bidder' : 'bidders'} (now{' '}
+          <span className="mono">
+            {formatUsdc(sale.escrowTotal)} USDC, {sale.bidders} {sale.bidders === 1 ? 'bidder' : 'bidders'}
+          </span>
+          )
+        </span>
+      </p>
+      <p className="small muted" style={{ margin: '8px 0 0' }}>
+        {tokenSymbol(sale.token) !== tokenLabel(sale.token) ? (
+          <>
+            Token <span className="mono">{tokenLabel(sale.token)}</span> ·{' '}
+          </>
+        ) : null}
+        Seller <span className="mono">{sale.seller}</span>
+        {config.teamAccounts.includes(sale.seller) ? ' · team-funded demo sale' : ''}
+        {sale.state === 'Open'
+          ? ` · after close anyone can open the sale; bids are revealed in a window of at least ${Number(sale.revealSecs) / 3600} hours after the key is released.`
+          : ''}
+      </p>
+    </>
   );
 }
 
@@ -165,6 +213,8 @@ export function Wizard({
   const ticketRef = useRef<Ticket | null>(null);
   /** The deadline (ms) of the payload the wallet just signed. */
   const deadlineRef = useRef<number>(0);
+  /** What the form holds right now, for the "Who sees what" panel only. */
+  const [draft, setDraft] = useState({ price: '', size: '', escrow: '' });
 
   const rpc = config.rpcUrls;
   const quoteToken = sale.quoteToken;
@@ -751,9 +801,10 @@ export function Wizard({
   const ctPreview = sealed ? toHex(fromBase64(sealed.ct)).slice(0, 48) : '';
   const needed = plan ? plan.B + SELF_REVEAL_RESERVE - (balance ?? 0n) : 0n;
 
-  // A sale that stopped taking bids hides the wizard, unless a bid is already under way: its result must stay on screen.
-  if (sale.state !== 'Open' && (step === 'wallet' || step === 'bid')) {
-    return <p className="note">This sale is {sale.state}; it no longer takes bids.</p>;
+  // A sale that stopped taking bids (or closed and waits to be opened) hides the wizard, unless a bid is already under way:
+  // its result must stay on screen. Presentation only: every later step keeps its own closed note and guards.
+  if ((sale.state !== 'Open' || nowNs >= sale.closeNs) && (step === 'wallet' || step === 'bid')) {
+    return closedPanel(id, sale);
   }
 
   const where = problemSection(step, signer !== null);
@@ -766,297 +817,384 @@ export function Wizard({
   const closedNote: ReactNode = block ? <p className="note">{block}</p> : null;
   const clockNote: ReactNode = !synced ? <p className="small muted">The chain clock is not read yet; close times use your device clock until it is.</p> : null;
 
+  const unit = priceUnitLabel(tokenSymbol(sale.token), sale.lotExp);
+  const shown = (v: string, suffix: string) => (v.trim() === '' ? 'not set yet' : `${v.trim()} ${suffix}`);
   return (
-    <div ref={root}>
+    <div ref={root} className="bid-flow">
       <div className="sr-only" role="status">
         {announcementFor(step, busy, stored)}
       </div>
-      <HonestNote>{HOSTED_BUNDLE}</HonestNote>
-      <p className="small muted">{UNRECOVERABLE_TRANSFER}</p>
+      <p className="note bid-honest">
+        <strong>Sealed means only you can read your price</strong>, unless 11 of the parties that hold, or ever held, a piece of NEAR&apos;s key work together, or
+        this page is a bad copy that reads your price before sealing it. To rule out the second, developers can seal on their own machine with{' '}
+        <code>pnpm seal:bid</code> and paste the result here. <a href="#/trust">Who can see your bid</a>
+      </p>
       <StepList current={step} failed={step === 'done' && stored !== undefined && !(stored && stored !== 'unknown')} doneLabel={stored === 'unknown' ? 'Not confirmed' : undefined} />
-      <div className="tabs" role="group" aria-label="How to seal">
-        <button type="button" aria-pressed={tab === 'wizard'} onClick={() => setTab('wizard')}>
-          Seal here
-        </button>
-        <button type="button" aria-pressed={tab === 'paste'} onClick={() => setTab('paste')}>
-          Paste a sealed bid
-        </button>
-      </div>
+      <div className="bid-main">
+        <div className="tabs" role="group" aria-label="How to seal">
+          <button type="button" aria-pressed={tab === 'wizard'} onClick={() => setTab('wizard')}>
+            Seal here
+          </button>
+          <button type="button" aria-pressed={tab === 'paste'} onClick={() => setTab('paste')}>
+            Paste a sealed bid
+          </button>
+        </div>
 
-      <section className="card" aria-label="Wallet" data-step="wallet">
-        <h2 className="sub">1. Wallet</h2>
-        <WalletPicker signer={signer} onConnect={onConnect} />
-        {signer && mine > 0 ? <p className="small muted">You already have {mine} bid{mine === 1 ? '' : 's'} in this sale.</p> : null}
-        {problemFor('wallet')}
-      </section>
-
-      {signer && (step === 'bid' || step === 'wallet') ? (
-        <section className="card" style={{ marginTop: 16 }} aria-label="Bid" data-step="bid">
-          <h2 className="sub" tabIndex={-1}>
-            2. Bid
-          </h2>
-          {tab === 'wizard' ? (
-            <BidForm sale={sale} nowNs={nowNs} disabled={busy !== null} onSubmit={onForm} />
-          ) : (
-            <PasteSealedBid saleId={id} signerId={signer.signerId} disabled={busy !== null} onSubmit={onPasted} />
-          )}
-          {extra ? (
-            <div className="result warn" role="status" style={{ marginTop: 8 }}>
-              <p style={{ marginTop: 0 }}>
-                You already have {extra.mine.map((b) => `bid #${b.idx}${b.escrow !== undefined ? `, escrow ${formatUsdc(b.escrow)} USDC` : ''}`).join('; ')} in this sale.
-                {' '}This will be an additional bid.
-              </p>
-              <button type="button" className="primary" disabled={busy !== null} onClick={() => signer && void precheck(signer, extra.plan, extra.mine.length)}>
-                Place an additional bid
-              </button>{' '}
-              <button type="button" disabled={busy !== null} onClick={() => setExtra(null)}>
-                Cancel
-              </button>
-            </div>
-          ) : null}
-          {again ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" disabled={busy !== null} onClick={() => signer && void precheck(signer, again.plan, again.confirmed)}>
-                Check again
-              </button>
-            </div>
-          ) : null}
-          {busy === 'check' ? <p className="muted">Reading the chain…</p> : null}
-          {problemFor('bid')}
+        <section className="card" aria-label="Wallet" data-step="wallet">
+          <h2 className="sub">Connect your wallet</h2>
+          <WalletPicker signer={signer} onConnect={onConnect} />
+          {signer && mine > 0 ? <p className="small muted">You already have {mine} bid{mine === 1 ? '' : 's'} in this sale.</p> : null}
+          {problemFor('wallet')}
         </section>
-      ) : null}
 
-      {signer && plan && step === 'fund' ? (
-        <section className="card" style={{ marginTop: 16 }} aria-label="Fund" data-step="fund">
-          <h2 className="sub" tabIndex={-1}>
-            3. Fund your Intents account
-          </h2>
-          <p className="small">
-            Escrow <strong>{formatUsdc(plan.B)} USDC</strong> · your Intents balance{' '}
-            <strong>{balance === null ? '…' : `${formatUsdc(balance)} USDC`}</strong>
-          </p>
-          {balance !== null && isFunded(balance, plan.B) ? (
-            <>
-              <p className="result ok">Already funded in NEAR Intents ({formatUsdc(balance)} USDC) · skipping deposit</p>
-              {fundOnly ? <p className="small muted">Funding check complete (fund-only mode).</p> : null}
-            </>
-          ) : signer.origin === 'near' ? (
-            <>
-              <p className="small">
-                1Click cannot fund a NEAR-native USDC balance. Move NEAR USDC into your Intents account yourself ({formatUsdc(needed)} USDC missing, which includes
-                0.000001 USDC left over for the gasless reveal). The command is signed by your NEAR account <span className="mono">{signer.signerId}</span>:
-              </p>
-              <pre className="payload">{nearFundCommand({ amount: needed, quoteToken, signerId: signer.signerId })}</pre>
-              <CopyButton text={nearFundCommand({ amount: needed, quoteToken, signerId: signer.signerId })} label="Copy command" />
-            </>
-          ) : quote ? (
-            <DepositBox
-              origin={signer.origin}
-              quote={quote}
-              status={status}
-              need={needed}
-              onSubmitTx={onSubmitTx}
-              onNewQuote={() => {
-                const d = fundDecision(balance ?? 0n, plan.B);
-                if (!d.skip) void requestQuote(signer, d.deposit, true);
-              }}
-            />
-          ) : busy === 'quote' ? (
-            <p className="muted">Requesting a deposit address…</p>
-          ) : (
-            <>
-              <p className="muted">No deposit address yet.</p>
-              <button
-                type="button"
-                className="primary"
-                disabled={busy !== null}
-                onClick={() => {
-                  const d = fundDecision(balance ?? 0n, plan.B);
-                  if (!d.skip) void requestQuote(signer, d.deposit);
-                }}
-              >
-                Get a deposit address
-              </button>
-            </>
-          )}
-          {closedNote}
-          {problemFor('fund')}
-        </section>
-      ) : null}
+        {signer && (step === 'bid' || step === 'wallet') ? (
+          <section className="card" style={{ marginTop: 16 }} aria-label="Bid" data-step="bid">
+            <h2 className="sub" tabIndex={-1}>
+              Choose your price
+            </h2>
+            {tab === 'wizard' ? <p className="small muted">Two numbers stay sealed until the sale opens. One is public now.</p> : null}
+            {tab === 'wizard' ? (
+              <BidForm sale={sale} nowNs={nowNs} disabled={busy !== null} onSubmit={onForm} onDraft={setDraft} />
+            ) : (
+              <PasteSealedBid saleId={id} signerId={signer.signerId} disabled={busy !== null} onSubmit={onPasted} />
+            )}
+            {extra ? (
+              <div className="result warn" role="status" style={{ marginTop: 8 }}>
+                <p style={{ marginTop: 0 }}>
+                  You already have {extra.mine.map((b) => `bid #${b.idx}${b.escrow !== undefined ? `, escrow ${formatUsdc(b.escrow)} USDC` : ''}`).join('; ')} in this sale.
+                  {' '}This will be an additional bid.
+                </p>
+                <button type="button" className="primary" disabled={busy !== null} onClick={() => signer && void precheck(signer, extra.plan, extra.mine.length)}>
+                  Place an additional bid
+                </button>{' '}
+                <button type="button" disabled={busy !== null} onClick={() => setExtra(null)}>
+                  Cancel
+                </button>
+              </div>
+            ) : null}
+            {again ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" disabled={busy !== null} onClick={() => signer && void precheck(signer, again.plan, again.confirmed)}>
+                  Check again
+                </button>
+              </div>
+            ) : null}
+            {busy === 'check' ? <p className="muted">Reading the chain…</p> : null}
+            {problemFor('bid')}
+          </section>
+        ) : null}
 
-      {signer && plan && step === 'seal' ? (
-        <section className="card" style={{ marginTop: 16 }} aria-label="Seal" data-step="seal">
-          <h2 className="sub" tabIndex={-1}>
-            4. Seal
-          </h2>
-          {plan.pasted ? (
-            <p className="result ok">Using your pasted sealed bid. The browser never saw its price.</p>
-          ) : plan.secret ? (
-            <button type="button" className="primary" onClick={doSeal} disabled={busy !== null || !live || !gate.seal}>
-              {busy === 'seal' ? 'Sealing…' : 'Seal in this browser'}
-            </button>
-          ) : (
-            <p className="result ok">Using the bid you sealed earlier in this browser.</p>
-          )}
-          {plan.pasted ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" className="primary" onClick={continueToSign} disabled={!live || !gate.seal}>
-                Continue to signing
-              </button>
-            </div>
-          ) : !plan.secret && sealed && ticket ? (
-            // A restored bid (no price in this page) keeps its sealed bid and ticket: back to Sign, same nonce.
-            <div style={{ marginTop: 8 }}>
-              <button type="button" className="primary" onClick={() => setStep('sign')} disabled={!live || !gate.sign}>
-                Continue to signing
-              </button>
-            </div>
-          ) : null}
-          {closedNote}
-          {clockNote}
-          {problemFor('seal')}
-        </section>
-      ) : null}
-
-      {signer && plan && sealed && (step === 'sign' || step === 'relay' || step === 'done') ? (
-        <section className="card" style={{ marginTop: 16 }} aria-label="Sign" data-step="sign">
-          <h2 className="sub" tabIndex={-1}>
-            5. Sign one transfer
-          </h2>
-          <p className="result ok">
-            {plan.pasted ? 'Sealed bid pasted' : 'Sealed in your browser'} · ciphertext <span className="mono">{ctPreview}…</span>
-          </p>
-          <p className="small muted">
-            One Intents <code>Transfer</code> of {formatUsdc(plan.B)} USDC to <span className="mono">{config.tenderContractId}</span> carrying your sealed
-            bid. It expires in 10 minutes, or a minute before the sale closes if that is sooner; sign and send right away.
-          </p>
-          {notice ? <p className="note">{notice}</p> : null}
-          {verdict && verdict.kind !== 'stored' && verdict.kind !== 'refunded' ? <p className="note">{pendingText(verdict, hhmm)}</p> : null}
-          {ticket && !remembers ? (
-            <p className="note">
-              This browser will not keep this bid (storage is blocked or this is a private window). If you reload, check the sale&apos;s bid list on the twin view before you fund or sign again.
-            </p>
-          ) : null}
-          {stale ? (
-            <div className="result warn" role="status" style={{ marginBottom: 8 }}>
-              <p style={{ marginTop: 0 }}>
-                Your account now has {stale.map((i) => `bid #${i}`).join(', ')} in this sale, stored after this bid was prepared, so the contract would refund this one. Keep
-                what is stored, or make this an additional bid on purpose.
-              </p>
-              <button type="button" onClick={placeAnother}>
-                Keep {stale.map((i) => `#${i}`).join(', ')}
-              </button>{' '}
-              <button type="button" className="primary" onClick={makeAdditional} disabled={busy !== null}>
-                Make this an additional bid
-              </button>
-            </div>
-          ) : null}
-          {step === 'sign' && !stale ? (
-            <button type="button" className="primary" onClick={doSign} disabled={busy !== null || !live || !gate.sign}>
-              {busy === 'sign' ? 'Waiting for wallet…' : recovery?.to === 'sign_again' ? 'Sign again' : 'Sign with wallet'}
-            </button>
-          ) : null}
-          {verdict?.kind === 'dead' ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" onClick={placeAnother} disabled={busy !== null}>
-                Start over
-              </button>
-            </div>
-          ) : null}
-          {ticket && verdict && !isFinal(verdict) ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" onClick={() => void runSettle()} disabled={busy !== null}>
-                Check the chain
-              </button>
-            </div>
-          ) : null}
-          {recovery?.to === 'register_key' && signed && canRegisterKey(signed, signer.signerId) ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" className="primary" onClick={doRegisterKey} disabled={busy !== null}>
-                {busy === 'register' ? 'Waiting for wallet…' : 'Register this key with NEAR Intents (1 yoctoNEAR)'}
-              </button>
-            </div>
-          ) : null}
-          {recovery?.to === 'retry' && signed ? (
-            <div style={{ marginTop: 8 }}>
-              <button type="button" onClick={() => void doPreflightAndRelay(signed)} disabled={busy !== null || !live}>
-                Try the relayer again
-              </button>
-            </div>
-          ) : null}
-          {busy === 'relay' ? <p className="muted">Checking with simulate_intents, then relaying…</p> : null}
-          {busy === 'check' && step === 'sign' ? <p className="muted">Reading the chain before the wallet prompt…</p> : null}
-          {busy === 'confirm' ? <p className="muted">Asking the chain what became of the bid…</p> : null}
-          {step !== 'done' ? closedNote : null}
-          {clockNote}
-          {problemFor('sign')}
-        </section>
-      ) : null}
-
-      {step === 'done' ? (
-        <section className="card" style={{ marginTop: 16 }} aria-label="Result" data-step="result">
-          <h2 className="sub" tabIndex={-1}>
-            6. Result
-          </h2>
-          {txHash ? (
+        {signer && plan && step === 'fund' ? (
+          <section className="card" style={{ marginTop: 16 }} aria-label="Fund" data-step="fund">
+            <h2 className="sub" tabIndex={-1}>
+              Move USDC into your Intents account
+            </h2>
             <p className="small">
-              Relay transaction <TxLink hash={txHash} />
+              Escrow <strong>{formatUsdc(plan.B)} USDC</strong> · your Intents balance{' '}
+              <strong>{balance === null ? '…' : `${formatUsdc(balance)} USDC`}</strong>
             </p>
-          ) : null}
-          {stored && stored !== 'unknown' ? (
-            <>
-              <p className="result ok">Bid #{stored.idx} stored · Sealed</p>
-              <p className="small">
-                On-chain commitment <span className="mono">{stored.cm}</span>
-              </p>
-            </>
-          ) : (
-            <p className="result bad" role="alert">
-              {verdict?.kind === 'refunded' && refundedText(verdict.why, verdict.other) ? (
-                refundedText(verdict.why, verdict.other)
-              ) : (
-                <>
-                  Not stored:{' '}
-                  {verdict?.kind === 'refunded' && verdict.why !== 'other' && verdict.why !== 'unlogged'
-                    ? `the contract refunded this bid (reason ${verdict.why})`
-                    : 'the bid did not appear on chain within 90 seconds of its nonce being used, so the contract most likely refunded the transfer (see tx logs)'}
-                  {txHash ? <> · <TxLink hash={txHash} /></> : null}. {NOT_STORED_CAUSES}
-                </>
-              )}
-            </p>
-          )}
-          <p className="small muted">Anyone can relay a signed payload from their own account; the relayer cannot change it.</p>
-          <div style={{ marginTop: 8 }}>
-            {stored && stored !== 'unknown' ? (
-              <button type="button" onClick={placeAnother} disabled={busy !== null || !gate.another}>
-                Place another bid
-              </button>
+            {balance !== null && isFunded(balance, plan.B) ? (
+              <>
+                <p className="result ok">Already funded in NEAR Intents ({formatUsdc(balance)} USDC) · skipping deposit</p>
+                {fundOnly ? <p className="small muted">Funding check complete (fund-only mode).</p> : null}
+              </>
+            ) : signer.origin === 'near' ? (
+              <>
+                <p className="small">
+                  1Click cannot fund a NEAR-native USDC balance. Move NEAR USDC into your Intents account yourself ({formatUsdc(needed)} USDC missing, which includes
+                  0.000001 USDC left over for the gasless reveal). The command is signed by your NEAR account <span className="mono">{signer.signerId}</span>:
+                </p>
+                <pre className="payload">{nearFundCommand({ amount: needed, quoteToken, signerId: signer.signerId })}</pre>
+                <CopyButton text={nearFundCommand({ amount: needed, quoteToken, signerId: signer.signerId })} label="Copy command" />
+              </>
+            ) : quote ? (
+              <DepositBox
+                origin={signer.origin}
+                quote={quote}
+                status={status}
+                need={needed}
+                onSubmitTx={onSubmitTx}
+                onNewQuote={() => {
+                  const d = fundDecision(balance ?? 0n, plan.B);
+                  if (!d.skip) void requestQuote(signer, d.deposit, true);
+                }}
+              />
+            ) : busy === 'quote' ? (
+              <p className="muted">Requesting a deposit address…</p>
             ) : (
               <>
-                {plan?.secret && gate.seal && !(verdict?.kind === 'refunded' && verdict.why === 'bid_seq') ? (
-                  <>
-                    <button type="button" className="primary" onClick={sealAgain} disabled={busy !== null || !live}>
-                      Seal again
-                    </button>{' '}
-                  </>
-                ) : null}
-                <button type="button" onClick={placeAnother} disabled={busy !== null}>
-                  Start over
+                <p className="muted">No deposit address yet.</p>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    const d = fundDecision(balance ?? 0n, plan.B);
+                    if (!d.skip) void requestQuote(signer, d.deposit);
+                  }}
+                >
+                  Get a deposit address
                 </button>
               </>
             )}
-          </div>
-          {problemFor('result')}
-        </section>
-      ) : null}
+            {closedNote}
+            {problemFor('fund')}
+          </section>
+        ) : null}
 
-      {signed ? (
-        <details className="debug-only" style={{ marginTop: 16 }}>
-          <summary>Signed payload</summary>
-          <pre className="payload">{JSON.stringify(signed, null, 2)}</pre>
-          <CopyButton text={JSON.stringify(signed, null, 2)} label="Copy signed payload" />
-        </details>
-      ) : null}
+        {signer && plan && step === 'seal' ? (
+          <section className="card" style={{ marginTop: 16 }} aria-label="Seal" data-step="seal">
+            <h2 className="sub" tabIndex={-1}>
+              Seal your bid
+            </h2>
+            {plan.pasted ? (
+              <p className="result ok">Using your pasted sealed bid. The browser never saw its price.</p>
+            ) : plan.secret ? (
+              <button type="button" className="primary" onClick={doSeal} disabled={busy !== null || !live || !gate.seal}>
+                {busy === 'seal' ? 'Sealing…' : 'Seal in this browser'}
+              </button>
+            ) : (
+              <p className="result ok">Using the bid you sealed earlier in this browser.</p>
+            )}
+            {plan.pasted ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="primary" onClick={continueToSign} disabled={!live || !gate.seal}>
+                  Continue to signing
+                </button>
+              </div>
+            ) : !plan.secret && sealed && ticket ? (
+              // A restored bid (no price in this page) keeps its sealed bid and ticket: back to Sign, same nonce.
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="primary" onClick={() => setStep('sign')} disabled={!live || !gate.sign}>
+                  Continue to signing
+                </button>
+              </div>
+            ) : null}
+            {closedNote}
+            {clockNote}
+            {problemFor('seal')}
+          </section>
+        ) : null}
+
+        {signer && plan && sealed && (step === 'sign' || step === 'relay' || step === 'done') ? (
+          <section className="card" style={{ marginTop: 16 }} aria-label="Sign" data-step="sign">
+            <h2 className="sub" tabIndex={-1}>
+              Sign one transfer
+            </h2>
+            <p className="result ok">
+              {plan.pasted ? 'Sealed bid pasted' : 'Sealed in your browser'} · ciphertext <span className="mono">{ctPreview}…</span>
+            </p>
+            <p className="small muted">
+              One Intents <code>Transfer</code> of {formatUsdc(plan.B)} USDC to <span className="mono">{config.tenderContractId}</span> carrying your sealed
+              bid. It expires in 10 minutes, or a minute before the sale closes if that is sooner; sign and send right away.
+            </p>
+            {notice ? <p className="note">{notice}</p> : null}
+            {verdict && verdict.kind !== 'stored' && verdict.kind !== 'refunded' ? <p className="note">{pendingText(verdict, hhmm)}</p> : null}
+            {ticket && !remembers ? (
+              <p className="note">
+                This browser will not keep this bid (storage is blocked or this is a private window). If you reload, check the sale&apos;s bid list on the twin view before you fund or sign again.
+              </p>
+            ) : null}
+            {stale ? (
+              <div className="result warn" role="status" style={{ marginBottom: 8 }}>
+                <p style={{ marginTop: 0 }}>
+                  Your account now has {stale.map((i) => `bid #${i}`).join(', ')} in this sale, stored after this bid was prepared, so the contract would refund this one. Keep
+                  what is stored, or make this an additional bid on purpose.
+                </p>
+                <button type="button" onClick={placeAnother}>
+                  Keep {stale.map((i) => `#${i}`).join(', ')}
+                </button>{' '}
+                <button type="button" className="primary" onClick={makeAdditional} disabled={busy !== null}>
+                  Make this an additional bid
+                </button>
+              </div>
+            ) : null}
+            {step === 'sign' && !stale ? (
+              <button type="button" className="primary" onClick={doSign} disabled={busy !== null || !live || !gate.sign}>
+                {busy === 'sign' ? 'Waiting for wallet…' : recovery?.to === 'sign_again' ? 'Sign again' : 'Sign with wallet'}
+              </button>
+            ) : null}
+            {verdict?.kind === 'dead' ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" onClick={placeAnother} disabled={busy !== null}>
+                  Start over
+                </button>
+              </div>
+            ) : null}
+            {ticket && verdict && !isFinal(verdict) ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" onClick={() => void runSettle()} disabled={busy !== null}>
+                  Check the chain
+                </button>
+              </div>
+            ) : null}
+            {recovery?.to === 'register_key' && signed && canRegisterKey(signed, signer.signerId) ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="primary" onClick={doRegisterKey} disabled={busy !== null}>
+                  {busy === 'register' ? 'Waiting for wallet…' : 'Register this key with NEAR Intents (1 yoctoNEAR)'}
+                </button>
+              </div>
+            ) : null}
+            {recovery?.to === 'retry' && signed ? (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" onClick={() => void doPreflightAndRelay(signed)} disabled={busy !== null || !live}>
+                  Try the relayer again
+                </button>
+              </div>
+            ) : null}
+            {busy === 'relay' ? <p className="muted">Checking with simulate_intents, then relaying…</p> : null}
+            {busy === 'check' && step === 'sign' ? <p className="muted">Reading the chain before the wallet prompt…</p> : null}
+            {busy === 'confirm' ? <p className="muted">Asking the chain what became of the bid…</p> : null}
+            {step !== 'done' ? closedNote : null}
+            {clockNote}
+            {problemFor('sign')}
+          </section>
+        ) : null}
+
+        {step === 'done' ? (
+          <section className="card" style={{ marginTop: 16 }} aria-label="Result" data-step="result">
+            <h2 className="sub" tabIndex={-1}>
+              Result
+            </h2>
+            {txHash ? (
+              <p className="small">
+                Relay transaction <TxLink hash={txHash} />
+              </p>
+            ) : null}
+            {stored && stored !== 'unknown' ? (
+              <>
+                <p className="result ok">Bid #{stored.idx} stored · Sealed</p>
+                <p className="small">
+                  On-chain commitment <span className="mono">{stored.cm}</span>
+                </p>
+              </>
+            ) : (
+              <p className="result bad" role="alert">
+                {verdict?.kind === 'refunded' && refundedText(verdict.why, verdict.other) ? (
+                  refundedText(verdict.why, verdict.other)
+                ) : (
+                  <>
+                    Not stored:{' '}
+                    {verdict?.kind === 'refunded' && verdict.why !== 'other' && verdict.why !== 'unlogged'
+                      ? `the contract refunded this bid (reason ${verdict.why})`
+                      : 'the bid did not appear on chain within 90 seconds of its nonce being used, so the contract most likely refunded the transfer (see tx logs)'}
+                    {txHash ? <> · <TxLink hash={txHash} /></> : null}. {NOT_STORED_CAUSES}
+                  </>
+                )}
+              </p>
+            )}
+            <p className="small muted">Anyone can relay a signed payload from their own account; the relayer cannot change it.</p>
+            <div style={{ marginTop: 8 }}>
+              {stored && stored !== 'unknown' ? (
+                <button type="button" onClick={placeAnother} disabled={busy !== null || !gate.another}>
+                  Place another bid
+                </button>
+              ) : (
+                <>
+                  {plan?.secret && gate.seal && !(verdict?.kind === 'refunded' && verdict.why === 'bid_seq') ? (
+                    <>
+                      <button type="button" className="primary" onClick={sealAgain} disabled={busy !== null || !live}>
+                        Seal again
+                      </button>{' '}
+                    </>
+                  ) : null}
+                  <button type="button" onClick={placeAnother} disabled={busy !== null}>
+                    Start over
+                  </button>
+                </>
+              )}
+            </div>
+            {problemFor('result')}
+          </section>
+        ) : null}
+
+        {signed ? (
+          <details className="debug-only" style={{ marginTop: 16 }}>
+            <summary>Signed payload</summary>
+            <pre className="payload">{JSON.stringify(signed, null, 2)}</pre>
+            <CopyButton text={JSON.stringify(signed, null, 2)} label="Copy signed payload" />
+          </details>
+        ) : null}
+      </div>
+      <aside className="bid-side">
+        <section className="card pad" aria-label="Who sees what">
+          <h2 className="sub">Who sees what</h2>
+          <p className="eyebrow">Sealed until the sale opens</p>
+          <dl className="kv-rows">
+            <dt>Your price</dt>
+            <dd className="mono">{shown(draft.price, unit)}</dd>
+            <dt>Most you spend</dt>
+            <dd className="mono">{shown(draft.size, 'USDC')}</dd>
+          </dl>
+          <p className="eyebrow">Everyone, from now on</p>
+          <dl className="kv-rows">
+            <dt>Deposit</dt>
+            <dd className="mono">{shown(draft.escrow, 'USDC')}</dd>
+            <dt>Account</dt>
+            <dd className={signer ? 'mono' : 'muted'}>{signer ? shortId(signer.signerId, 8, 6) : 'shown after you connect'}</dd>
+            <dt>Chain</dt>
+            <dd className={signer ? undefined : 'muted'}>{signer ? originBadge(signer.origin) : 'shown after you connect'}</dd>
+          </dl>
+          <p className="small muted side-note">
+            Sealed means only you can read it, unless 11 of the parties that hold, or ever held, a piece of NEAR&apos;s key work together (11 of 16 nodes on
+            2026-11-10; <code>pnpm verify</code> prints today&apos;s count), or this page is a bad copy that reads your price before sealing it.{' '}
+            <a href="#/trust">Who can see your bid →</a>
+          </p>
+          <p className="small muted side-note">
+            <Rich text={UNRECOVERABLE_TRANSFER} />
+          </p>
+          <details className="fold tech side-note">
+            <summary>If you do not trust this page</summary>
+            <p className="small muted">
+              <Rich text={HOSTED_BUNDLE} />
+            </p>
+          </details>
+        </section>
+        <section className="card pad" aria-label="After you bid">
+          <h2 className="sub">After you bid</h2>
+          <ol className="tl-vertical small">
+            <li className={sale.state === 'Open' && nowNs < sale.closeNs ? 'now' : 'done'}>
+              Sale takes bids{sale.state === 'Open' && nowNs < sale.closeNs ? ` · ${formatCountdown(sale.closeNs - nowNs)} left` : ''}
+            </li>
+            <li>Sale closes. It opens only if its public conditions hold; otherwise it is cancelled and every bid is refunded in full</li>
+            <li>Key released; anyone can open the bids</li>
+            <li>Bids are revealed: our keeper normally does it, you can too. An unrevealed bid can lose 10%</li>
+            <li>One price; unspent USDC back</li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+/** The bid page of a sale that no longer takes bids: why, and where to go instead (no dead end). */
+function closedPanel(id: string, sale: Sale): ReactNode {
+  const STATE_WORD = { Open: 'closed', Opening: 'closed and its key is being asked for', Keyed: 'closed and opened', Finalized: 'finished', Cancelled: 'cancelled' } as const;
+  const head = `This sale is ${STATE_WORD[sale.state]}; it no longer takes bids.`;
+  const next =
+    sale.state === 'Open'
+      ? 'Anyone can now open it if it met its public conditions, or cancel it if it did not. Both buttons are on the sale page.'
+      : sale.state === 'Finalized'
+        ? 'Its bids were opened and one price was set: the sale page shows who got what.'
+        : sale.state === 'Keyed'
+          ? 'Its key is public: anyone can open the bids on the sale page.'
+          : sale.state === 'Opening'
+            ? "Its key has been asked for; the sale page shows when it arrives."
+            : 'Every bid is refunded in full; the sale page shows the refunds.';
+  return (
+    <div className="card pad empty-state" role="status">
+      <p className="empty-title">{head}</p>
+      <p className="muted">
+        {next} You can still sign a practice bid with your own wallet: it is free and nothing is sent.
+      </p>
+      <p className="empty-actions">
+        <a className="btn primary" href={`#/sale/${id}`}>
+          {sale.state === 'Finalized' ? 'See the result' : 'Open the sale page'}
+        </a>
+        <a className="btn" href="#/try">
+          Try signing (free)
+        </a>
+      </p>
     </div>
   );
 }

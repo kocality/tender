@@ -46,6 +46,10 @@ export interface AppConfig {
   demoFailSales: string[];
   nearblocksApiUrl: string;
   explorerUrl: string;
+  /** Public repository URL; empty while the repository is private (the footer then shows no source link). */
+  repoUrl: string;
+  /** The twin sales run on an earlier build of the contract (the T1 testnet copy): the home page says so. */
+  earlierBuild: boolean;
 }
 
 function twinSales(v: unknown): [string, string] {
@@ -67,4 +71,6 @@ export const config: AppConfig = {
   demoFailSales: list(env.VITE_DEMO_FAIL_SALES, network === 'mainnet' ? ['0'] : []).filter((s) => /^\d+$/.test(s)),
   nearblocksApiUrl: str(env.VITE_NEARBLOCKS_API_URL, network === 'testnet' ? 'https://api-testnet.nearblocks.io/v3' : 'https://api.nearblocks.io/v3'),
   explorerUrl: str(env.VITE_EXPLORER_URL, network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io'),
+  repoUrl: str(env.VITE_REPO_URL, '').replace(/\/+$/, ''),
+  earlierBuild: env.VITE_EARLIER_BUILD === '1',
 };

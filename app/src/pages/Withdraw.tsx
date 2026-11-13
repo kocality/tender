@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { mtBatchBalanceOf, simulateIntents, type MultiPayload } from '@tender/intents';
 import { AmountField } from '../components/AmountField';
 import { CopyButton } from '../components/CopyButton';
-import { HonestNote } from '../components/HonestNote';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
@@ -275,12 +274,23 @@ export function Withdraw() {
   const q = quote?.quote;
 
   return (
-    <div>
-      <h1>Withdraw to chain</h1>
-      <HonestNote>
-        Moves tokens from your NEAR Intents account to a wallet on Base, Arbitrum or Solana through 1Click. You sign one Intents transfer to the
-        quote&apos;s deposit address; the relayer only pays gas and cannot change it. Each token needs its own quote and signature.
-      </HonestNote>
+    <div className="wrap page narrow">
+      <header className="page-head">
+        <p className="eyebrow">After a sale</p>
+        <h1>Withdraw to chain</h1>
+        <p className="lead">
+          Got a refund or tokens from a sale? They wait in your NEAR Intents account, a balance on NEAR that your own wallet controls. This page sends them back to
+          your wallet on Base, Arbitrum or Solana.
+        </p>
+        <p className="small muted">You only need it after a sale. If you never bid, there is nothing to withdraw.</p>
+      </header>
+      <details className="fold tech page-intro-tech">
+        <summary>How it works</summary>
+        <p className="small">
+          It moves tokens from your NEAR Intents account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
+          relayer only pays gas and cannot change it. Each token needs its own quote and signature.
+        </p>
+      </details>
 
       <section className="card" aria-label="Wallet">
         <h2 className="sub">1. Wallet</h2>

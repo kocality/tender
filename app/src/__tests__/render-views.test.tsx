@@ -10,10 +10,11 @@ import { loadKeys, loadSaleBundle, type SaleBundle } from '../lib/loaders';
 import { parseBid, parseSale } from '../lib/views';
 import { KeysView } from '../pages/Keys';
 import { SaleView } from '../pages/Sale';
+import { HomeView } from '../pages/Home';
 import { TwinView } from '../pages/Twin';
 
 const NEVER_REQUESTED = 'Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)';
-const KEYS_LINE = 'sale 0: 0 requests · Cancelled · never requested (sealed unless the MPC threshold colludes)';
+const KEYS_LINE = 'Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)';
 
 const s0 = parseSale(sale0);
 const s1 = parseSale(sale1);
@@ -46,6 +47,15 @@ describe('twin view', () => {
     expect(html).toContain('via Solana (self-declared)');
     expect(html).toContain('total escrow ≥ min_escrow and distinct bidders ≥ min_bidders');
     expect(html).toContain('pnpm verify --keys');
+    expect(html).not.toMatch(FORBIDDEN);
+  });
+
+  test('the whole home page: the pinned label once, the open rule, and no forbidden words', () => {
+    const html = renderToString(<HomeView data={[bundle1, bundle0]} error={null} loading={false} nowNs={NOW} />);
+    expect(html.split(NEVER_REQUESTED).length - 1).toBe(1);
+    expect(html).toContain('total escrow ≥ min_escrow and distinct bidders ≥ min_bidders');
+    expect(html).toContain('pnpm seal:bid'); // the hosted-page exception sits next to what we cannot do
+    expect(html).toContain('ever held');
     expect(html).not.toMatch(FORBIDDEN);
   });
 
@@ -112,7 +122,7 @@ describe('key ledger view', () => {
     stubNetwork(new Response(JSON.stringify(receipts), { status: 200 }));
     const html = renderToString(<KeysView data={await loadKeys()} />);
     expect(html).toContain(KEYS_LINE);
-    expect(html).toContain('sale 1: 1 request · Keyed');
+    expect(html).toContain('1 key request · key public');
     expect(html).toContain('version <strong>3.18.0</strong>');
     expect(html).toContain('NearBlocks: 1 receipt (match)');
     expect(html).not.toContain('not indexed yet');

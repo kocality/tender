@@ -20,8 +20,36 @@ export function tokenLabel(tokenId: string): string {
   return tokenId.replace(/^nep141:/, '');
 }
 
+/**
+ * A short name for a sale token where the account id says what it is: wNEAR ("wrap.near", or a testnet "wnear.*" copy)
+ * and meme.cooking tokens ("jambo-1679.meme-cooking.near" → "JAMBO"). Anything else keeps its account id. Pages show the
+ * full id next to it (mono line or title).
+ */
+export function tokenSymbol(tokenId: string): string {
+  const id = tokenLabel(tokenId);
+  if (/^(wrap\.(near|testnet)|wnear\.)/.test(id)) return 'wNEAR';
+  const meme = /^([a-z][a-z0-9]*)-\d+\.meme-cooking\.(near|testnet)$/.exec(id);
+  return meme ? meme[1]!.toUpperCase() : id;
+}
+
+/** A USDC price, always with at least two decimals: 3900000n → "3.90", 174000n → "0.174". */
+export function formatPrice(value: bigint): string {
+  const s = formatUsdc(value);
+  const dot = s.indexOf('.');
+  if (dot === -1) return `${s}.00`;
+  return s.length - dot - 1 < 2 ? `${s}0` : s;
+}
+
+/** Long ids shortened in the middle. A named NEAR account keeps its first and last labels whole ("bidder1.…testnet"), so no word is cut. */
 export function shortId(s: string, head = 8, tail = 6): string {
-  return s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`;
+  if (s.length <= head + tail + 1) return s;
+  const labels = s.split('.');
+  if (labels.length > 2) {
+    const first = labels[0]!;
+    const last = labels[labels.length - 1]!;
+    if (first.length <= head + 4 && last.length <= tail + 4) return `${first}.…${last}`;
+  }
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
 }
 
 /** Chain timestamp (ns) → "2026-11-13 02:10:00 UTC". */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseHash } from '../router';
+import { parseHash, titleFor } from '../router';
 
 describe('parseHash', () => {
   test('sale id param', () => {
@@ -20,6 +20,14 @@ describe('parseHash', () => {
     expect(parseHash('#/try').path).toBe('/try');
     expect(parseHash('#/keys/').path).toBe('/keys');
     expect(parseHash('#/withdraw').path).toBe('/withdraw');
+    expect(parseHash('#/trust').path).toBe('/trust');
+  });
+
+  test('home sections are a query, not a route', () => {
+    const r = parseHash('#/?at=live');
+    expect(r.path).toBe('/');
+    expect(r.query.get('at')).toBe('live');
+    expect(titleFor(parseHash('#/trust'))).toBe('Who can see your bid · Tender');
   });
 
   test('unknown routes and wrong arity fall through', () => {

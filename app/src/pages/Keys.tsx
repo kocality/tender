@@ -9,32 +9,52 @@ import { loadKeys } from '../lib/loaders';
 import { usePolling } from '../lib/usePolling';
 import type { Sale } from '../lib/views';
 
-/** One line per sale: how many key requests the contract recorded for it. */
+const STATE_PLAIN: Record<Exclude<Sale['state'], 'Cancelled'>, string> = {
+  Open: 'taking bids, or closed and waiting to be opened',
+  Opening: 'key being asked for',
+  Keyed: 'key public',
+  Finalized: 'finished and paid out',
+};
+
+/** One line per sale: how many key requests the contract recorded for it. A cancelled sale gets the pinned label. */
 export function saleSummary(sale: Sale): string {
   const label = cancelledLabel(sale.state, sale.keyRequests);
-  if (label !== null) {
-    return sale.keyRequests === 0
-      ? `sale ${sale.id}: 0 requests · Cancelled · never requested (sealed unless the MPC threshold colludes)`
-      : `sale ${sale.id}: ${sale.keyRequests} requests · Cancelled · may be decryptable`;
-  }
-  return `sale ${sale.id}: ${sale.keyRequests} ${sale.keyRequests === 1 ? 'request' : 'requests'} · ${sale.state}`;
+  if (label !== null) return label;
+  return `${sale.keyRequests} key ${sale.keyRequests === 1 ? 'request' : 'requests'} · ${STATE_PLAIN[sale.state as Exclude<Sale['state'], 'Cancelled'>]}`;
 }
 
-export function KeysView({ data }: { data: KeysData }) {
+function KeysHead() {
+  return (
+    <header className="page-head">
+      <p className="eyebrow">Proof · every key request</p>
+      <h1>Key ledger</h1>
+      <p className="lead">
+        Every time the contract asked NEAR&apos;s key network for a sale&apos;s key, it wrote a line here first. A sale that missed its public conditions has no
+        line: its key was never asked for.
+      </p>
+      <p className="small muted">
+        Why it matters: bids can only be opened with a sale&apos;s key, so this list shows which sales&apos; keys the contract ever asked for, and when. Anyone
+        can match each line with the receipt the NearBlocks explorer indexes for <code>request_app_private_key</code>, or run <code>pnpm verify --keys</code>.
+      </p>
+    </header>
+  );
+}
+
+function KeysBody({ data }: { data: KeysData }) {
   const check = receiptCheck(data.rows, data.receipts);
   const receiptCount = data.receipts?.length ?? 0;
   return (
-    <div>
-      <h1>Key ledger</h1>
-      <p className="muted">
-        The contract writes every MPC key request to its own on-chain ledger before it makes the call. Each row below can be matched with the
-        receipt NearBlocks indexes for <code>request_app_private_key</code>.
+    <>
+      <p className="small">
+        Key network (MPC): <code>{data.mpc}</code> version <strong>{data.mpcVersion ?? 'unavailable'}</strong>
       </p>
-      <p>
-        MPC network: <code>{data.mpc}</code> version <strong>{data.mpcVersion ?? 'unavailable'}</strong>
-      </p>
-      {data.receipts === null ? <p className="note">NearBlocks unavailable (rate limit) · state ledger shown</p> : null}
-      <div className="card table-wrap">
+      {data.receipts === null ? (
+        <p className="note info">
+          NearBlocks unavailable (rate limit) · state ledger shown. NearBlocks is rate-limiting us right now; the ledger below is read from the contract&apos;s own
+          state.
+        </p>
+      ) : null}
+      <div className="card table-wrap" tabIndex={0} role="region" aria-label="Key ledger table, scrolls sideways on small screens">
         <table>
           <thead>
             <tr>
@@ -58,7 +78,9 @@ export function KeysView({ data }: { data: KeysData }) {
                 <tr key={entry.i.toString()}>
                   <td>{entry.i.toString()}</td>
                   <td>
-                    <a href={`#/sale/${entry.sale}`}>{entry.sale}</a>
+                    <a className="cell-link" href={`#/sale/${entry.sale}`} aria-label={`Sale ${entry.sale}`}>
+                      {entry.sale}
+                    </a>
                   </td>
                   <td>
                     <a className="mono" href={`${config.explorerUrl}/blocks/${entry.block}`} target="_blank" rel="noreferrer">
@@ -80,27 +102,42 @@ export function KeysView({ data }: { data: KeysData }) {
           </tbody>
         </table>
       </div>
+      <p className="small">{`NearBlocks: ${receiptCount} ${receiptCount === 1 ? 'receipt' : 'receipts'} (${check})`}</p>
+      {data.rows.some((r) => r.entry.outcome === 'Ok') ? <p className="small muted">Ok: NEAR&apos;s key network answered, and the contract checked and stored the key.</p> : null}
       {data.rows.some((r) => r.entry.outcome === 'Err') ? <p className="small">{KEY_ERR_RULE}</p> : null}
       <h2>Per sale</h2>
-      <ul>
+      <ul className="per-sale">
         {data.sales.map((s) => (
-          <li key={s.id}>{saleSummary(s)}</li>
+          <li key={s.id}>
+            <a href={`#/sale/${s.id}`} className="per-sale-link">
+              {`Sale #${s.id}`}
+            </a>
+            <span>{saleSummary(s)}</span>
+          </li>
         ))}
       </ul>
-      <p className="small">
-        {`NearBlocks: ${receiptCount} ${receiptCount === 1 ? 'receipt' : 'receipts'} (${check})`}
-      </p>
+
+    </>
+  );
+}
+
+export function KeysView({ data }: { data: KeysData }) {
+  return (
+    <div className="wrap page">
+      <KeysHead />
+      <KeysBody data={data} />
     </div>
   );
 }
 
 export function Keys() {
-  const { data, error, loading } = usePolling(loadKeys, 0, []) // one NearBlocks request per page load, never polled (V3);
+  const { data, error, loading } = usePolling(loadKeys, 0, []); // one NearBlocks request per page load, never polled (V3)
   return (
-    <>
-      <ReadError error={error} stale={data !== null} retrying={false} />
+    <div className="wrap page">
+      <KeysHead />
+      <ReadError error={error} stale={data !== null} retrying={false} compact />
       {loading && !data ? <Loading what="key ledger" /> : null}
-      {data ? <KeysView data={data} /> : null}
-    </>
+      {data ? <KeysBody data={data} /> : null}
+    </div>
   );
 }

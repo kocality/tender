@@ -143,8 +143,8 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
 
   if (sale.state !== 'Keyed') return null;
   return (
-    <section className="card" style={{ marginTop: 16 }} aria-label="Reveal">
-      <h2 style={{ marginTop: 0 }}>Reveal</h2>
+    <section className="card pad" aria-label="Reveal">
+      <h2>Reveal</h2>
       <p className="small muted">
         Revealing publishes a bid&apos;s price, size and salt so the contract can check them against the commitment. {PENALTY_RULE}
       </p>
@@ -171,40 +171,43 @@ export function RevealPanel({ sale, bids, decrypted, nowNs }: { sale: Sale; bids
           {busy === 'all' ? 'Revealing…' : `Reveal all (NEAR wallet, gas)${items.length ? ` · ${items.length}` : ''}`}
         </button>
       </div>
-      <h3 style={{ marginTop: 16 }}>Reveal my bid (gasless)</h3>
-      <WalletPicker signer={signer} onConnect={setSigner} showOrigin={false} />
-      <div style={{ marginTop: 8 }}>
-        <button type="button" onClick={() => revealMine(mine)} disabled={!enabled || !signer || mine.length === 0 || busy !== null}>
-          {busy === 'mine' ? 'Waiting for wallet…' : `Reveal my bid${mine.length === 1 ? '' : 's'} (gasless)${mine.length ? ` · ${mine.length}` : ''}`}
-        </button>
-        {signer && decrypted?.keyOk && mine.length === 0 ? <p className="small muted">No sealed bid of {signer.signerId} can be revealed.</p> : null}
-      </div>
-      <h3 style={{ marginTop: 16 }}>Reveal from my bid file</h3>
-      <p className="small muted">
-        For a bid that cannot be decrypted here. Pick the files <code>pnpm seal:bid</code> saved in <code>~/.tender/bids</code>, or paste one. They are read in this
-        browser and never uploaded, and each is checked against the bid on chain before anything is sent.
-      </p>
-      <label className="field">
-        <span>Bid files</span>
-        <input type="file" multiple accept="application/json,.json" onChange={(e) => pickFiles(e.target.files)} disabled={busy !== null} />
-      </label>
-      <label className="field">
-        <span>Or paste one bid file</span>
-        <textarea rows={3} value={pasted} onChange={(e) => setPasted(e.target.value)} spellCheck={false} disabled={busy !== null} />
-      </label>
-      {fromFiles.notes.map((n) => (
-        <p key={n} className="small" role="note">
-          {n}
+      <details className="fold more-ways">
+        <summary>More ways to reveal</summary>
+        <h3>Reveal my bid (gasless)</h3>
+        <WalletPicker signer={signer} onConnect={setSigner} showOrigin={false} />
+        <div style={{ marginTop: 8 }}>
+          <button type="button" onClick={() => revealMine(mine)} disabled={!enabled || !signer || mine.length === 0 || busy !== null}>
+            {busy === 'mine' ? 'Waiting for wallet…' : `Reveal my bid${mine.length === 1 ? '' : 's'} (gasless)${mine.length ? ` · ${mine.length}` : ''}`}
+          </button>
+          {signer && decrypted?.keyOk && mine.length === 0 ? <p className="small muted">No sealed bid of {signer.signerId} can be revealed.</p> : null}
+        </div>
+        <h3>Reveal from my bid file</h3>
+        <p className="small muted">
+          For a bid that cannot be decrypted here. Pick the files <code>pnpm seal:bid</code> saved in <code>~/.tender/bids</code>, or paste one. They are read in this
+          browser and never uploaded, and each is checked against the bid on chain before anything is sent.
         </p>
-      ))}
-      <div className="row">
-        <button type="button" className="primary" onClick={() => revealAll(fromFiles.items)} disabled={!open || fromFiles.items.length === 0 || busy !== null}>
-          {busy === 'all' ? 'Revealing…' : `Reveal file bids (NEAR wallet, gas)${fromFiles.items.length ? ` · ${fromFiles.items.length}` : ''}`}
-        </button>
-        <button type="button" onClick={() => revealMine(fileMine)} disabled={!open || !signer || fileMine.length === 0 || busy !== null}>
-          {busy === 'mine' ? 'Waiting for wallet…' : `Reveal file bids (gasless)${fileMine.length ? ` · ${fileMine.length}` : ''}`}
-        </button>
-      </div>
+        <label className="field">
+          <span>Bid files</span>
+          <input type="file" multiple accept="application/json,.json" onChange={(e) => pickFiles(e.target.files)} disabled={busy !== null} />
+        </label>
+        <label className="field">
+          <span>Or paste one bid file</span>
+          <textarea rows={3} value={pasted} onChange={(e) => setPasted(e.target.value)} spellCheck={false} disabled={busy !== null} />
+        </label>
+        {fromFiles.notes.map((n) => (
+          <p key={n} className="small" role="note">
+            {n}
+          </p>
+        ))}
+        <div className="row">
+          <button type="button" className="primary" onClick={() => revealAll(fromFiles.items)} disabled={!open || fromFiles.items.length === 0 || busy !== null}>
+            {busy === 'all' ? 'Revealing…' : `Reveal file bids (NEAR wallet, gas)${fromFiles.items.length ? ` · ${fromFiles.items.length}` : ''}`}
+          </button>
+          <button type="button" onClick={() => revealMine(fileMine)} disabled={!open || !signer || fileMine.length === 0 || busy !== null}>
+            {busy === 'mine' ? 'Waiting for wallet…' : `Reveal file bids (gasless)${fileMine.length ? ` · ${fileMine.length}` : ''}`}
+          </button>
+        </div>
+      </details>
       {blocked.length > 0 ? (
         <p className="note" role="note">
           Bids {blocked.map((i) => `#${i}`).join(', ')} cannot be revealed. If they are still unrevealed when the window ends, each loses 10% of its escrow. That 10%
