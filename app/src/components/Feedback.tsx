@@ -1,8 +1,28 @@
 import { config } from '../config';
+import { HOME } from '../copy';
 import { RPC_UNAVAILABLE, isNotDeployed, isRpcUnavailable } from '../lib/errors';
 
-/** Shown while the initial read is under way; the page keeps its place so nothing jumps when data arrives. */
-export function Loading({ what }: { what: string }) {
+/**
+ * Shown while the initial read is under way; the page keeps its place so nothing jumps when data arrives. `tall` draws
+ * the two twin cards' outlines at their loaded height (home page).
+ */
+export function Loading({ what, tall = false }: { what: string; tall?: boolean }) {
+  if (tall) {
+    return (
+      <div className="skeleton-twins" role="status">
+        <p className="muted small">{`Loading ${what}…`}</p>
+        <div className="twins" aria-hidden="true">
+          {[0, 1].map((i) => (
+            <div key={i} className="twin skeleton">
+              <span className="skeleton-line short" />
+              <span className="skeleton-block" />
+              <span className="skeleton-line" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card skeleton" role="status">
       <p className="muted" style={{ margin: 0 }}>
@@ -36,7 +56,12 @@ export function ReadError({
   const raw = (
     <details className="fold tech debug-only">
       <summary>Technical details</summary>
-      {notDeployed ? <p className="small">NEAR&apos;s answer, as it came: there is no account with this name on this network.</p> : null}
+      {notDeployed ? (
+        <p className="small">
+          There is nothing to read at <span className="mono">{config.tenderContractId}</span> yet. NEAR&apos;s answer, as it came: there is no account with this
+          name on this network.
+        </p>
+      ) : null}
       <p className="small mono">{error.length > 400 ? `${error.slice(0, 400)}…` : error}</p>
     </details>
   );
@@ -45,20 +70,17 @@ export function ReadError({
       <div className="card pad empty-state" role="status">
         <p className="eyebrow">{`NEAR ${config.network}`}</p>
         <p className="empty-title">{`The sale contract is not live on NEAR ${config.network} yet.`}</p>
-        {compact ? (
-          <p className="muted">Until it is, the worked example shows a whole sale, and you can sign a practice bid for free.</p>
-        ) : (
-          <p className="muted">
-            There is nothing to read at <span className="mono">{config.tenderContractId}</span> yet, so this part of the page stays empty until it is deployed.
-            The worked example on the home page shows a whole sale, and you can sign a practice bid with your own wallet today: it is free and nothing is sent.
-          </p>
-        )}
+        <p className="muted">
+          {compact
+            ? 'Until it is, the example on the home page shows a whole sale, and a practice bid is free.'
+            : 'Until it is, the example at the top shows a whole sale, and a practice bid is free.'}
+        </p>
         <p className="empty-actions">
-          <a className="btn" href="#/?at=how">
-            Follow the worked example
+          <a className="btn" href="#/?at=example">
+            See the example
           </a>
           <a className="btn primary" href="#/try">
-            Try signing (free)
+            {HOME.ctaTry}
           </a>
         </p>
         {raw}

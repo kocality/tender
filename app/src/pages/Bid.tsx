@@ -6,7 +6,7 @@ import { DepositBox } from '../components/DepositBox';
 import { Loading, ReadError } from '../components/Feedback';
 import { PasteSealedBid } from '../components/PasteSealedBid';
 import { Rich } from '../components/Rich';
-import { saleEyebrow } from '../components/SaleCard';
+import { NetworkBadge } from '../components/NetworkBadge';
 import { StepList } from '../components/StepList';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
@@ -98,7 +98,7 @@ export function BidView({
         <a href={`#/sale/${id}`}>← Sale #{id}</a>
       </p>
       <header className="page-head">
-        <p className="eyebrow">{saleEyebrow(id)}</p>
+        <NetworkBadge />
         <h1>Bid on sale #{id}</h1>
         {sale ? <SaleStrip sale={sale} nowNs={nowNs} /> : null}
       </header>
@@ -1135,18 +1135,21 @@ export function Wizard({
             <dt>Chain</dt>
             <dd className={signer ? undefined : 'muted'}>{signer ? originBadge(signer.origin) : 'shown after you connect'}</dd>
           </dl>
-          <p className="small muted side-note">
-            Sealed means only you can read it, unless 11 of the parties that hold, or ever held, a piece of NEAR&apos;s key work together (11 of 16 nodes on
-            2026-11-10; <code>pnpm verify</code> prints today&apos;s count), or this page is a bad copy that reads your price before sealing it.{' '}
-            <a href="#/trust">Who can see your bid →</a>
-          </p>
-          <p className="small muted side-note">
-            <Rich text={UNRECOVERABLE_TRANSFER} />
-          </p>
           <details className="fold tech side-note">
-            <summary>If you do not trust this page</summary>
+            <summary>Two exceptions: NEAR&apos;s key holders, or this page</summary>
+            <p className="small muted">
+              Sealed means only you can read it, unless 11 of the parties that hold, or ever held, a piece of NEAR&apos;s key work together (11 of 16 nodes on
+              2026-11-10; <code>pnpm verify</code> prints today&apos;s count), or this page is a bad copy that reads your price before sealing it.{' '}
+              <a href="#/trust">Who can see your bid →</a>
+            </p>
             <p className="small muted">
               <Rich text={HOSTED_BUNDLE} />
+            </p>
+          </details>
+          <details className="fold tech side-note">
+            <summary>Never send a plain transfer to the contract</summary>
+            <p className="small muted">
+              <Rich text={UNRECOVERABLE_TRANSFER} />
             </p>
           </details>
         </section>

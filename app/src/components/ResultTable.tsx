@@ -1,7 +1,8 @@
 import { priceUnitLabel } from '../lib/amounts';
 import { revealedWithoutCiphertext, type DecryptResult } from '../lib/decrypt';
-import { formatPrice, formatUnits, formatUsdc, shortId, tokenSymbol } from '../lib/format';
+import { formatPrice, formatRounded, formatUnits, formatUsdc, shortId, tokenSymbol } from '../lib/format';
 import { refundOf, type Recomputed } from '../lib/results';
+import { useOverflowX } from '../lib/useOverflowX';
 import type { Bid, Sale, SaleResult } from '../lib/views';
 
 function isMarginal(b: Bid, pStar: bigint | null): boolean {
@@ -27,6 +28,9 @@ export function ResultTable({
   const rows = new Map(decrypted?.keyOk ? decrypted.rows.map((r) => [r.idx, r]) : []);
   const lastLook = bids.filter((b) => revealedWithoutCiphertext(b, rows.get(b.idx)));
   const tok = (v: bigint) => formatUnits(v, sale.decimals);
+  // The penalty column only when a bid has one; the pool total is always in the line under the table.
+  const penalties = bids.some((b) => b.penalty > 0n || b.penaltyShare > 0n);
+  const [wrapRef, overflows] = useOverflowX<HTMLDivElement>();
   return (
     <section className="card pad" aria-label="Result">
       <h2>Who got what</h2>
@@ -69,10 +73,10 @@ export function ResultTable({
           </div>
         )
       ) : null}
-      <p className="scroll-hint small muted" aria-hidden="true">
+      <p className={overflows ? 'scroll-hint on small muted' : 'scroll-hint small muted'} aria-hidden="true">
         Scroll sideways for every column →
       </p>
-      <div className="table-wrap" tabIndex={0} role="region" aria-label="Who got what, per bid; scrolls sideways on small screens">
+      <div className="table-wrap" ref={wrapRef} tabIndex={0} role="region" aria-label="Who got what, per bid; scrolls sideways on small screens">
         <table>
           <thead>
             <tr>
@@ -83,7 +87,7 @@ export function ResultTable({
               <th>tokens</th>
               <th>spent</th>
               <th>refund</th>
-              <th>penalty</th>
+              {penalties ? <th>penalty</th> : null}
               <th>payout</th>
             </tr>
           </thead>
@@ -100,13 +104,13 @@ export function ResultTable({
                 </td>
                 <td className="num">{b.p !== null ? formatPrice(b.p) : <span className="muted">{b.state === 'Revealed' ? '–' : 'not revealed'}</span>}</td>
                 <td className="num">{b.q !== null ? formatUsdc(b.q) : '–'}</td>
-                <td className="num">
-                  {tok(b.alloc)}
+                <td className="num" title={tok(b.alloc)}>
+                  {formatRounded(b.alloc, sale.decimals, 4)}
                   {isMarginal(b, result.pStar) ? <span className="pill pill-block">marginal · pro rata</span> : null}
                 </td>
                 <td className="num">{formatUsdc(b.spend)}</td>
                 <td className="num">{formatUsdc(refundOf(b))}</td>
-                <td className="num">{b.penaltyShare > 0n ? formatUsdc(b.penaltyShare) : b.penalty > 0n ? `−${formatUsdc(b.penalty)}` : '0'}</td>
+                {penalties ? <td className="num">{b.penaltyShare > 0n ? formatUsdc(b.penaltyShare) : b.penalty > 0n ? `−${formatUsdc(b.penalty)}` : '0'}</td> : null}
                 <td>{b.paid?.ok ? <span className="pill ok">paid</span> : <span className="pill">pending</span>}</td>
               </tr>
             ))}

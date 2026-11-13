@@ -1,4 +1,4 @@
-import { PUBLIC_FROM_START, ROLES, TOP_LIMITS } from '../copy';
+import { PUBLIC_FROM_START, ROLES } from '../copy';
 import { Rich } from './Rich';
 
 /** Who can see what, by role: the home band and `#/trust` show the same list. `phoneShort` (home band): on a phone each
@@ -40,22 +40,5 @@ export function PublicList() {
         </li>
       ))}
     </ul>
-  );
-}
-
-/** The three limits a visitor reads first. `short` keeps the title and the first sentence. */
-export function TopLimits() {
-  return (
-    <ol className="limit-list">
-      {TOP_LIMITS.map((l) => {
-        const [first, ...rest] = l.text.split(/(?<=\.) /);
-        return (
-          <li key={l.title}>
-            <strong>{l.title}</strong> <span className="limit-text">{first}</span>
-            {rest.length > 0 ? <span className="limit-more"> {rest.join(' ')}</span> : null}
-          </li>
-        );
-      })}
-    </ol>
   );
 }

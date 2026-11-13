@@ -42,7 +42,7 @@ describe('sale page panels', () => {
     expect(html).toContain('Decrypt all bids in this browser');
     expect(html).toContain('Reveal all (NEAR wallet, gas)');
     expect(html).toContain('Reveal my bid (gasless)');
-    expect(html).toContain('Key released at block');
+    expect(html).toContain('released at block');
     expect(html).not.toContain('never requested');
     expect(html).not.toMatch(FORBIDDEN);
   });

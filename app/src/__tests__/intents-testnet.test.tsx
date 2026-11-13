@@ -104,8 +104,12 @@ describe('Withdraw wording follows the network', () => {
     for (const [k, v] of Object.entries(TESTNET)) vi.stubEnv(k, v);
     vi.stubGlobal('window', { location: { hash: '#/' }, addEventListener: () => {}, removeEventListener: () => {} });
     const { Withdraw } = await import('../pages/Withdraw');
-    const t = text(renderToString(<Withdraw />));
+    const html = renderToString(<Withdraw />);
+    const t = text(html);
     expect(t).toContain(`Withdrawals to other chains work on mainnet through 1Click; on testnet your funds stay in ${LABEL}.`);
+    // Visible, not only inside the closed "How it works" fold: the lead under the title says it.
+    const lead = /<p class="lead">([\s\S]*?)<\/p>/.exec(html)?.[1] ?? '';
+    expect(text(lead)).toContain('Withdrawals to other chains work on mainnet through 1Click');
     expect(t).not.toContain('sends them back to your wallet');
     expect(t).not.toContain('Base, Arbitrum or Solana');
   });

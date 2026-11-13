@@ -4,7 +4,7 @@ import bids1 from '../__fixtures__/views/bids-1.json';
 import sale0 from '../__fixtures__/views/sale-0-cancelled.json';
 import sale1 from '../__fixtures__/views/sale-1-keyed.json';
 import { BidForm } from '../components/BidForm';
-import { twinHeading } from '../copy';
+import { EYE_GRID, ROLES, twinHeading } from '../copy';
 import { parseBid, parseSale } from '../lib/views';
 import { BidView } from '../pages/Bid';
 import { HomeView } from '../pages/Home';
@@ -47,6 +47,10 @@ describe('the twin heading promises only what happened', () => {
     expect(twinHeading([keyed, { ...cancelled, keyRequests: 1 }], [], NOW, 'testnet').lead).not.toMatch(/never asked for/);
     expect(twinHeading([keyed, cancelled], [], NOW, 'testnet').lead).toContain('so its key was never asked for');
   });
+  test('"we set the other to miss them" only when the missed sale is one the team configured to miss', () => {
+    expect(twinHeading([keyed, cancelled], [cancelled.id], NOW, 'testnet').lead).toContain('we set the other to miss them, so its key was never asked for');
+    expect(twinHeading([keyed, cancelled], [], NOW, 'testnet').lead).not.toContain('we set');
+  });
   test('a planned miss is worded as a plan, only while that sale still takes bids', () => {
     const planned = { ...open, id: '0' };
     expect(twinHeading([keyed, planned], ['0'], keyed.closeNs, 'testnet').lead).toContain('set up to');
@@ -57,5 +61,18 @@ describe('the twin heading promises only what happened', () => {
     const html = text(renderToString(<HomeView data={[b(keyed, '0'), b(keyed, '1')]} error={null} loading={false} nowNs={NOW} />));
     expect(html).toContain('Real sales, read live.');
     expect(html).not.toMatch(/its key (was|is) never asked for/);
+  });
+});
+
+describe('who sees your price: the seller is us today, so it carries our exception', () => {
+  test('the grid gives the seller a lock with that hint, never a plain no', () => {
+    const seller = EYE_GRID.find((r) => r.who === 'The seller');
+    expect(seller?.price).toBe('lock');
+    expect(seller?.hint).toContain('Today the seller is us');
+  });
+  test('the role text says the same, full and short', () => {
+    const seller = ROLES.find((r) => r.who === 'The seller');
+    expect(seller?.text).toContain('Today the seller is us');
+    expect(seller?.short).toContain('Today the seller is us');
   });
 });

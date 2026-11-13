@@ -45,6 +45,14 @@ describe('the 10% penalty copy describes the current rule', () => {
     expect(html).not.toMatch(OLD_RULE);
   });
 
+  test('Result table: a penalty column only when a bid has a penalty (the pool line is always there)', () => {
+    const result = parseResult({ p_star: '3600000', sold: '1', seller_usdc: '1', seller_tokens_back: '0', token_dust: '0', penalty_pool: '0', block: '2', ns: '2', cancelled: false })!;
+    const head = (bs: typeof bids) => /<thead>[\s\S]*?<\/thead>/.exec(renderToString(<ResultTable sale={parseSale(sale1f)} bids={bs} result={result} recomputed={null} />))![0];
+    const none = bids.map((b) => ({ ...b, penalty: 0n, penaltyShare: 0n }));
+    expect(head(none)).not.toContain('penalty');
+    expect(head([{ ...none[0]!, penalty: 100_000n }, ...none.slice(1)])).toContain('penalty');
+  });
+
   test('Bid form: 10% stays in the contract, not paid to anyone', () => {
     const open = { ...keyed, state: 'Open' as const, key: null, closeNs: NOW + 3_600_000_000_000n };
     const html = text(renderToString(<BidForm sale={open} nowNs={NOW} disabled={false} onSubmit={() => {}} />));

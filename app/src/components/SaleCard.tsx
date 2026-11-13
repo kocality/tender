@@ -9,16 +9,16 @@ import { ConditionBar } from './ConditionBar';
 import { StatusPill, type Tone } from './StatusPill';
 import { Timeline } from './Timeline';
 
-const STATE_TONE: Record<Sale['state'], Tone> = {
+export const STATE_TONE: Record<Sale['state'], Tone> = {
   Open: 'accent',
   Opening: 'warn',
   Keyed: 'ok',
   Finalized: 'ok',
-  Cancelled: 'neutral',
+  Cancelled: 'bad',
 };
 
 /** The state pill: the contract's state name, with a plain word where the name alone says little. */
-function stateText(sale: Sale, nowNs: bigint): string {
+export function stateText(sale: Sale, nowNs: bigint): string {
   switch (sale.state) {
     case 'Open':
       return nowNs < sale.closeNs ? 'Open · taking bids' : 'Closed · waiting to be opened';

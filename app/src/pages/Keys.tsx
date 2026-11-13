@@ -1,7 +1,11 @@
 import { Loading, ReadError } from '../components/Feedback';
+import { NetworkBadge } from '../components/NetworkBadge';
+import { Rich } from '../components/Rich';
+import { StatTile } from '../components/StatTile';
 import { TxLink } from '../components/TxLink';
+import StatusMark, { type StatusMarkStatus } from '../fx/StatusMark';
 import { config } from '../config';
-import { KEY_ERR_RULE, cancelledLabel } from '../copy';
+import { KEY_ERR_RULE, VERIFY_KEYS_LINE, cancelledLabel } from '../copy';
 import { formatNsUtc } from '../lib/format';
 import { receiptCheck } from '../lib/ledger';
 import type { KeysData } from '../lib/loaders';
@@ -26,25 +30,38 @@ export function saleSummary(sale: Sale): string {
 function KeysHead() {
   return (
     <header className="page-head">
-      <p className="eyebrow">Proof · every key request</p>
+      <NetworkBadge />
       <h1>Key ledger</h1>
-      <p className="lead">
-        Every time the contract asked NEAR&apos;s key network for a sale&apos;s key, it wrote a line here first. A sale that missed its public conditions has no
-        line: its key was never asked for.
-      </p>
-      <p className="small muted">
-        Why it matters: bids can only be opened with a sale&apos;s key, so this list shows which sales&apos; keys the contract ever asked for, and when. Anyone
-        can match each line with the receipt the NearBlocks explorer indexes for <code>request_app_private_key</code>, or run <code>pnpm verify --keys</code>.
-      </p>
+      <p className="lead">Every key the contract ever asked for, written on chain before the request.</p>
+      <details className="fold">
+        <summary>Why it matters</summary>
+        <p className="small">
+          Every time the contract asked NEAR&apos;s key network for a sale&apos;s key, it wrote a line here first. A sale that missed its public conditions has no
+          line: its key was never asked for.
+        </p>
+        <p className="small muted">
+          Bids can only be opened with a sale&apos;s key, so this list shows which sales&apos; keys the contract ever asked for, and when. Anyone can match each
+          line with the receipt the NearBlocks explorer indexes for <code>request_app_private_key</code>, or run <code>pnpm verify --keys</code>.
+        </p>
+      </details>
     </header>
   );
 }
 
+const MARK: Record<string, StatusMarkStatus> = { Ok: 'done', Err: 'failed' };
+
 function KeysBody({ data }: { data: KeysData }) {
   const check = receiptCheck(data.rows, data.receipts);
   const receiptCount = data.receipts?.length ?? 0;
+  const keyed = data.sales.filter((s) => s.key !== null).length;
+  const errs = data.rows.filter((r) => r.entry.outcome === 'Err').length;
   return (
     <>
+      <div className="stats keys-stats">
+        <StatTile value={String(data.rows.length)} label={data.rows.length === 1 ? 'key request' : 'key requests'} />
+        <StatTile value={String(keyed)} label={keyed === 1 ? 'sale with a key' : 'sales with a key'} />
+        <StatTile value={String(errs)} label={errs === 1 ? 'failed request' : 'failed requests'} />
+      </div>
       <p className="small">
         Key network (MPC): <code>{data.mpc}</code> version <strong>{data.mpcVersion ?? 'unavailable'}</strong>
       </p>
@@ -88,7 +105,9 @@ function KeysBody({ data }: { data: KeysData }) {
                     </a>
                   </td>
                   <td>{formatNsUtc(entry.ns)}</td>
-                  <td>{entry.outcome}</td>
+                  <td>
+                    <StatusMark status={MARK[entry.outcome] ?? 'running'} label={entry.outcome} size={15} fontSize={13} />
+                  </td>
                   <td>
                     {receipt ? (
                       <TxLink hash={receipt.txHash} label={receipt.receiptId.slice(0, 10) + '…'} />
@@ -102,7 +121,9 @@ function KeysBody({ data }: { data: KeysData }) {
           </tbody>
         </table>
       </div>
-      <p className="small">{`NearBlocks: ${receiptCount} ${receiptCount === 1 ? 'receipt' : 'receipts'} (${check})`}</p>
+      <p className="small">
+        {`NearBlocks: ${receiptCount} ${receiptCount === 1 ? 'receipt' : 'receipts'} (${check})`} · <Rich text={VERIFY_KEYS_LINE} />
+      </p>
       {data.rows.some((r) => r.entry.outcome === 'Ok') ? <p className="small muted">Ok: NEAR&apos;s key network answered, and the contract checked and stored the key.</p> : null}
       {data.rows.some((r) => r.entry.outcome === 'Err') ? <p className="small">{KEY_ERR_RULE}</p> : null}
       <h2>Per sale</h2>

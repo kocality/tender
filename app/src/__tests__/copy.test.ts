@@ -9,7 +9,8 @@ describe('the hero says who asks for the key and when', () => {
     expect(step).not.toMatch(/network (gives|releases|hands)/i);
   });
   test('the caveat under the steps is plain, keeps both exceptions and former key holders, and is not worded as a threat', () => {
-    expect(HOME.heroCaveat).toContain('Your price stays sealed until the sale opens.');
+    expect(HOME.heroCaveat).toMatch(/^Two ways a price could leak:/);
+    expect(HOME.howLead).toContain('your price is not, until the sale opens');
     expect(HOME.heroCaveat).toContain("11 of NEAR's key holders, past or present, working together");
     expect(HOME.heroCaveat).toContain('a tampered copy of this page');
     expect(HOME.heroCaveat).not.toMatch(/^Sealed unless/);

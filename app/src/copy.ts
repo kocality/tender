@@ -38,15 +38,39 @@ export const VERIFY_KEYS_LINE = 'Check it: `pnpm verify --keys`';
 export const PRIVACY_PLAIN =
   "Before a sale opens, reading a bid would take 11 of the computers that hold, or ever held, a piece of NEAR's key working together (11 of 16 on 2026-11-10; `pnpm verify` prints today's count), or a bad copy of the page the bid was sealed with.";
 
-/** The status line under the hero and in the footer. It follows the build's network, and says so when the sale contract cannot be found. */
-export function networkStatus(network: 'mainnet' | 'testnet', contractMissing = false): { label: string; text: string; footer: string } {
+/**
+ * What the network badge says (components/NetworkBadge.tsx): `badge` is its pill, `footer` its popover. It follows the
+ * build's network. On mainnet, `contractMissing` is `null` until the contract has been read: the pill claims nothing then.
+ */
+export function networkStatus(
+  network: 'mainnet' | 'testnet',
+  contractMissing: boolean | null = false,
+): { label: string; text: string; footer: string; plain: string; badge: string; tone: 'live' | 'testnet' | 'missing' | 'pending' } {
   const common = 'No audit. Only our team can create sales, and we are the seller in every one of them. The chain shown on a bid is declared by the bidder, not proven.';
+  const team = 'No audit, and our team is the seller in every sale.';
   if (network === 'testnet') {
     const intents = `NEAR Intents here is our own testnet copy, ${config.intentsContractId}, running the same intents 0.4.5 contract code.`;
-    return { label: 'Testnet demo', text: 'test tokens only, no real money', footer: `Test tokens only, no real money. ${intents} ${common}` };
+    return {
+      label: 'Testnet demo',
+      text: 'test tokens only, no real money',
+      footer: `Test tokens only, no real money. ${intents} ${common}`,
+      plain: `Test tokens only, no real money. ${team}`,
+      badge: 'Testnet · test tokens only',
+      tone: 'testnet',
+    };
   }
-  if (contractMissing) return { label: 'Mainnet', text: 'the sale contract is not live yet', footer: `The sale contract is not live yet; once it is, bids move real USDC. ${common}` };
-  return { label: 'Mainnet', text: 'real USDC · no audit · team-funded demo sales', footer: `Bids move real USDC. ${common}` };
+  if (contractMissing === null) return { label: 'Mainnet', text: 'checking the sale contract', footer: common, plain: team, badge: 'NEAR mainnet', tone: 'pending' };
+  if (contractMissing) {
+    return {
+      label: 'Mainnet',
+      text: 'the sale contract is not live yet',
+      footer: `The sale contract is not live yet; once it is, bids move real USDC. ${common}`,
+      plain: `The sale contract is not live yet. ${team}`,
+      badge: 'Mainnet · not live',
+      tone: 'missing',
+    };
+  }
+  return { label: 'Mainnet', text: 'real USDC · no audit · team-funded demo sales', footer: `Bids move real USDC. ${common}`, plain: `Bids move real USDC. ${team}`, badge: 'Live on NEAR mainnet', tone: 'live' };
 }
 
 const ORIGIN_NAMES = { base: 'Base', arb: 'Arbitrum', sol: 'Solana', near: 'NEAR' } as const;
@@ -80,63 +104,75 @@ export const KEY_ERR_RULE =
 // ---- Landing, trust page and twin copy. `**x**` marks the words a component sets in bold (see components/Rich.tsx). ----
 
 export const HOME = {
-  eyebrow: 'Sealed-bid token sales · on NEAR',
-  title: 'Bid without showing your price.',
-  lead: 'A token sale with sealed bids. Bid with USDC from Base, Arbitrum, Solana or NEAR. Other bidders and the seller see your deposit, not your price.',
+  title: 'Bid on tokens without showing your price.',
+  sentence: 'Public deposits, sealed prices, one price for every winner.',
+  ctaSales: 'See both sales',
+  ctaBid: 'Bid on a sale',
+  /** The free practice signature (#/try): nothing is sent. */
+  ctaTry: 'Try it free',
+  /** The example card's screen-reader description (never shown): who asks for the key, and when. */
   steps: [
     "Your browser seals your price with the sale's lock before you send it.",
     "Only the sale's key opens it. The locked sale contract is the only account that can get that key from NEAR's key network, and it asks only after close, if the sale's public conditions hold.",
     'Then anyone can open the bids, and every winner pays the same price.',
   ],
-  /** Under the three steps: the two exceptions to "sealed" in plain words; `heroWhy` links to the exact wording on #/trust. */
-  heroCaveat: "Your price stays sealed until the sale opens. Two things could reveal it sooner: 11 of NEAR's key holders, past or present, working together, or a tampered copy of this page.",
+  /** Under the example card: the two exceptions to "sealed" in plain words; `heroWhy` links to the exact wording on #/trust. */
+  heroCaveat: "Two ways a price could leak: 11 of NEAR's key holders, past or present, working together, or a tampered copy of this page.",
   heroWhy: 'Why these two',
-  /** Mobile hero: the one-line cast above "What other bidders see". */
-  castLine: 'In the example below, Bea bids 3.90 from Base; Sam bids later from Solana.',
-  cast: [
-    { initial: 'P', name: 'Priya', tag: 'Seller', line: 'Sells 3 NEAR for at least 3.00 USDC each.' },
-    { initial: 'B', name: 'Bea', tag: 'Base', line: 'Bids early: 3.90 USDC per NEAR, with a 5 USDC deposit.' },
-    { initial: 'S', name: 'Sam', tag: 'Solana', line: 'Bids later. He cannot copy Bea.' },
-  ],
-  howTitle: 'One sale, start to',
-  howAccent: 'finish.',
-  howLead: 'Six people bid from four chains. Follow three of them.',
-  chapters: [
-    {
-      eyebrow: 'Before it starts',
-      title: 'Priya lists a sale.',
-      text: 'She sells 3 NEAR, at a minimum price of 3.00 USDC each. She sets two public conditions: the sale opens only if bidders put down **at least 5 USDC in total** and **at least 3 people bid**.',
+  howTitle: 'Sealed, checked, opened. One price.',
+  howLead: 'Your deposit is public from the start; your price is not, until the sale opens.',
+  /** The five tiles of section 01: a title and at most one short line each; the visual carries the rest. */
+  bento: {
+    seal: { title: 'Sealed in your browser', line: 'Encrypted before it leaves your device.' },
+    chains: {
+      title: 'USDC from four chains',
+      line: 'Bid from Base, Arbitrum, Solana or NEAR.',
+      /** 1Click is mainnet only: a testnet build bids with test USDC already in our Intents copy. */
+      testnet: 'Base, Arbitrum, Solana or NEAR on mainnet; test USDC here.',
     },
-    {
-      eyebrow: 'Sealed',
-      title: "Bea and Sam bid. Neither sees the other's price.",
-      text: "In MetaMask, Bea's browser seals **3.90 USDC per NEAR, for up to 4 USDC**, and sends it with a 5 USDC deposit. The deposit is public, so she puts down more than she will spend: that way it does not give her amount away. Whatever she does not spend comes back. Sam bids later, with a 3 USDC deposit. In a public sale he would see her 3.90 and copy it, or snipe at the last second. Here he sees only her 5 USDC deposit, so he bids **what NEAR is worth to him: 3.20**.",
-    },
-    {
-      eyebrow: 'Closed · checked · opened',
-      title: 'The sale closes, checks two numbers, and opens.',
-      text: "Six bids, 21 USDC down: both conditions are met. The check reads deposits and bidders, never prices. Anyone can now press Open. The sale contract writes the request in its key ledger (a public list of every key it ever asked for), asks **NEAR's key network** for this sale's key, and the key is posted on chain for everyone.",
-      aside: 'If the check had failed: the sale is cancelled, every bid is refunded, and the key is never requested.',
-    },
-    {
-      eyebrow: 'Settled',
-      title: 'One price for every winner.',
-      text: 'Anyone can open the six bids and check them. The price where the bids buy all 3 NEAR is **3.60**. Bea pays 3.60 too, though she bid 3.90. Sam bid below it, so his whole 3 USDC deposit comes back.',
-    },
-  ],
-  storyNote: 'The names are made up; the numbers are a worked example.',
-  missingLead:
-    'two sales will run here side by side: one set up to meet its public conditions and open, the other to miss them, so its key is never asked for.',
+    gate: { title: 'Opened only if public conditions hold', line: 'Short on deposits or bidders: cancelled, refunded, key never requested.' },
+    price: { title: 'One price for every winner', line: 'Every winner pays the same price.' },
+    roles: { title: 'Who sees your price' },
+  },
+  /** Below the twin cards: where the numbers come from (the network is added by the page). */
+  liveCaption: 'Live from NEAR',
+  missingLead: 'Then two run here side by side: one set up to open, one set up to miss its conditions.',
   noOpenSale: 'No sale is taking bids right now. You can still sign a practice bid with your own wallet: it is free and nothing is sent.',
   liveNote: 'We are the seller in these sales and funded them; we also run the keeper (the bot that reveals bids), the relayer (which pays the network fee for bids) and this page.',
-  trustTitle: 'Who sees what,',
-  trustAccent: 'and when.',
-  trustLead: 'Your price and amount are sealed. Your deposit is not: it is public from the start, so the sale can check its conditions without opening anything.',
-  publicNote: 'A sale that misses its conditions never asks for its key. Its sealed bids stay on chain, readable only if 11 of the parties that hold, or ever held, a piece of the key work together.',
-  checkLine: 'Check it yourself: every key the contract ever asked for is in the key ledger.',
   tryTitle: 'Try it in a minute.',
-  tryLead: 'No install. Reading and checking are free; only a real bid moves money.',
+  /** #/try, under the wallet cards: the check that needs no wallet. */
+  tryNoWallet: "No wallet? Open a finished sale's bids yourself",
 } as const;
+
+/**
+ * The worked example on the home page's card (an example, labelled as one: never live data). Prices in USDC per NEAR,
+ * `size` = the most the bidder spends, in USDC. `__tests__/example-sale.test.tsx` clears it with `@tender/clearing` and
+ * checks `clearing`, so the card cannot show a wrong price.
+ */
+export const HERO_EXAMPLE = {
+  supply: '1.5',
+  reserve: '3.00',
+  minEscrow: '5.00',
+  minBidders: 3,
+  bids: [
+    { who: 'Bea', chain: 'base', deposit: '5.00', price: '3.90', size: '4' },
+    { who: 'Sam', chain: 'sol', deposit: '3.00', price: '3.20', size: '3' },
+    { who: 'A NEAR bidder', chain: 'near', deposit: '3.00', price: '3.60', size: '2' },
+  ],
+  clearing: '3.60',
+  /** Bea and the NEAR bidder win; Sam bid below the clearing price. */
+  winners: [0, 2],
+} as const;
+
+/** "Who sees your price", as a grid: the deposit column is public for everyone; the price column per role. Short form of ROLES. */
+export const EYE_GRID: { who: string; price: 'yes' | 'no' | 'lock'; hint?: string }[] = [
+  { who: 'You', price: 'yes' },
+  { who: 'Other bidders', price: 'no' },
+  { who: 'The seller', price: 'lock', hint: 'Today the seller is us: the same exception as Tender (us)' },
+  { who: 'Tender (us)', price: 'lock', hint: 'Unless this page is a bad copy that reads your price before sealing it' },
+  { who: "NEAR's key network", price: 'lock', hint: 'Unless 11 of its key holders, past or present, work together' },
+  { who: 'Everyone, if it opens', price: 'yes' },
+];
 
 /** What section 02 of the home page promises, from what the twin sales did: "its key was never asked for" appears only when such a sale exists. */
 export function twinHeading(
@@ -147,13 +183,17 @@ export function twinHeading(
 ): { before: string; accent: string; after: string; lead: string } {
   const opened = sales.some((s) => s.state === 'Keyed' || s.state === 'Finalized');
   const neverAsked = sales.some((s) => s.state === 'Cancelled' && s.keyRequests === 0);
-  const read = 'Every number is read live from the chain.';
+  // "Read live from the chain" is the caption under the cards (HOME.liveCaption).
   if (opened && neverAsked) {
+    // "We set" only when the sale that missed is one the team configured to miss (config.demoFailSales).
+    const ours = sales.some((s) => s.state === 'Cancelled' && s.keyRequests === 0 && demoFailSales.includes(s.id));
     return {
       before: 'Both',
-      accent: 'endings,',
-      after: 'side by side.',
-      lead: `Two sales on NEAR ${network}, run the same way. One met its public conditions and opened; the other missed them, so its key was never asked for. ${read}`,
+      accent: 'endings',
+      after: ', side by side.',
+      lead: ours
+        ? 'One met its conditions and opened; we set the other to miss them, so its key was never asked for.'
+        : 'One met its public conditions and opened; the other missed them, so its key was never asked for.',
     };
   }
   // A sale we set up to miss its conditions that is still taking bids: the sentence is about what is planned, and says so.
@@ -161,19 +201,23 @@ export function twinHeading(
   if (planned && sales.length > 1) {
     return {
       before: 'Both',
-      accent: 'endings,',
-      after: 'side by side.',
-      lead: `Two sales on NEAR ${network}, run the same way. One is set up to meet its public conditions and open; the other to miss them, so its key is never asked for. ${read}`,
+      accent: 'endings',
+      after: ', side by side.',
+      lead: 'One is set up to open; the other to miss its conditions, so its key is never asked for.',
     };
   }
-  return { before: 'Real sales, read', accent: 'live.', after: '', lead: `${sales.length === 1 ? 'A sale' : 'Sales'} on NEAR ${network}. ${read}` };
+  return { before: 'Real sales, read', accent: 'live.', after: '', lead: `${sales.length === 1 ? 'A sale' : 'Sales'} on NEAR ${network}, read live from the chain.` };
 }
 
 /** Who can see what, by role. Shared by the home band and `#/trust`; `short` is the home band on a phone, with the same exceptions. */
 export const ROLES: { who: string; text: string; small?: string; short?: string }[] = [
   { who: 'You', text: '**Your price and amount, always.**' },
   { who: 'Other bidders', text: 'Your deposit, your account and the time. **Not your price.**' },
-  { who: 'The seller', text: 'The same as other bidders. The seller cannot open bids early either.', short: 'The same as other bidders. **Not your price.**' },
+  {
+    who: 'The seller',
+    text: 'The same as other bidders. The seller cannot open bids early either. Today the seller is us, so our exception below applies too.',
+    short: 'The same as other bidders. **Not your price.** Today the seller is us: our exception below applies too.',
+  },
   {
     who: 'Tender (us)',
     text: "The same. **We cannot get the key**: if we ask, NEAR's network gives us a different key that opens nothing. Only the locked sale contract gets the right one, and nobody can change that contract, us included: it has no owner key and no upgrade method.",
@@ -187,7 +231,7 @@ export const ROLES: { who: string; text: string; small?: string; short?: string 
     small: "Technically an MPC (multi-party computation) network: 11 of 16 nodes on 2026-11-10; `pnpm verify` prints today's count. If they did work together, nothing on chain would show it.",
     short: "**Not your price**, unless 11 of its key holders, past or present, work together. Nothing on chain would show it.",
   },
-  { who: 'Everyone, later', text: 'Every bid, once the sale opens. That is how anyone can check the price.' },
+  { who: 'Everyone, if it opens', text: 'Every bid, once the sale opens. That is how anyone can check the price.' },
 ];
 
 /** What is public before the key is released (README "Trust and limits"). */
@@ -397,24 +441,4 @@ export function openCheckLine(c: { total: number; opened: number; lastLook: numb
     out += ` Bid${one ? '' : 's'} ${ids(c.closed)} ${one ? 'does' : 'do'} not open and ${one ? 'was' : 'were'} not revealed.`;
   }
   return out;
-}
-
-/** One short phrase per twin sale for the hero's live line, from the chain numbers. */
-export function heroSalePhrase(
-  sale: Pick<Sale, 'id' | 'state' | 'closeNs' | 'escrowTotal' | 'minEscrow' | 'bidders' | 'minBidders' | 'keyRequests'>,
-  nowNs: bigint,
-): string {
-  const n = `Sale #${sale.id}`;
-  switch (sale.state) {
-    case 'Open':
-      return nowNs < sale.closeNs ? `${n} is taking sealed bids` : `${n} has closed and waits to be opened or cancelled`;
-    case 'Opening':
-      return `${n} met its conditions; its key is being asked for`;
-    case 'Keyed':
-    case 'Finalized':
-      return `${n} met its conditions and opened`;
-    case 'Cancelled':
-      if (sale.keyRequests > 0) return `${n} was cancelled after a key request`;
-      return missedConditions(sale).length > 0 ? `${n} missed its conditions, so its key was never asked for` : `${n} was cancelled; its key was never asked for`;
-  }
 }

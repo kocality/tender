@@ -1,16 +1,29 @@
+import { useEffect } from 'react';
+import { EyeGrid } from '../components/EyeGrid';
+import { NetworkBadge } from '../components/NetworkBadge';
 import { PublicList, RoleList } from '../components/Trust';
 import { Rich } from '../components/Rich';
 import { config } from '../config';
 import { MORE_LIMITS, PRIVACY_PLAIN, RELY_ON, SELLER_STEPS, TOP_LIMITS, TRUST_LINE } from '../copy';
+import { scrollToSection } from '../lib/sections';
 
 /** Who can see a bid, what that rests on, and every limit: README "Trust and limits" in plain words, with the detail one click away. */
-export function Trust() {
+export function Trust({ at = '' }: { at?: string }) {
+  // `#/trust?at=check` (every "Evidence" link): after the route's own scroll to the top, go to that section.
+  useEffect(() => {
+    if (!at) return;
+    const id = requestAnimationFrame(() => scrollToSection(at));
+    return () => cancelAnimationFrame(id);
+  }, [at]);
   return (
     <div className="wrap page">
       <header className="page-head">
-        <p className="eyebrow">Trust and limits</p>
+        <NetworkBadge />
         <h1>Who can see your bid.</h1>
-        <p className="lead">Your price and amount are sealed until the sale&apos;s key is released. Here is who could read them before that, what that rests on, and what Tender does not protect against.</p>
+        <p className="lead">Who sees what, what you rely on, and eleven limits.</p>
+        <div className="card pad trust-grid-card">
+          <EyeGrid />
+        </div>
         <p className="plain-callout">
           <Rich text={PRIVACY_PLAIN} />
         </p>
@@ -65,14 +78,15 @@ export function Trust() {
         <p className="eyebrow">03 · Assumptions</p>
         <h2 id="t-rely">What you rely on.</h2>
         <p className="muted measure">One line each: what has to hold, and what happens if it does not.</p>
-        <ol className="rows">
+        <ol className="rely-grid">
           {RELY_ON.map((r) => (
             <li key={r.plain}>
-              <strong>
+              <p className="rely-holds">
                 <Rich text={r.plain} />
-              </strong>
-              <p className="muted small">
-                If it breaks: <Rich text={r.breaks} />
+              </p>
+              <p className="rely-breaks small">
+                <span className="eyebrow">If it breaks</span>
+                <Rich text={r.breaks} />
               </p>
             </li>
           ))}
@@ -99,7 +113,7 @@ export function Trust() {
         <ol className="rows limits-all">
           {[...TOP_LIMITS, ...MORE_LIMITS].map((l: { title: string; text: string; technical?: string }) => (
             <li key={l.title}>
-              {/* Open: the three a visitor reads first, and the counterweight to "its key was never asked for". */}
+              {/* Open: the three a visitor should read first, and the counterweight to "its key was never asked for"; the rest is one click away. */}
               <details className="fold" open={TOP_LIMITS.includes(l) || l === MORE_LIMITS[1]}>
                 <summary>{l.title}</summary>
                 <p className="small">
@@ -132,7 +146,7 @@ export function Trust() {
         </ol>
       </section>
 
-      <section className="trust-sec" aria-labelledby="t-check">
+      <section className="trust-sec" id="check" aria-labelledby="t-check">
         <p className="eyebrow">06 · Proof</p>
         <h2 id="t-check">Check it yourself.</h2>
         <p className="muted measure">Do not trust this page? You do not have to: everything it shows can be checked against the chain.</p>

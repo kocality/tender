@@ -2,30 +2,31 @@
   --bg: #fafaf8;
   --surface: #ffffff;
   --surface-2: #f2f2ee;
-  --text: #15161a;
-  --muted: #585c66;
-  --border: #e3e3de;
+  --text: #121317;
+  --muted: #5d616b;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
   --field-border: #82858e;
   --accent: #2f4bd0;
   --accent-text: #ffffff;
   --accent-bg: #eef1fd;
+  --seal: #6b5fb8;
+  --key: #8a5a00;
   --ok: #17703a;
   --ok-bg: #e5f4ea;
   --warn: #8a5a00;
   --warn-bg: #fff3d9;
   --bad: #a3231c;
   --bad-bg: #fbe6e4;
-  --band: #121318;
-  --band-text: #ececef;
-  --band-muted: #a4a7b0;
-  --band-accent: #95a8ff;
-  --band-warn: #f0c46a;
-  --band-line: #2c2e36;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 2px 8px rgba(20, 22, 30, 0.04);
-  --radius: 14px;
-  --radius-sm: 8px;
+  --glow: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* Light mode's page is near white: the hero's glow needs more colour than the dark mode's to read at all. */
+  --hero-glow: color-mix(in srgb, var(--accent) 20%, transparent);
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Inter, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(20, 22, 30, 0.04), 0 8px 24px -12px rgba(20, 22, 30, 0.12);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --radius: 20px;
+  --radius-sm: 12px;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -35,67 +36,66 @@
   --s7: 48px;
   --s8: 64px;
   --s9: 96px;
+  --s10: 120px;
   --gutter: 32px;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0f1013;
-    --surface: #16171b;
-    --surface-2: #1e1f25;
-    --text: #ececef;
-    --muted: #a4a7b0;
-    --border: #2a2c33;
+    --bg: #0b0c0f;
+    --surface: #131419;
+    --surface-2: #1a1b21;
+    --text: #ededf0;
+    --muted: #a3a6b0;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
     --field-border: #7a7d87;
     --accent: #95a8ff;
     --accent-text: #0a0e22;
     --accent-bg: #1c2240;
+    --seal: #a99cf2;
+    --key: #e9c25c;
     --ok: #6fd596;
     --ok-bg: #12301f;
     --warn: #f0c46a;
     --warn-bg: #36290a;
     --bad: #ff8d84;
     --bad-bg: #3a1613;
-    --band: #20222b;
-    --band-text: #ececef;
-    --band-muted: #a4a7b0;
-    --band-accent: #95a8ff;
-    --band-warn: #f0c46a;
-    --band-line: #3b3e4a;
+    --glow: color-mix(in srgb, var(--accent) 20%, transparent);
+    --hero-glow: var(--glow);
     --shadow: none;
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --bg: #0f1013;
-  --surface: #16171b;
-  --surface-2: #1e1f25;
-  --text: #ececef;
-  --muted: #a4a7b0;
-  --border: #2a2c33;
+  --bg: #0b0c0f;
+  --surface: #131419;
+  --surface-2: #1a1b21;
+  --text: #ededf0;
+  --muted: #a3a6b0;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
   --field-border: #7a7d87;
   --accent: #95a8ff;
   --accent-text: #0a0e22;
   --accent-bg: #1c2240;
+  --seal: #a99cf2;
+  --key: #e9c25c;
   --ok: #6fd596;
   --ok-bg: #12301f;
   --warn: #f0c46a;
   --warn-bg: #36290a;
   --bad: #ff8d84;
   --bad-bg: #3a1613;
-  --band: #20222b;
-  --band-text: #ececef;
-  --band-muted: #a4a7b0;
-  --band-accent: #95a8ff;
-  --band-warn: #f0c46a;
-  --band-line: #3b3e4a;
+  --glow: color-mix(in srgb, var(--accent) 20%, transparent);
+  --hero-glow: var(--glow);
   --shadow: none;
   color-scheme: dark;
 }
 
-/* Type scale: 12 eyebrow · 13.5 small · 15 body · 17 lead · 20 h3 · 26 chapter · 36 h2 · 56 display. */
+/* Type scale: 11 mono label · 13 small · 15 body · 18 lead · 18 h3 · 40 h2 · 68 display (40 on phones). */
 
 * {
   box-sizing: border-box;
@@ -353,9 +353,10 @@ p {
 }
 
 .footer-in {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: var(--s8);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4) var(--s6);
 }
 
 .footer-links {
@@ -366,26 +367,10 @@ p {
   align-content: flex-start;
 }
 
-.footer-trust {
-  margin-top: var(--s3);
-}
-
-.footer-trust summary,
 .fold summary {
   cursor: pointer;
   color: var(--text);
   font-weight: 600;
-}
-
-.status-line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  margin: 0;
-}
-
-.status-line strong {
-  color: var(--text);
 }
 
 .dot {
@@ -863,135 +848,6 @@ td {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- hero ---------- */
-.hero {
-  padding: var(--s9) 0 var(--s8);
-}
-
-.hero-in {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: var(--s8);
-  align-items: center;
-}
-
-.display {
-  font-size: 56px;
-  line-height: 1.02;
-  letter-spacing: -0.035em;
-  font-weight: 680;
-  max-width: 13ch;
-}
-
-.hero .lead {
-  margin-top: var(--s5);
-  max-width: 46ch;
-}
-
-.steps3 {
-  list-style: none;
-  margin: var(--s6) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--s3);
-}
-
-.steps3 li {
-  display: grid;
-  grid-template-columns: 32px 1fr;
-  font-size: 17px;
-}
-
-.steps3 .n {
-  font-size: 12px;
-  line-height: 2.2;
-  color: var(--muted);
-}
-
-.steps3 li:last-child {
-  font-weight: 620;
-}
-
-.steps3 li:last-child .n {
-  color: var(--accent);
-}
-
-.hero-cta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s5);
-  margin-top: var(--s7);
-}
-
-.hero-cta .btn {
-  min-height: 44px;
-  padding: 0 20px;
-  font-size: 15px;
-}
-
-.hero .status-line {
-  margin-top: var(--s5);
-  color: var(--muted);
-}
-
-.cast {
-  padding: var(--s5);
-}
-
-.person {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  gap: var(--s3);
-  align-items: start;
-  padding: var(--s3) 0;
-  border-top: 1px solid var(--border);
-}
-
-.cast-head + .person {
-  border-top: 0;
-}
-
-.person p {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 13.5px;
-}
-
-.who {
-  font-weight: 620;
-}
-
-.av {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font: 600 14px/1 var(--sans);
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.av.seller {
-  background: var(--text);
-  color: var(--bg);
-  border-color: var(--text);
-}
-
-.peek {
-  margin-top: var(--s4);
-  background: var(--surface-2);
-  border-radius: 10px;
-  padding: var(--s4);
-}
-
-.peek .kv-rows dt,
-.peek .kv-rows dd {
-  border-color: var(--border);
-}
-
 /* ---------- home sections ---------- */
 .sec {
   padding: var(--s9) 0;
@@ -1010,145 +866,9 @@ td {
   margin: 0;
 }
 
-.chapters {
-  display: grid;
-  gap: var(--s4);
-}
-
-.card.chapter {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  overflow: hidden;
-  padding: 0;
-  margin: 0;
-}
-
-.chapter .txt {
-  padding: var(--s7);
-}
-
-.chapter .vis {
-  background: var(--surface-2);
-  padding: var(--s6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-left: 1px solid var(--border);
-}
-
-.chapter:nth-child(even) .txt {
-  order: 2;
-}
-
-.chapter:nth-child(even) .vis {
-  border-left: 0;
-  border-right: 1px solid var(--border);
-}
-
-.chapter h3 {
-  font-size: 26px;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  max-width: 20ch;
-  margin: 0;
-}
-
-.chapter p:not(.eyebrow) {
-  font-size: 17px;
-  color: var(--muted);
-  max-width: 44ch;
-  margin: var(--s4) 0 0;
-}
-
-.chapter p strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.chapter .chapter-aside {
-  font-size: 14px;
-  border-left: 2px solid var(--border);
-  padding-left: var(--s3);
-}
-
-.frag {
-  width: 100%;
-  max-width: 380px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: var(--s5);
-  font-size: 13.5px;
-}
-
-.frag-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--s3);
-  margin-bottom: var(--s3);
-}
-
-.frag-title {
-  font-weight: 620;
-  font-size: 15px;
-}
-
 .price-big {
   font: 600 28px/1.1 var(--mono);
   letter-spacing: -0.02em;
-}
-
-.cmp {
-  width: 100%;
-  max-width: 420px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  font-size: 13.5px;
-}
-
-.cmp > div {
-  background: var(--surface);
-  padding: var(--s3) var(--s4);
-}
-
-.cmp .h {
-  font: 500 11px/1.4 var(--mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--surface-2);
-}
-
-.cmp .dim {
-  color: var(--muted);
-}
-
-.mini-table th {
-  padding: 0 0 6px;
-}
-
-.mini-table td {
-  padding: 8px 0;
-  border-bottom: 0;
-  border-top: 1px solid var(--border);
-}
-
-.mini-table .r {
-  text-align: right;
-}
-
-.footnote {
-  border-top: 1px solid var(--border);
-  margin-top: var(--s7);
-  padding-top: var(--s5);
-  font-size: 13.5px;
-  color: var(--muted);
 }
 
 /* Live twin */
@@ -1289,10 +1009,11 @@ td {
   box-shadow: 0 0 0 4px var(--accent-bg);
 }
 
+/* A step a cancelled sale will never reach: hollow and struck through, not a dashed "pending" ring. */
 .timeline li.skipped .node {
-  border-style: dashed;
-  border-color: var(--muted);
-  background: transparent;
+  border-color: var(--border-strong);
+  background: linear-gradient(135deg, transparent 43%, var(--muted) 43%, var(--muted) 57%, transparent 57%), var(--surface);
+  opacity: 0.7;
 }
 
 .tl-name {
@@ -1348,39 +1069,6 @@ td {
   top: 5px;
 }
 
-/* Trust band (inverted) */
-.band {
-  background: var(--band);
-  color: var(--band-text);
-  border-top: 0;
-}
-
-.band .eyebrow,
-.band .lead,
-.band-muted {
-  color: var(--band-muted);
-}
-
-.band .hl,
-.band a {
-  color: var(--band-accent);
-}
-
-.band .eyebrow.band-warn {
-  color: var(--band-warn);
-}
-
-.band code {
-  background: #262833;
-  color: var(--band-text);
-}
-
-.trust-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: var(--s8);
-}
-
 .roles {
   margin: 0;
 }
@@ -1419,15 +1107,6 @@ td {
   margin-top: 4px;
 }
 
-.band .role {
-  border-color: var(--band-line);
-}
-
-.band .role dt,
-.band .role-small {
-  color: var(--band-muted);
-}
-
 .public-list {
   list-style: none;
   margin: 0;
@@ -1447,102 +1126,6 @@ td {
   color: var(--muted);
   text-align: right;
   font-family: var(--mono);
-}
-
-.band .public-list li {
-  border-color: var(--band-line);
-}
-
-.band .public-list li span:last-child {
-  color: var(--band-muted);
-}
-
-.limits {
-  margin-top: var(--s8);
-  padding-top: var(--s6);
-  border-top: 1px solid var(--band-line);
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: var(--s8);
-}
-
-.limits h3 {
-  font-size: 20px;
-}
-
-.limit-list {
-  margin: var(--s4) 0 0;
-  padding-left: 20px;
-  display: grid;
-  gap: var(--s3);
-}
-
-.limit-list li::marker {
-  color: var(--band-muted);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-
-.limit-text,
-.limit-more {
-  color: var(--band-muted);
-  font-size: 14px;
-}
-
-.limit-list strong {
-  display: block;
-}
-
-.band .btn.ghost {
-  color: var(--band-text);
-  border-color: var(--band-line);
-}
-
-.check {
-  font-family: var(--mono);
-  color: var(--band-muted);
-  margin-top: var(--s5);
-  line-height: 1.7;
-}
-
-/* 60-second path */
-.path {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.path li {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  gap: var(--s5);
-  align-items: center;
-  padding: var(--s5) 0;
-  border-top: 1px solid var(--border);
-}
-
-.path-time {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.path li strong {
-  font-size: 17px;
-  font-weight: 620;
-}
-
-.path li p {
-  margin: 2px 0 0;
-  color: var(--muted);
-}
-
-.path-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--s3) var(--s5);
-  margin-top: var(--s5);
 }
 
 /* ---------- inner pages ---------- */
@@ -2157,42 +1740,6 @@ main:focus {
     gap: var(--s2);
   }
 
-  .hero {
-    padding: var(--s7) 0;
-  }
-
-  .hero-in {
-    grid-template-columns: 1fr;
-    gap: var(--s6);
-  }
-
-  .display {
-    font-size: 40px;
-  }
-
-  .hero .lead,
-  .steps3 li {
-    font-size: 16px;
-  }
-
-  .hero-cta {
-    margin-top: var(--s6);
-    gap: var(--s4);
-  }
-
-  .cast-head,
-  .cast .person {
-    display: none;
-  }
-
-  .cast {
-    padding: var(--s4);
-  }
-
-  .cast .peek {
-    margin-top: 0;
-  }
-
   .sec {
     padding: var(--s7) 0;
   }
@@ -2206,59 +1753,13 @@ main:focus {
     font-size: 28px;
   }
 
-  .card.chapter {
-    grid-template-columns: 1fr;
-  }
-
-  .chapter .txt {
-    padding: var(--s5);
-    order: 0 !important;
-  }
-
-  .chapter .vis {
-    border: 0 !important;
-    border-top: 1px solid var(--border) !important;
-    padding: var(--s4);
-  }
-
-  /* One visual on mobile: the public-sale-vs-Tender table, the one that explains the trick. */
-  .chapter:nth-child(1) .vis,
-  .chapter:nth-child(3) .vis,
-  .chapter:nth-child(4) .vis {
-    display: none;
-  }
-
-  .chapter h3 {
-    font-size: 22px;
-  }
-
-  .chapter p:not(.eyebrow) {
-    font-size: 15px;
-  }
-
-  .footnote {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .grid-2,
   .grid-3,
-  .trust-grid,
-  .limits,
   .footer-in,
   .cols-2,
   .proves {
     grid-template-columns: 1fr;
     gap: var(--s5);
-  }
-
-  .limits {
-    margin-top: var(--s6);
-  }
-
-  /* The last-look limit keeps its cost and "prices it, does not prevent it" on phones too. */
-  .limit-list li:not(:nth-child(2)) .limit-more {
-    display: none;
   }
 
   .role {
@@ -2268,15 +1769,6 @@ main:focus {
 
   .footer-links {
     justify-content: flex-start;
-  }
-
-  .path li {
-    grid-template-columns: 1fr;
-    gap: var(--s2);
-  }
-
-  .path li .btn {
-    justify-self: start;
   }
 
   .sale-layout,
@@ -2424,10 +1916,6 @@ main:focus {
 }
 
 @media (max-width: 600px) {
-  .footer-trust p {
-    overflow-wrap: anywhere;
-  }
-
   .btn.btn-sm {
     padding: 6px 10px;
   }
@@ -2484,7 +1972,7 @@ td a {
 }
 
 /* Disclosure rows: a chevron instead of the browser triangle, and a tap target of at least 32 px. */
-details:not(.menu) > summary {
+details:not(.menu, .netbadge) > summary {
   list-style: none;
   display: flex;
   align-items: center;
@@ -2493,11 +1981,11 @@ details:not(.menu) > summary {
   cursor: pointer;
 }
 
-details:not(.menu) > summary::-webkit-details-marker {
+details:not(.menu, .netbadge) > summary::-webkit-details-marker {
   display: none;
 }
 
-details:not(.menu) > summary::before {
+details:not(.menu, .netbadge) > summary::before {
   content: '';
   flex: none;
   width: 6px;
@@ -2510,7 +1998,7 @@ details:not(.menu) > summary::before {
   transition: transform 0.15s ease;
 }
 
-details:not(.menu)[open] > summary::before {
+details:not(.menu, .netbadge)[open] > summary::before {
   transform: rotate(45deg);
   margin-bottom: 4px;
 }
@@ -2577,19 +2065,6 @@ td a.cell-link {
   flex-wrap: wrap;
   gap: var(--s3);
   margin: var(--s4) 0 0;
-}
-
-.next-step {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3) var(--s5);
-  margin: var(--s5) 0 0;
-  padding: var(--s4) var(--s5);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
 }
 
 .plain-callout {
@@ -2672,10 +2147,6 @@ td a.cell-link {
   margin: var(--s3) 0 0;
 }
 
-.path-foot-head {
-  color: var(--muted);
-}
-
 .origin-select select {
   margin-left: 4px;
 }
@@ -2702,10 +2173,6 @@ select {
 @media (max-width: 900px) {
   .scroll-hint {
     display: block;
-  }
-
-  .next-step .btn {
-    justify-self: start;
   }
 }
 
@@ -2738,70 +2205,10 @@ select {
   font-size: inherit;
 }
 
-/* ---------- revision 2: hero live line, caveat, one-line cast, band edges in dark, command chips ---------- */
-.hero-caveat {
-  margin: var(--s4) 0 0;
-  color: var(--muted);
-  max-width: 54ch;
-}
-
-.hero-live {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  margin: var(--s6) 0 0;
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  max-width: 62ch;
-}
-
-.hero-live + .status-line {
-  margin-top: var(--s4);
-}
+/* ---------- revision 2: live dot ---------- */
 
 .dot.live {
   background: var(--ok);
-}
-
-.cast-line {
-  display: none;
-  margin: 0 0 var(--s4);
-  color: var(--muted);
-}
-
-@media (max-width: 900px) {
-  .cast-line {
-    display: block;
-  }
-}
-
-/* "Check it yourself" is prose: set in the body face, not mono. */
-.check {
-  font-family: var(--sans);
-}
-
-.cmd-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-}
-
-/* In dark mode the band is only a little lighter than the page: hairlines mark where it starts and ends. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .band {
-    border-top: 1px solid var(--band-line);
-    border-bottom: 1px solid var(--band-line);
-  }
-}
-
-:root[data-theme='dark'] .band {
-  border-top: 1px solid var(--band-line);
-  border-bottom: 1px solid var(--band-line);
 }
 
 /* A note inside a table cell sits on its own line and wraps, so it never widens the column past the card. */
@@ -2919,20 +2326,6 @@ tr.row-warn td {
   color: var(--text);
 }
 
-.path-foot {
-  justify-content: flex-start;
-  align-items: center;
-}
-
-/* The hero carries a caveat and the live line now: less air above it keeps the live line above the fold at 900 px. */
-.hero {
-  padding-top: var(--s8);
-}
-
-.hero .hero-cta {
-  margin-top: var(--s5);
-}
-
 /* Column heads may wrap ("spends up to (USDC)"), so a table fits its card before it has to scroll. */
 .table-wrap th {
   white-space: normal;
@@ -2960,10 +2353,6 @@ tr.row-warn td {
 }
 
 @media (max-width: 600px) {
-  /* Chapter 2's "public sale vs Tender" table shows the same peek. */
-  .hero .cast {
-    display: none;
-  }
 
   .sec {
     padding: var(--s6) 0;
@@ -2971,10 +2360,6 @@ tr.row-warn td {
 
   .sec-head {
     margin-bottom: var(--s5);
-  }
-
-  .chapter .txt {
-    padding: var(--s4);
   }
 
   .proves {
@@ -3003,4 +2388,1933 @@ tr.row-warn td {
   .roles-phone .role-short {
     display: inline;
   }
+}
+
+/* ======================================================================================================================
+   UI round 2 (2026-11-13): fewer words, the mechanism drawn. Hero with the example card, bento, twin cards with chain
+   numbers, network badge. Motion: opacity and short rises only, nothing loops, nothing runs off screen; under reduced
+   motion the rule above switches every animation and transition off and the components paint their end states.
+   ====================================================================================================================== */
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.btn,
+button {
+  border-radius: var(--radius-sm);
+  transition:
+    background 160ms var(--ease),
+    border-color 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+
+.btn:not(.primary),
+button:not(.primary) {
+  border-color: var(--border-strong);
+}
+
+.btn:active,
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  border-bottom-color: var(--border);
+}
+
+.nav {
+  gap: var(--s5);
+}
+
+.nav a {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.topbar-end {
+  gap: var(--s3);
+}
+
+.menu {
+  display: block;
+}
+
+.menu summary {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+
+.menu nav {
+  min-width: 200px;
+  z-index: 20;
+}
+
+.menu-phone {
+  display: none;
+}
+
+/* ---------- network badge ---------- */
+.netbadge {
+  position: relative;
+  display: inline-block;
+  font-size: 13px;
+}
+
+.netbadge summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.netbadge summary::-webkit-details-marker {
+  display: none;
+}
+
+.netbadge .dot {
+  transform: none;
+}
+
+.netbadge[data-net='live'] .dot {
+  background: var(--ok);
+}
+
+.netbadge[data-net='missing'] .dot,
+.netbadge[data-net='pending'] .dot {
+  background: var(--muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .netbadge[data-net='live'] .dot {
+    animation: nb-pulse 2.4s var(--ease) 3;
+  }
+}
+
+@keyframes nb-pulse {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 25%, transparent);
+  }
+}
+
+.netbadge .chev {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+  transition: transform 200ms var(--ease);
+}
+
+.netbadge[open] .chev {
+  transform: rotate(180deg);
+}
+
+.netbadge .pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
+  width: min(400px, calc(100vw - 32px));
+  padding: var(--s4) var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.netbadge .pop p {
+  margin: 0 0 var(--s2);
+}
+
+.netbadge .pop p:last-child {
+  margin: 0;
+}
+
+.netbadge.up .pop {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  translate: none;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative;
+  padding: 80px 0 var(--s6);
+  text-align: center;
+  overflow: hidden;
+}
+
+.hero-glow {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 720px;
+  background: radial-gradient(60% 50% at 50% 62%, var(--hero-glow), transparent 70%);
+  pointer-events: none;
+}
+
+.hero-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.display {
+  font-size: 68px;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  max-width: 15ch;
+  margin: var(--s5) auto 0;
+}
+
+.seal-word {
+  color: var(--seal);
+}
+
+.hero .lead {
+  margin: var(--s4) auto 0;
+  max-width: 40ch;
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s5);
+}
+
+.hero-cta .btn {
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+/* Small print under the card, just below the first screen at 1440 × 900 and 390 × 844 (the first screen stays under 50 words). */
+.hero-caveat {
+  margin: var(--s7) auto 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- the example card ---------- */
+.excard {
+  width: min(640px, 100%);
+  margin: 56px auto 0;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), 0 40px 80px -40px var(--glow);
+  overflow: hidden;
+}
+
+.excard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tag {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.keystate {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.keystate .status-mark__label {
+  color: var(--text);
+}
+
+.phase-cancelled .keystate .status-mark__label {
+  color: var(--bad);
+}
+
+.key-glyph {
+  color: var(--key);
+  animation: key-in 500ms var(--ease) both;
+}
+
+@keyframes key-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) rotate(-30deg);
+  }
+}
+
+.excard-cols,
+.exrow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 84px 96px;
+  align-items: center;
+  gap: 16px;
+}
+
+.excard-cols {
+  padding: 10px 20px 6px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.excard-cols span:nth-child(n + 2) {
+  text-align: right;
+}
+
+.excard-rows {
+  padding: 0 8px 8px;
+}
+
+.exrow {
+  min-height: 58px;
+  padding: 0 12px;
+  border-radius: 12px;
+  transition:
+    background 400ms var(--ease),
+    opacity 400ms var(--ease);
+}
+
+.exrow + .exrow {
+  margin-top: 2px;
+}
+
+/* An empty row keeps the height of a bid row, so the card never changes height between its two endings. */
+.exrow.empty {
+  border: 1px dashed var(--border-strong);
+  margin: 0 4px;
+  min-height: 56px;
+}
+
+.exrow.win {
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+/* The losing row keeps its numbers readable (muted text, not opacity); only its marks fade. */
+.exrow.out .dep,
+.exrow.out .price {
+  color: var(--muted);
+}
+
+.exrow.out .chain-glyph,
+.exrow.out .depbar,
+.exrow.out .exmark {
+  opacity: 0.55;
+}
+
+.av {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8da2ff, #c3b5ff);
+}
+
+.av.av1 {
+  background: linear-gradient(135deg, #f0a58f, #f6d0a4);
+}
+
+.av.av2 {
+  background: linear-gradient(135deg, #7fd3a5, #b9e8c9);
+}
+
+.exchain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.depbar {
+  flex: 1;
+  max-width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.depbar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 900ms var(--ease);
+}
+
+.exrow .dep {
+  text-align: right;
+  font-size: 15px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.exrow .price {
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.exrow.win .price {
+  color: var(--ok);
+}
+
+.excard-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.exrail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rail-name {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.rail-name.bad {
+  color: var(--bad);
+}
+
+.pstar {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.pstar .mono,
+.pstar .rolling {
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.pstar.on .mono {
+  color: var(--ok);
+}
+
+.pstar-l {
+  font-size: 13px;
+}
+
+.excard-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  min-height: 32px;
+  width: 32px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn.ghost.btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* ---------- five-node rail (dots only; the steps are named for screen readers) ---------- */
+.rail5 {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.rail5 .rn {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  transition:
+    background 300ms var(--ease),
+    border-color 300ms var(--ease),
+    box-shadow 300ms var(--ease);
+}
+
+.rail5 .rs {
+  width: 26px;
+  height: 2px;
+  background: var(--border-strong);
+  transition: background 300ms var(--ease);
+}
+
+.rail5 .rs.on {
+  background: var(--ok);
+}
+
+.rail5 .rn.done {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.rail5 .rn.now {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.rail5 .rn.x {
+  background: var(--bad);
+  border-color: var(--bad);
+}
+
+/* ---------- sealed values ---------- */
+.decrypted {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.decrypted.sealed {
+  color: var(--seal);
+  letter-spacing: 0.04em;
+}
+
+.dt-cell {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.decrypted.running .dt-cell:not(.on) {
+  color: var(--seal);
+}
+
+/* ---------- sections ---------- */
+.sec {
+  padding: 88px 0;
+  border-top: 0;
+}
+
+/* The try band follows the live sales closely: their caption is its lead-in. */
+.sec#try {
+  padding-top: var(--s4);
+}
+
+.sec-head {
+  text-align: center;
+  margin: 0 auto var(--s7);
+}
+
+.sec h2 {
+  font-size: 40px;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 680;
+  max-width: 24ch;
+  margin: 0 auto;
+}
+
+.sec-head .lead {
+  margin: var(--s3) auto 0;
+  max-width: 48ch;
+}
+
+/* A short rise only: the block is never invisible, so print, full-page captures and link previews show it. */
+.rv {
+  transform: translateY(14px);
+  transition: transform 600ms var(--ease);
+}
+
+.rv.in {
+  transform: none;
+}
+
+/* ---------- bento ---------- */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tile {
+  position: relative;
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.tile.t-price {
+  grid-column: span 2;
+}
+
+.tile.wide {
+  grid-column: span 4;
+}
+
+/* Every visual gets the same height, so the titles of a row sit on one line whatever is folded below them. */
+.tile .vis {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: var(--s5) var(--s5) 0;
+  height: 190px;
+}
+
+.tile .txt {
+  padding: var(--s4) var(--s5) var(--s5);
+}
+
+.tile h3 {
+  font-size: 17px;
+  font-weight: 640;
+  margin: 0;
+}
+
+.tile .txt > p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.tile .fold {
+  margin-top: var(--s3);
+}
+
+.tile .fold summary {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.tile-link {
+  margin: var(--s2) 0 0;
+}
+
+/* tile 1: a bid card, deposit lit, price sealed */
+.mini {
+  width: min(260px, 100%);
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+}
+
+.mini .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 30px;
+  color: var(--muted);
+}
+
+.mini .row.lit {
+  color: var(--text);
+}
+
+.mini .row.lit .v {
+  color: var(--accent);
+  font-weight: 650;
+  font-size: 15px;
+}
+
+.mini .lock {
+  color: var(--seal);
+}
+
+/* tile 2: four chains into USDC */
+.chains {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chains .chain-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.chains .chain-glyph svg {
+  width: 20px;
+  height: 20px;
+}
+
+.chains .arrow {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.chains .usdc {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #2775ca;
+  color: #fff;
+  font: 700 18px/1 var(--sans);
+}
+
+.chain-glyph {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: #fff;
+  background: var(--muted);
+}
+
+.chain-glyph.base {
+  background: #0052ff;
+}
+
+.chain-glyph.arb {
+  background: #213147;
+  color: #9dcced;
+}
+
+.chain-glyph.sol {
+  background: linear-gradient(135deg, #9945ff, #14f195);
+}
+
+.chain-glyph.near {
+  background: var(--text);
+  color: var(--bg);
+}
+
+/* tile 3: the gate */
+.gate {
+  width: min(280px, 100%);
+  display: grid;
+  gap: 14px;
+}
+
+.meter {
+  display: grid;
+  gap: 6px;
+}
+
+.meter-l {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.meter-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.meter-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 18%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition:
+    width 900ms var(--ease),
+    background 300ms var(--ease);
+}
+
+.meter-bar .tick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 72%;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.5;
+}
+
+.gate.met .meter-bar span {
+  width: 100%;
+  background: var(--ok);
+}
+
+.gate .status-mark__label {
+  color: var(--text);
+}
+
+/* tile 4: one price */
+.clearing {
+  width: min(300px, 100%);
+}
+
+.clearing svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.clearing .sold {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+
+.clearing .unsold {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+}
+
+.clearing .pline {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  transform: translateY(-38px);
+  transition: transform 900ms var(--ease);
+}
+
+.clearing.in .pline {
+  transform: none;
+}
+
+.clearing .big {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 650;
+  color: var(--ok);
+}
+
+/* tile 5: who sees what */
+.eyegrid {
+  width: min(520px, 100%);
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+.eyegrid th,
+.eyegrid td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.eyegrid thead th {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+
+.eyegrid tbody th {
+  text-align: left;
+  font: 600 14px/1.4 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+
+.eyegrid th,
+.eyegrid td {
+  vertical-align: middle;
+}
+
+.eyegrid td {
+  text-align: center;
+  width: 84px;
+}
+
+.eyegrid tr:last-child th,
+.eyegrid tr:last-child td {
+  border-bottom: 0;
+}
+
+.eye-ic {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+.eye-ic.seen {
+  color: var(--ok);
+}
+
+.eyegrid td:nth-child(2) .eye-ic.seen {
+  color: var(--accent);
+}
+
+.eye-ic.hidden {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.eye-ic.lock {
+  color: var(--key);
+}
+
+/* ---------- twin cards ---------- */
+.twins {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 14px;
+}
+
+.twin,
+.twins > .sale-card {
+  margin: 0;
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.twin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.twin-head h3 {
+  font-size: 18px;
+  margin: 0 4px 0 0;
+}
+
+.pill.quiet {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+
+.twin .rail5 {
+  display: flex;
+  margin: var(--s4) 0;
+}
+
+.twin .rail5 .rs {
+  flex: 1;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.stat {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 14px 12px 14px 0;
+  min-width: 0;
+}
+
+.stat + .stat {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.stat .n {
+  font: 650 26px/1.1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.stat .u {
+  font: 500 13px/1 var(--sans);
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.stat .l {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.stat.glow .n {
+  color: var(--ok);
+}
+
+.twin-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+.twin-foot > .fold {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.twin-foot .fold summary {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.twin-links {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.chain-note {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: var(--s4) 0 0;
+  color: var(--muted);
+}
+
+.chain-note .dot {
+  transform: none;
+}
+
+/* ---------- try band ---------- */
+.cta {
+  position: relative;
+  text-align: center;
+  padding: var(--s7) var(--s5);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 24px;
+  background:
+    radial-gradient(60% 100% at 50% 0%, var(--glow), transparent 70%),
+    radial-gradient(70% 90% at 50% 110%, var(--glow), transparent 70%),
+    var(--surface);
+  overflow: hidden;
+}
+
+.cta .hero-cta {
+  margin-top: var(--s5);
+}
+
+/* ---------- footer ---------- */
+.footer {
+  padding: var(--s6) 0 var(--s7);
+}
+
+.footer .brand {
+  font-size: 15px;
+}
+
+.footer-links {
+  margin-left: auto;
+  gap: var(--s3) var(--s5);
+}
+
+.footer-links a {
+  color: var(--muted);
+}
+
+/* ---------- inner pages: badge row, h1, one sentence ---------- */
+.page-head .netbadge {
+  margin-bottom: var(--s4);
+}
+
+.page-head h1 {
+  font-size: 44px;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+/* ---------- tablet and phone ---------- */
+@media (max-width: 900px) {
+  .menu-phone {
+    display: contents;
+  }
+
+  .bento {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tile,
+  .tile.t-price {
+    grid-column: span 1;
+  }
+
+  .tile.wide {
+    grid-column: 1 / -1;
+  }
+
+  .twins {
+    grid-template-columns: 1fr;
+  }
+
+  .page-head h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 720px) {
+  .sec {
+    padding: 72px 0;
+  }
+
+  .sec h2 {
+    font-size: 30px;
+  }
+
+  .hero {
+    padding: 40px 0 var(--s8);
+  }
+
+  .display {
+    font-size: 40px;
+    margin-top: 20px;
+  }
+
+  .hero .lead {
+    font-size: 16px;
+  }
+
+  .hero-cta {
+    align-self: stretch;
+  }
+
+  .hero .hero-cta .btn {
+    width: 100%;
+    min-height: 50px;
+  }
+
+  .excard {
+    margin-top: 36px;
+  }
+
+  .exrow {
+    min-height: 60px;
+  }
+
+  .exrow.empty {
+    min-height: 58px;
+  }
+
+  .hero-caveat {
+    margin-top: 72px;
+  }
+
+  .excard-head,
+  .excard-foot {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* The price column holds the lock and four seal glyphs (about 90 px), so a sealed price never runs into the deposit. */
+  .excard-cols,
+  .exrow {
+    grid-template-columns: 24px minmax(0, 1fr) 48px 92px;
+    gap: 10px;
+  }
+
+  .excard-cols {
+    padding: 10px 14px 6px;
+  }
+
+  .excard-rows {
+    padding: 0 4px 6px;
+  }
+
+  .exrow {
+    padding: 0 10px;
+  }
+
+  .depbar {
+    display: none;
+  }
+
+  .excard-foot {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .rail5 .rs {
+    width: 14px;
+  }
+
+  .bento {
+    grid-template-columns: 1fr;
+  }
+
+  .tile,
+  .tile.t-price,
+  .tile.wide {
+    grid-column: auto;
+    min-height: 0;
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stat:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .stat:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .eyegrid th,
+  .eyegrid td {
+    padding: 6px;
+  }
+
+  .eyegrid td {
+    width: 64px;
+  }
+
+  .cta {
+    padding: var(--s7) var(--s4);
+  }
+
+  .footer-links {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* ---------- sale page: head, five facts, outcome numbers, decrypt in place ---------- */
+.sale-hero {
+  margin-bottom: var(--s5);
+}
+
+.sale-hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
+.sale-hero h1 {
+  font-size: 44px;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: var(--s3) 0 0;
+}
+
+/* A long pill (the pinned never-requested label) wraps inside the column instead of widening the page on a phone. */
+.pills .pill {
+  white-space: normal;
+  max-width: 100%;
+}
+
+.pill.quiet.mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.sale-hero .timeline {
+  margin: var(--s5) 0 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.sale-hero .timeline li {
+  padding: 18px 18px 18px 36px;
+  border-left: 1px solid var(--border);
+}
+
+.sale-hero .timeline li:first-child {
+  border-left: 0;
+}
+
+.sale-hero .timeline li::before {
+  display: none;
+}
+
+.sale-hero .timeline .node {
+  top: 22px;
+  left: 16px;
+  width: 9px;
+  height: 9px;
+  border-width: 1.5px;
+}
+
+.sale-hero .timeline li.done .node {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.sale-hero .timeline li.now .node {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.sale-hero .tl-n {
+  display: none;
+}
+
+.sale-hero .tl-name {
+  font: 500 11px/1.5 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+
+.sale-hero .timeline li.next .tl-name,
+.sale-hero .timeline li.skipped .tl-name {
+  color: var(--muted);
+}
+
+.sale-hero .tl-fact {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.sale-hero .timeline.branched li.now .node {
+  background: var(--bad);
+  border-color: var(--bad);
+  box-shadow: none;
+}
+
+.sale-hero .timeline.branched li.now .tl-name {
+  color: var(--bad);
+}
+
+.sale-hero .tl-branch {
+  justify-self: start;
+  margin: 8px 0 0;
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+}
+
+.sale-hero .conds {
+  margin-top: var(--s4);
+}
+
+.sale-hero .actions {
+  margin-top: var(--s4);
+}
+
+.sale-hero .actions:not(:has(*:not([role='status']:empty))) {
+  display: none;
+}
+
+.outcome-tiles {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: var(--s5);
+}
+
+.outcome-tiles .stat .n {
+  white-space: normal;
+}
+
+.outcome-tiles .stat {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  align-content: space-between;
+}
+
+.outcome-tiles .stat + .stat {
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+
+.outcome-tiles .stat .n {
+  font-size: 32px;
+}
+
+.outcome-tiles .stat.glow {
+  background: radial-gradient(90% 120% at 0% 100%, var(--glow), transparent 70%), var(--surface);
+}
+
+.outcome-tiles .stat .l {
+  order: -1;
+  font-size: 13px;
+}
+
+.decrypt-panel table th.r,
+.decrypt-panel table td.r {
+  text-align: right;
+}
+
+.decrypt-panel td .decrypted {
+  font-size: 14px;
+}
+
+.bidder-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.decrypt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
+.decrypt-actions .status-mark__label {
+  color: var(--text);
+}
+
+.decrypt-panel .fold,
+.card .fold {
+  margin-top: var(--s3);
+}
+
+.sale-aside .side h2.sub {
+  font-size: 15px;
+  margin: 0;
+}
+
+.sale-aside .side .kv-rows {
+  margin-top: var(--s3);
+}
+
+.sale-aside .side .fold summary {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .sale-hero h1 {
+    font-size: 30px;
+  }
+
+  .sale-hero .timeline li {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 12px 16px 12px 36px;
+  }
+
+  .sale-hero .timeline li:first-child {
+    border-top: 0;
+  }
+
+  .sale-hero .timeline .node {
+    top: 17px;
+  }
+
+  .outcome-tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .outcome-tiles .stat .n {
+    font-size: 26px;
+  }
+}
+
+/* ---------- inner page heads ---------- */
+.trust-grid-card {
+  margin-top: var(--s5);
+  max-width: 640px;
+  display: grid;
+  place-items: center;
+}
+
+.keys-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: var(--s4);
+}
+
+.proves-fold {
+  margin-top: var(--s6);
+}
+
+.proves-fold .proves {
+  margin-top: var(--s4);
+}
+
+.page-head > .fold {
+  margin-top: var(--s3);
+}
+
+/* ======================================================================================================================
+   UI round 2, revision 1: calmer motion, readable numbers, layout fixes from the first critique.
+   ====================================================================================================================== */
+
+/* Leads and headings break into balanced lines, never one orphan word. */
+h1,
+h2,
+.lead {
+  text-wrap: balance;
+}
+
+.hero .lead {
+  max-width: 34ch;
+}
+
+/* The shell fills the window, so a short page keeps its footer at the bottom. */
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell > main {
+  flex: 1 0 auto;
+}
+
+/* ---------- RollingNumber: digits rise into place; separators stay still ---------- */
+.roll {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.roll-d {
+  display: inline-block;
+  animation: roll-d 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes roll-d {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+}
+
+/* ---------- example card ---------- */
+.ex-pill {
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+}
+
+.exmark {
+  justify-self: center;
+}
+
+.exmark.won {
+  color: var(--ok);
+}
+
+.exmark.lost {
+  color: var(--muted);
+}
+
+.exrow .price {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.seal-lock {
+  flex: none;
+  color: var(--seal);
+}
+
+/* ---------- bento ---------- */
+.tile .txt {
+  flex: 1;
+}
+
+.tile.wide .vis {
+  height: auto;
+}
+
+.mini {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.mini .row .v {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clearing .big .tag {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* A standalone link gets a 24 px target (WCAG 2.5.8). */
+.tile-link a {
+  display: inline-block;
+  padding: 4px 0;
+}
+
+/* ---------- twin cards and the live section ---------- */
+.twin-foot .fold summary {
+  line-height: 32px;
+}
+
+.chain-note a {
+  color: var(--muted);
+}
+
+.skeleton-twins > p {
+  margin: 0 0 var(--s3);
+}
+
+.twin.skeleton {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 360px;
+}
+
+.skeleton-block {
+  display: block;
+  height: 120px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+/* ---------- sale page: the cancelled ending ---------- */
+.cancelled-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+}
+
+.cancelled-top h2 {
+  margin: 0;
+}
+
+.cancelled-top .status-mark__label {
+  color: var(--bad);
+}
+
+.cancelled-card .stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--s4);
+}
+
+.sale-aside .side .fold + .fold {
+  margin-top: var(--s2);
+}
+
+/* ---------- try: chain marks on each wallet card ---------- */
+.wallet-chains {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+/* ---------- trust: what you rely on, as cards ---------- */
+.rely-grid {
+  list-style: none;
+  margin: var(--s4) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rely-grid li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.rely-holds {
+  margin: 0;
+  font-weight: 600;
+}
+
+.rely-breaks {
+  margin: auto 0 0;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.rely-breaks .eyebrow {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ---------- network badge popover: anchored to its pill, inside the window ---------- */
+.page-head .netbadge .pop,
+.sale-hero .netbadge .pop {
+  left: 0;
+  translate: none;
+}
+
+/* The footer's popover opens from the footer's own edge, so it fits a phone whatever sits left of the pill. */
+.footer-in {
+  position: relative;
+}
+
+.netbadge.up {
+  position: static;
+}
+
+.netbadge.up .pop {
+  left: var(--gutter);
+}
+
+@media print {
+  .rv {
+    transform: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .tile .vis {
+    height: auto;
+    min-height: 150px;
+  }
+
+  .rely-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cta .hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cta .hero-cta .btn {
+    width: 100%;
+    min-height: 50px;
+  }
+
+  .twin.skeleton {
+    min-height: 330px;
+  }
+
+  .cancelled-card .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cancelled-card .stat:nth-child(3) {
+    padding-left: 12px;
+    border-left: 1px solid var(--border);
+  }
+
+  .cancelled-card .stat:nth-child(n + 3) {
+    border-top: 0;
+  }
+}
+
+/* The example's tag reads at a glance: it is not a live sale. Its text is the seal colour pulled toward the text colour,
+   on a light tint, so it passes AA in both themes. */
+.excard .ex-pill {
+  border-color: color-mix(in srgb, var(--seal) 55%, transparent);
+  background: color-mix(in srgb, var(--seal) 8%, transparent);
+  color: color-mix(in srgb, var(--seal) 78%, var(--text));
+  font-weight: 650;
+}
+
+/* ---------- round 3: calmer folds, one state colour, phone fixes ---------- */
+/* A tile's fold opens over the tiles below instead of stretching every tile in its row. */
+@media (min-width: 721px) {
+  .tile .tile-pop[open] > :not(summary) {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    z-index: 20;
+    margin-top: 8px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.35);
+    max-height: 360px;
+    overflow: auto;
+  }
+}
+
+/* Tile 4 shares row 2 with the taller eye grid: its chart takes the spare height, centred. */
+.tile.t-price .vis {
+  flex: 1;
+  height: auto;
+  min-height: 190px;
+}
+
+.tile.t-price .txt {
+  flex: none;
+}
+
+/* Tile 5: the grid starts at the tile's text edge, under which its title sits. */
+.tile.wide .vis {
+  place-items: start;
+}
+
+.eyegrid-wrap {
+  width: min(520px, 100%);
+}
+
+.eyegrid-wrap .eyegrid {
+  width: 100%;
+}
+
+.eye-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.eye-legend .eye-ic {
+  width: 13px;
+  height: 13px;
+}
+
+.sec h2 .hl {
+  color: var(--seal);
+}
+
+.twin-check {
+  margin: var(--s3) 0 0;
+}
+
+.twin-foot {
+  align-items: center;
+}
+
+.twin-foot > .fold {
+  margin: 0;
+}
+
+.twin-foot > .fold[open] {
+  align-self: flex-start;
+}
+
+.scroll-hint.on {
+  display: block;
+}
+
+.stat .approx {
+  margin-right: 1px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.try-nowallet {
+  margin: var(--s5) 0 0;
+}
+
+@media (max-width: 720px) {
+  .icon-btn,
+  .excard .btn.ghost.btn-sm {
+    min-height: 40px;
+  }
+
+  .icon-btn {
+    width: 40px;
+  }
+
+  /* Every unit under its number, so the four numbers share one line. */
+  .outcome-tiles .stat .u {
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* The badge's popover is a sheet at the bottom of a phone screen, never over the headline. */
+  .netbadge .pop,
+  .netbadge.up .pop,
+  .page-head .netbadge .pop,
+  .sale-hero .netbadge .pop {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    translate: none;
+    width: auto;
+    max-height: 70vh;
+    overflow: auto;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+.exrow.empty .no-bid {
+  grid-column: 1 / -1;
+  justify-self: center;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

@@ -69,7 +69,7 @@ describe('the home hero', () => {
     const { HomeView } = await load({});
     const html = renderToString(<HomeView data={null} error={null} loading nowNs={0n} />);
     const hero = html.slice(html.indexOf('class="hero"'), html.indexOf('id="how"'));
-    expect(visible(hero)).toContain('Your price stays sealed until the sale opens.');
+    expect(visible(hero)).toContain("Two ways a price could leak: 11 of NEAR's key holders, past or present, working together");
     expect(hero).toMatch(/<a href="#\/trust">Why these two/);
   });
 });

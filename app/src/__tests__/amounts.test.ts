@@ -52,3 +52,13 @@ describe('priceToP', () => {
     expect(priceUnitLabel('wrap.near', 0)).toBe('USDC per wrap.near');
   });
 });
+
+describe('formatRounded (display at size; the exact value sits in a title)', () => {
+  test('half up to two places, never more places than the token has', async () => {
+    const { formatRounded } = await import('../lib/format');
+    expect(formatRounded(1_800_001n, 6)).toBe('1.80');
+    expect(formatRounded(2_199_999n, 6)).toBe('2.20');
+    expect(formatRounded(277_777_777_777_777_777_777_777n, 24, 4)).toBe('0.2778');
+    expect(formatRounded(5n, 1)).toBe('0.5');
+  });
+});

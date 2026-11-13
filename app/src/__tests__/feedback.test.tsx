@@ -50,7 +50,7 @@ describe('loading, error and empty states', () => {
     const html = renderToString(<HomeView data={null} error={raw} loading={false} nowNs={0n} />).replace(/<!-- -->/g, '');
     expect(html).toMatch(/once the contract is <span[^>]*>live\.<\/span>/);
     expect(html).not.toContain('Both endings,');
-    expect(html).toContain('the sale contract is not live yet'); // the hero status line says so too
+    expect(html).toContain('Mainnet · not live'); // the hero's network badge says so too
   });
 
   test('a failed read of the key ledger keeps the page title and its explanation', () => {

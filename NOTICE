@@ -23,3 +23,9 @@ This product includes or adapts third-party work:
 
 - near/intents 0.4.5 contract wasm (MIT, see LICENSES/MIT-near-intents.txt)
   Copyright (c) 2025 NEAR Foundation. contract/tests/res/defuse-0.4.5.wasm, fetched from intents.near with view_code, used only in tests.
+
+- DavidHDev/react-bits (MIT + Commons Clause License Condition v1.0, see LICENSES/react-bits.txt)
+  Copyright (c) 2026 David Haz. https://github.com/DavidHDev/react-bits at 9d9c687dc4f55b23539aa5417b703078047efa74, src/ts-default/.
+  Copied into app/src/fx/ as part of the app: TextAnimations/DecryptedText and Micro/StatusMark, adapted to run without
+  motion/react. Each file carries a header naming its source path and commit. The Commons Clause forbids selling or
+  redistributing the components themselves; they are used here only as part of this application.

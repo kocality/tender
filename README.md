@@ -176,7 +176,7 @@ Steps 11-15 need the mainnet rows of their sale ([Demo sales](#demo-sales)); 16-
 | 14 | `pnpm verify --sale 0` | `#23 cancelled-sealed` PASS: `Cancelled · 0 key requests · never requested (sealed unless the MPC threshold colludes)` |
 | 15 | `pnpm verify --sale 3` | garbage and copied bids `Penalized`; `#17 conservation` PASS |
 | 16 | hosted app `#/try`: sign with MetaMask, Phantom or a NEAR wallet | `signature valid · insufficient balance` (a view call; nothing is spent) |
-| 17 | hosted app `#/sale/1` (the home page links it under "Real sales", next to sale 0): press **Decrypt all bids in this browser** | 6 bids decrypt in your browser and match their on-chain commitments |
+| 17 | hosted app `#/sale/1` (the home page links it under "Both endings", next to sale 0): press **Decrypt all bids in this browser** | 6 bids decrypt in your browser and match their on-chain commitments |
 | 18 | optional, costs at least 1 USDC: bid on sale 2 at hosted app `#/bid/2` before close | the bid is stored sealed |
 
 </details>
@@ -318,7 +318,7 @@ Team-funded demo sales: there is no external seller yet. Planned on mainnet:
 
 | What | Result |
 |---|---|
-| Tests | clearing 13, intents 63, seal 37, relayer 421, app 481, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Counted on `main` on 2026-11-13 UTC; `COUNTS=1 node --test docs/scripts/docs-checks.test.mjs` compares the pnpm counts with a fresh run. The contract and its tests are unchanged since step 9's commit |
+| Tests | clearing 13, intents 65, seal 37, relayer 421, app 503, cli 118 passing (pnpm; 22 more skipped); cargo 97 unit + 32 sandbox (+2 ignored) + 5 S3a (+1 ignored), with property tests; the sandbox uses a mock MPC. Counted on `main` on 2026-11-13 UTC; `COUNTS=1 node --test docs/scripts/docs-checks.test.mjs` compares the pnpm counts with a fresh run. The contract and its tests are unchanged since step 9's commit |
 | Wasm RC3 | the release candidate from the step 9 commit: 281,895 bytes, built twice with the same sha256 in the Docker image pinned in `contract/Cargo.toml`; report `evidence/wasm.json` |
 | Entry points | integrators: `packages/seal/src/index.ts` (workspace package, not on npm); evidence file formats: `evidence/README.md` |
 
@@ -329,7 +329,7 @@ All code in this repository was written inside the hackathon's code window, whic
 ## Libraries, prior work and AI code (Q-005)
 
 - `@noble/curves` and `@noble/hashes` 2.4.0, `bs58` 6.0.0 (`@tender/seal`, `@tender/intents`); viem 2.57.16 and qrcode 1.5.4 (app); near-api-js 7.4.0 (relayer); `@defuse-protocol/intents-sdk` 0.95.0 (dev-only test oracle); near-workspaces 0.24.0 and proptest 1.12.0 (contract tests).
-- Adapted code: drand/tlock-js IBE in `packages/seal/src/ibe.ts` and `prototype/ibe.mjs`; defdone/annon's import checker in `contract/scripts/check-imports.mjs`.
+- Adapted code: drand/tlock-js IBE in `packages/seal/src/ibe.ts` and `prototype/ibe.mjs`; defdone/annon's import checker in `contract/scripts/check-imports.mjs`; two React Bits components (DavidHDev/react-bits, MIT + Commons Clause) copied as source into `app/src/fx/`: DecryptedText and StatusMark, adapted to run without motion/react.
 - Used unchanged: the near/mpc CKD test vectors (`fixtures/ckd_test_vectors.json`) and the near/intents wasm `contract/tests/res/defuse-0.4.5.wasm`.
 - Parts of the code were written with AI coding assistants and reviewed by the team. No AI in the product, on purpose.
 - Full list with licenses: `NOTICE`, `LICENSES/`.
@@ -340,4 +340,4 @@ Arrow: an independent NEAR HACKATHON submission with no shared code, packages, c
 
 ## License
 
-MIT (`LICENSE`).
+MIT (`LICENSE`), except `app/src/fx/`, which is React Bits under MIT + Commons Clause (`LICENSES/react-bits.txt`).

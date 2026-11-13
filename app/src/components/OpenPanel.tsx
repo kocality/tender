@@ -4,13 +4,13 @@ import { cancelSale, openSale } from '../lib/near-tx';
 import type { Sale } from '../lib/views';
 import { walletErrorMessage } from '../wallets/types';
 import { ensureNear } from '../wallets/near';
-import { BlockLink, TxLink } from './TxLink';
+import { TxLink } from './TxLink';
 
 /**
  * Open and Cancel for anyone with a NEAR wallet. The buttons follow chain time and the public open conditions; the
  * contract re-checks everything, so a stale button can only produce a refused call.
  */
-export function OpenPanel({ sale, nowNs, keyRequestBlock, keyRequestNs }: { sale: Sale; nowNs: bigint; keyRequestBlock?: bigint | null; keyRequestNs?: bigint | null }) {
+export function OpenPanel({ sale, nowNs, keyRequestNs }: { sale: Sale; nowNs: bigint; keyRequestNs?: bigint | null }) {
   const [busy, setBusy] = useState<'open' | 'cancel' | null>(null);
   const [tx, setTx] = useState<{ kind: 'open' | 'cancel'; hash: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +33,6 @@ export function OpenPanel({ sale, nowNs, keyRequestBlock, keyRequestNs }: { sale
   const key = sale.key;
   return (
     <div className="actions" role="group" aria-label="Open and cancel">
-      {key ? (
-        <p className="result ok" role="status">
-          {`Key requested ${sale.keyRequests} ${sale.keyRequests === 1 ? 'time' : 'times'} · Key released at block `}
-          <BlockLink block={key.block.toString()} />
-          {keyRequestBlock != null ? `, ${key.block - keyRequestBlock} blocks after the request` : ''}
-        </p>
-      ) : null}
       {cond.requestDead ? (
         <p className="result warn" role="status">
           The key request got no answer within an hour: anyone can open again.

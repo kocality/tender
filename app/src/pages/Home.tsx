@@ -1,9 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { ChainGlyph } from '../components/ChainGlyph';
+import { EyeGrid } from '../components/EyeGrid';
+import { ExampleSale } from '../components/ExampleSale';
 import { Loading, ReadError } from '../components/Feedback';
-import { Rich } from '../components/Rich';
-import { PublicList, RoleList, TopLimits } from '../components/Trust';
+import { NetworkBadge, popoverHandlers } from '../components/NetworkBadge';
+import { useDoneOnView, useReveal } from '../components/Reveal';
+import { RoleList } from '../components/Trust';
 import { config } from '../config';
-import { HOME, NEAR_INTENTS, heroSalePhrase, networkStatus, twinHeading } from '../copy';
+import { HERO_EXAMPLE, HOME, OPEN_RULE, twinHeading } from '../copy';
+import DecryptedText from '../fx/DecryptedText';
+import StatusMark from '../fx/StatusMark';
 import { isNotDeployed } from '../lib/errors';
 import { useChainClock } from '../lib/chainClock';
 import { loadSaleBundle, type SaleBundle } from '../lib/loaders';
@@ -47,427 +53,249 @@ export function HomeView({
   // No contract to read on this network (yet): the section says so instead of promising live sales.
   const missing = data === null && error !== null && isNotDeployed(error);
   const sales = (data ?? []).flatMap((b) => (b.sale ? [b.sale] : []));
-  const noneOpen = sales.length > 0 && !sales.some((s) => s.state === 'Open' && nowNs < s.closeNs);
-  // The heading promises only what the sales on screen did (a missed sale is named only when one exists).
+  const open = sales.find((s) => s.state === 'Open' && nowNs < s.closeNs);
+  // The heading promises only what the sales on screen did (a missed sale is named only when one exists); before the
+  // first read it claims nothing about them.
   const head = missing
-    ? { before: 'Two real sales, once the contract is', accent: 'live.', after: '', lead: `When the sale contract is live on NEAR ${config.network}, ${HOME.missingLead}` }
-    : twinHeading(sales, config.demoFailSales, nowNs, config.network);
+    ? { before: 'Two real sales, once the contract is', accent: 'live.', after: '', lead: HOME.missingLead }
+    : data === null
+      ? { before: 'Two sales,', accent: 'read from the chain.', after: '', lead: `Reading both from NEAR ${config.network}.` }
+      : twinHeading(sales, config.demoFailSales, nowNs, config.network);
   return (
     <>
-      <Hero missing={missing} sales={sales} nowNs={nowNs} />
-      <HowItWorks />
+      <Hero open={open} missing={missing} />
+      <Bento />
       <section className="sec" id="live" aria-labelledby="live-title">
         <div className="wrap">
-          <div className="sec-head">
-            <p className="eyebrow">02 · Real sales</p>
-            <h2 id="live-title">
-              {head.before} <span className="hl">{head.accent}</span>
-              {head.after ? ` ${head.after}` : ''}
-            </h2>
-            <p className="lead">{head.lead}</p>
-          </div>
+          <SecHead id="live-title" lead={head.lead}>
+            {head.before} <span className="hl">{head.accent}</span>
+            {head.after ? (head.after.startsWith(',') ? head.after : ` ${head.after}`) : ''}
+          </SecHead>
           <ReadError error={error} stale={data !== null} />
-          {loading && !data ? <Loading what="sales" /> : null}
-          {data ? <TwinView bundles={data} nowNs={nowNs} checks={checks} /> : null}
-          {noneOpen ? (
-            <p className="next-step">
-              <span>{HOME.noOpenSale}</span>
-              <a className="btn btn-sm" href="#/try">
-                Try signing (free)
-              </a>
-            </p>
-          ) : null}
+          {loading && !data ? <Loading what="sales" tall /> : null}
+          {data ? <TwinView bundles={data} nowNs={nowNs} checks={checks} stale={error !== null} /> : null}
         </div>
       </section>
-      <TrustBand />
-      <PathRows bundles={data} nowNs={nowNs} checks={checks} />
+      <TryBand sales={sales} open={open} />
     </>
   );
 }
 
-function Hero({ missing, sales, nowNs }: { missing: boolean; sales: Sale[]; nowNs: bigint }) {
-  const status = networkStatus(config.network, missing);
+function SecHead({ id, lead, children }: { id: string; lead: string; children: ReactNode }) {
+  const ref = useReveal<HTMLDivElement>();
   return (
-    <section className="hero">
+    <div className="sec-head" ref={ref}>
+      <h2 id={id}>{children}</h2>
+      <p className="lead">{lead}</p>
+    </div>
+  );
+}
+
+function Hero({ open, missing }: { open: Sale | undefined; missing: boolean }) {
+  const [before, after] = HOME.title.split('showing');
+  return (
+    <section className="hero" id="example" aria-labelledby="hero-title">
+      <div className="hero-glow" aria-hidden="true" />
       <div className="wrap hero-in">
-        <div>
-          <p className="eyebrow">{HOME.eyebrow}</p>
-          <h1 className="display">{HOME.title}</h1>
-          <p className="lead">{HOME.lead}</p>
-          <ol className="steps3">
-            {HOME.steps.map((s, i) => (
-              <li key={s}>
-                <span className="n mono">{`0${i + 1}`}</span>
-                <span>{s}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="hero-caveat small">
-            {HOME.heroCaveat}{' '}
-            <a href="#/trust">
-              {HOME.heroWhy}
-              <span aria-hidden="true">{'\u00a0→'}</span>
+        <NetworkBadge missing={missing} />
+        <h1 className="display" id="hero-title">
+          {before}
+          <span className="seal-word">showing</span>
+          {after}
+        </h1>
+        <p className="lead">{HOME.sentence}</p>
+        <div className="hero-cta">
+          {open ? (
+            <a className="btn primary" href={`#/bid/${open.id}`}>
+              {HOME.ctaBid}
             </a>
-          </p>
-          <div className="hero-cta">
-            <a className="btn primary" href="#/?at=how" onClick={onSectionLinkClick}>
-              Follow one sale <span aria-hidden="true">↓</span>
+          ) : missing ? (
+            // No sales to see yet: the button goes where something already works.
+            <a className="btn primary" href="#/try">
+              {HOME.ctaTry}
             </a>
-            <a className="arrow-link" href="#/?at=try" onClick={onSectionLinkClick}>
-              Judging? The 60-second path <span aria-hidden="true">↓</span>
+          ) : (
+            <a className="btn primary" href="#/?at=live" onClick={onSectionLinkClick}>
+              {HOME.ctaSales}
             </a>
-          </div>
-          {sales.length > 0 ? (
-            // The real sales, one line, above the fold: the worked example below is illustrated, these are read from the chain.
-            <p className="hero-live small">
-              <span className="dot live" aria-hidden="true" />
-              <span>
-                <strong>{`Live on NEAR ${config.network}:`}</strong> {sales.map((s) => heroSalePhrase(s, nowNs)).join(' · ')}.{' '}
-                <a href="#/?at=live" onClick={onSectionLinkClick}>
-                  See {sales.length === 1 ? 'it' : 'both'}
-                  <span aria-hidden="true">{'\u00a0↓'}</span>
-                </a>
-              </span>
-            </p>
-          ) : null}
-          <p className="status-line small">
-            <span className="dot" aria-hidden="true" />
-            <span>
-              <strong>{status.label}</strong> · {status.text}
-            </span>
-          </p>
+          )}
         </div>
-        <aside className="card cast" aria-label="The people in the story">
-          <p className="cast-line small">{HOME.castLine}</p>
-          <p className="eyebrow cast-head">In this example</p>
-          {HOME.cast.map((p) => (
-            <div key={p.name} className="person">
-              <span className={p.tag === 'Seller' ? 'av seller' : 'av'} aria-hidden="true">
-                {p.initial}
-              </span>
-              <div>
-                <span className="who">{p.name}</span>
-                <span className="chip">{p.tag}</span>
-                <p>{p.line}</p>
-              </div>
-            </div>
-          ))}
-          <div className="peek">
-            <p className="eyebrow">What Sam sees of Bea&apos;s bid</p>
-            <dl className="kv-rows">
-              <dt>Deposit</dt>
-              <dd className="mono">5.00 USDC</dd>
-              <dt>Price</dt>
-              <dd>
-                <span className="sealed">sealed</span>
-              </dd>
-              <dt>Amount</dt>
-              <dd>
-                <span className="sealed">sealed</span>
-              </dd>
-            </dl>
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
-
-function Meter({ label, value, pct, ok = false }: { label: string; value: string; pct: number; ok?: boolean }) {
-  return (
-    <div className="cond">
-      <div className="cond-label small">
-        <span>{label}</span>
-        <span className="mono">{value}</span>
-      </div>
-      <div className={ok ? 'bar met' : 'bar'} aria-hidden="true">
-        <span style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-/** The drawn part of each chapter: a fragment of what the app shows at that point of the story. */
-const FRAGMENTS = [
-  <div className="frag" key="1">
-    <div className="frag-head">
-      <span className="frag-title">Sale #1 · 3 NEAR</span>
-      <span className="pill accent">Taking bids</span>
-    </div>
-    <dl className="kv-rows">
-      <dt>Minimum price</dt>
-      <dd className="mono">3.00 USDC / NEAR</dd>
-    </dl>
-    <Meter label="Deposits" value="0 USDC · 5 needed" pct={0} />
-    <Meter label="Bidders" value="0 · 3 needed" pct={0} />
-  </div>,
-  <div className="cmp" key="2">
-    <div className="h">In a public sale</div>
-    <div className="h">In Tender</div>
-    <div className="dim">
-      Sam sees Bea&apos;s price: <span className="mono">3.90</span>
-    </div>
-    <div>
-      Sam sees Bea&apos;s deposit: <span className="mono">5 USDC</span>
-    </div>
-    <div className="dim">He copies Bea, or snipes at the end</div>
-    <div>
-      He bids his own value: <span className="mono">3.20</span>
-    </div>
-  </div>,
-  <div className="frag" key="3">
-    <div className="frag-head">
-      <span className="frag-title">Sale #1 · closed</span>
-      <span className="pill ok">Conditions met</span>
-    </div>
-    <Meter label="Deposits" value="21 USDC · 5 needed" pct={100} ok />
-    <Meter label="Bidders" value="6 · 3 needed" pct={100} ok />
-    <dl className="kv-rows" style={{ marginTop: 12 }}>
-      <dt>Key requested</dt>
-      <dd className="mono">1 time</dd>
-      <dt>Key</dt>
-      <dd>released, public</dd>
-    </dl>
-  </div>,
-  <div className="frag" key="4">
-    <div className="frag-head">
-      <span className="frag-title">Every winner pays</span>
-      <span className="price-big mono">3.60</span>
-    </div>
-    <table className="mini-table">
-      <thead>
-        <tr>
-          <th>Bidder</th>
-          <th className="r">Bid</th>
-          <th className="r">Gets</th>
-          <th className="r">Back</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Bea</td>
-          <td className="r mono">3.90</td>
-          <td className="r mono">1.11 NEAR</td>
-          <td className="r mono">1.00</td>
-        </tr>
-        <tr>
-          <td>Sam</td>
-          <td className="r mono">3.20</td>
-          <td className="r mono">0</td>
-          <td className="r mono">3.00</td>
-        </tr>
-        <tr>
-          <td className="muted" colSpan={4}>
-            4 more bids
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <dl className="kv-rows" style={{ marginTop: 8 }}>
-      <dt>Priya receives</dt>
-      <dd className="mono">about 10.80 USDC</dd>
-    </dl>
-  </div>,
-];
-
-function HowItWorks() {
-  return (
-    <section className="sec" id="how" aria-labelledby="how-title">
-      <div className="wrap">
-        <div className="sec-head">
-          <p className="eyebrow">01 · How it works</p>
-          <h2 id="how-title">
-            {HOME.howTitle} <span className="hl">{HOME.howAccent}</span>
-          </h2>
-          <p className="lead">{HOME.howLead}</p>
-        </div>
-        <div className="chapters">
-          {HOME.chapters.map((c, i) => (
-            <article key={c.title} className="card chapter">
-              <div className="txt">
-                <p className="eyebrow">{c.eyebrow}</p>
-                <h3>{c.title}</h3>
-                <p>
-                  <Rich text={c.text} />
-                </p>
-                {'aside' in c ? (
-                  <p className="chapter-aside">
-                    <em>{c.aside}</em>
-                  </p>
-                ) : null}
-              </div>
-              <div className="vis">{FRAGMENTS[i]}</div>
-            </article>
-          ))}
-        </div>
-        <p className="footnote">
-          <Rich text={HOME.storyNote} />
+        <ExampleSale />
+        <p className="hero-caveat small">
+          {HOME.heroCaveat}{' '}
+          <a href="#/trust">
+            {HOME.heroWhy}
+            <span aria-hidden="true">{' →'}</span>
+          </a>
         </p>
       </div>
     </section>
   );
 }
 
-function TrustBand() {
+function Tile({ className, title, line, visual, children }: { className: string; title: string; line?: string; visual: ReactNode; children?: ReactNode }) {
+  const ref = useReveal<HTMLElement>();
   return (
-    <section className="sec band" id="trust" aria-labelledby="trust-title">
+    <article className={`tile ${className}`} ref={ref}>
+      <div className="vis">{visual}</div>
+      <div className="txt">
+        <h3>{title}</h3>
+        {line ? <p>{line}</p> : null}
+        {children}
+      </div>
+    </article>
+  );
+}
+
+const Lock = () => (
+  <svg className="lock" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <rect x="3" y="7" width="10" height="7" rx="2" fill="currentColor" />
+    <path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
+
+/** Tile 3: two public meters reach their thresholds, then the mark turns to "key requested". No numbers: it is a diagram. */
+function GateVisual() {
+  const [ref, done] = useDoneOnView<HTMLDivElement>(900);
+  return (
+    <div className={done ? 'gate met' : 'gate'} ref={ref}>
+      {['Deposits', 'Bidders'].map((m) => (
+        <div className="meter" key={m}>
+          <span className="meter-l">{m}</span>
+          <span className="meter-bar" aria-hidden="true">
+            <span />
+            <i className="tick" />
+          </span>
+        </div>
+      ))}
+      <StatusMark status={done ? 'done' : 'pending'} label={done ? 'key requested' : undefined} size={18} fontSize={13} />
+    </div>
+  );
+}
+
+/** Tile 4: the hero example's three bids by price; the two at or above 3.60 buy the supply, the dashed line is that one price. */
+function PriceVisual() {
+  const [ref, done] = useDoneOnView<HTMLDivElement>(200);
+  const bars = HERO_EXAMPLE.bids.map((b) => Number(b.price)).sort((x, y) => y - x);
+  const h = (p: number) => Math.round((p - 2.9) * 75);
+  const lineY = 100 - h(Number(HERO_EXAMPLE.clearing));
+  return (
+    <div className={done ? 'clearing in' : 'clearing'} ref={ref}>
+      <svg viewBox="0 0 280 110" aria-hidden="true">
+        {bars.map((p, i) => (
+          <rect key={i} x={22 + i * 84} y={100 - h(p)} width="68" height={h(p)} rx="5" className={p >= Number(HERO_EXAMPLE.clearing) ? 'sold' : 'unsold'} />
+        ))}
+        <line className="pline" x1="0" x2="280" y1={lineY} y2={lineY} />
+      </svg>
+      {/* The example's price, static and tagged: a moving number on this page is always one read from the chain. */}
+      <span className="big mono">
+        {HERO_EXAMPLE.clearing}
+        <span className="tag">example</span>
+      </span>
+    </div>
+  );
+}
+
+function Bento() {
+  const t = HOME.bento;
+  return (
+    <section className="sec" id="how" aria-labelledby="how-title">
       <div className="wrap">
-        <div className="sec-head">
-          <p className="eyebrow">03 · Who can see your bid</p>
-          <h2 id="trust-title">
-            {HOME.trustTitle} <span className="hl">{HOME.trustAccent}</span>
-          </h2>
-          <p className="lead">{HOME.trustLead}</p>
-        </div>
-        <div className="trust-grid">
-          <RoleList phoneShort />
-          <div>
-            <p className="eyebrow">Public from the start</p>
-            <PublicList />
-            <p className="small band-muted">{HOME.publicNote}</p>
-          </div>
-        </div>
-        <div className="limits">
-          <div>
-            <p className="eyebrow band-warn">Limits</p>
-            <h3>The honest limits.</h3>
-            <TopLimits />
-          </div>
-          <div>
-            <a className="btn ghost" href="#/trust">
-              Full trust table and all 11 limits →
-            </a>
-            <p className="check small">
-              <Rich text={HOME.checkLine} />{' '}
-              <a href="#/keys">
-                Key ledger<span aria-hidden="true">{'\u00a0→'}</span>
+        <SecHead id="how-title" lead={HOME.howLead}>
+          {HOME.howTitle}
+        </SecHead>
+        <div className="bento">
+          <Tile
+            className="t-seal"
+            title={t.seal.title}
+            line={t.seal.line}
+            visual={
+              <div className="mini">
+                <span className="row lit">
+                  <span>Deposit</span>
+                  <span className="v mono">5.00</span>
+                </span>
+                <span className="row">
+                  <span>Price</span>
+                  <span className="v mono">
+                    <Lock />
+                    <DecryptedText text="" revealed={false} sealedLength={4} sealedLabel="sealed" />
+                  </span>
+                </span>
+              </div>
+            }
+          />
+          <Tile
+            className="t-chains"
+            title={t.chains.title}
+            line={config.network === 'testnet' ? t.chains.testnet : t.chains.line}
+            visual={
+              <span className="chains" role="img" aria-label="Base, Arbitrum, Solana or NEAR, into USDC">
+                {['base', 'arb', 'sol', 'near'].map((c) => (
+                  <ChainGlyph key={c} chain={c} />
+                ))}
+                <span className="arrow" aria-hidden="true">
+                  →
+                </span>
+                <span className="usdc" aria-hidden="true">
+                  $
+                </span>
+              </span>
+            }
+          />
+          <Tile className="t-gate" title={t.gate.title} line={t.gate.line} visual={<GateVisual />}>
+            <details className="fold tile-pop" onKeyDown={popoverHandlers.onKeyDown}>
+              <summary>Exact rule</summary>
+              <p className="small">{OPEN_RULE}</p>
+            </details>
+          </Tile>
+          <Tile className="t-price" title={t.price.title} line={t.price.line} visual={<PriceVisual />} />
+          <Tile className="t-roles wide" title={t.roles.title} visual={<EyeGrid />}>
+            <details className="fold tile-pop" onKeyDown={popoverHandlers.onKeyDown}>
+              <summary>Why each one</summary>
+              <RoleList phoneShort />
+            </details>
+            <p className="small tile-link">
+              <a href="#/trust">
+                All 11 limits<span aria-hidden="true">{' →'}</span>
               </a>
             </p>
-          </div>
+          </Tile>
         </div>
       </div>
     </section>
   );
 }
 
-/** What to expect on the sale page, said before the visitor presses Decrypt there. */
-function pathCheckNote(c: OpenCheck): string {
-  if (c.opened === c.total) return `Expect all ${c.total} to open.`;
-  const ids = (xs: number[]) => xs.map((i) => `#${i}`).join(', ');
-  const parts = [`Expect ${c.opened} of ${c.total} to open.`];
-  if (c.lastLook.length > 0) parts.push(`${c.lastLook.length === 1 ? 'Bid' : 'Bids'} ${ids(c.lastLook)} ${c.lastLook.length === 1 ? 'was' : 'were'} revealed from the owner's own copy after the key was out, so ${c.lastLook.length === 1 ? 'its sealed copy does' : 'their sealed copies do'} not open: the last-look case in our limits.`);
-  if (c.closed.length > 0) parts.push(`${c.closed.length === 1 ? 'Bid' : 'Bids'} ${ids(c.closed)} ${c.closed.length === 1 ? 'does' : 'do'} not open and ${c.closed.length === 1 ? 'was' : 'were'} not revealed.`);
-  return parts.join(' ');
-}
-
-function PathRows({ bundles, nowNs, checks }: { bundles: SaleBundle[] | null; nowNs: bigint; checks: Record<string, OpenCheck> }) {
-  const sales = (bundles ?? []).flatMap((b) => (b.sale ? [b.sale] : []));
-  const open = sales.find((s) => s.state === 'Open' && nowNs < s.closeNs);
+/** Section 03: three ways to check it in a minute; each button appears only when there is something behind it. */
+function TryBand({ sales, open }: { sales: Sale[]; open: Sale | undefined }) {
+  const ref = useReveal<HTMLDivElement>();
   const opened = sales.find((s) => s.state === 'Keyed' || s.state === 'Finalized');
-  // "Never asked for" is only true of a Cancelled sale with no key request.
-  const cancelled = sales.find((s) => s.state === 'Cancelled' && s.keyRequests === 0);
-  const check = opened ? checks[opened.id] : undefined;
-  const rows: { title: string; text: string; href: string; button: string; primary?: boolean; more?: { href: string; label: string } }[] = [
-    {
-      title: 'Sign a bid with your own wallet.',
-      text: `MetaMask, Phantom or a NEAR wallet signs the same message a real bid uses. ${NEAR_INTENTS}, the NEAR contract that holds balances your own wallet controls, checks the signature and stops there: free, nothing is sent.`,
-      href: '#/try',
-      button: 'Try signing (free)',
-      primary: true,
-    },
-    ...(opened
-      ? [
-          {
-            title: `Open the bids of Sale #${opened.id} yourself.`,
-            text: `Its key is public. Press "Decrypt all bids in this browser": your browser opens the bids, checks each against what its bidder stored, and recomputes the price.${check ? ` ${pathCheckNote(check)}` : ''}`,
-            href: `#/sale/${opened.id}`,
-            button: `Open Sale #${opened.id}`,
-            more: check && check.lastLook.length > 0 ? { href: '#/trust', label: 'Read the last-look limit' } : undefined,
-          },
-        ]
-      : []),
-    ...(cancelled
-      ? [
-          {
-            title: 'See the sale that never opened.',
-            text: 'Same rules, but it missed its public conditions, so its key was never asked for. Every bid was refunded.',
-            href: `#/sale/${cancelled.id}`,
-            button: `Open Sale #${cancelled.id}`,
-          },
-        ]
-      : []),
-    ...(open
-      ? [
-          {
-            title: 'Bid on an open sale.',
-            text: `Seal a price, put down a deposit of 1 USDC or more from your own chain, sign once. ${config.network === 'testnet' ? 'Test tokens only.' : 'This moves real USDC.'}`,
-            href: `#/bid/${open.id}`,
-            button: 'Place a sealed bid',
-          },
-        ]
-      : []),
-    // The ledger has something to show only once a key was asked for.
-    ...(sales.some((s) => s.keyRequests > 0)
-      ? [
-          {
-            title: 'Count the key requests.',
-            text: 'One line for every time the contract asked for a sale key, written on chain before the request. A sale with no line: the contract never asked for its key. Each line links to the NearBlocks explorer.',
-            href: '#/keys',
-            button: 'Key ledger',
-          },
-        ]
-      : []),
-  ];
   return (
     <section className="sec" id="try" aria-labelledby="try-title">
       <div className="wrap">
-        <div className="sec-head">
-          <p className="eyebrow">04 · The 60-second path</p>
+        <div className="cta" ref={ref}>
           <h2 id="try-title">{HOME.tryTitle}</h2>
-          <p className="lead">{HOME.tryLead}</p>
-        </div>
-        <ol className="path">
-          {rows.map((r, i) => (
-            <li key={r.title}>
-              <span className="path-time mono">{String(i + 1).padStart(2, '0')}</span>
-              <div>
-                <strong>{r.title}</strong>
-                <p>{r.text}</p>
-                {r.more ? (
-                  <p className="small">
-                    <a href={r.more.href}>
-                      {r.more.label}
-                      <span aria-hidden="true">{' →'}</span>
-                    </a>
-                  </p>
-                ) : null}
-              </div>
-              <a className={r.primary ? 'btn primary' : 'btn'} href={r.href}>
-                {r.button}
-              </a>
-            </li>
-          ))}
-        </ol>
-        <div className="path-foot small">
-          <span className="path-foot-head">For developers, on your own machine:</span>
-          <ul className="cmd-list" aria-label="Commands">
-            <li>
-              <code>pnpm demo:local</code>
-            </li>
-            <li>
-              <code>pnpm verify --keys</code>
-            </li>
-            <li>
-              <code>pnpm seal:bid</code>
-            </li>
-          </ul>
-          {config.repoUrl ? (
-            <a href={`${config.repoUrl}#try-it-free-no-wallet`} target="_blank" rel="noreferrer">
-              Every step, in the README<span aria-hidden="true">{' →'}</span>
+          <div className="hero-cta">
+            <a className="btn primary" href="#/try">
+              {HOME.ctaTry}
             </a>
-          ) : (
-            <span className="muted">Every step is in the README of the source code, section &quot;Try it (free, no wallet)&quot;.</span>
-          )}
+            {open ? (
+              <a className="btn" href={`#/bid/${open.id}`}>
+                Bid on an open sale
+              </a>
+            ) : opened ? (
+              <a className="btn" href={`#/sale/${opened.id}`}>
+                {`Open sale #${opened.id}'s bids`}
+              </a>
+            ) : null}
+            {/* The ledger has something to show only once a key was asked for. */}
+            {sales.some((s) => s.keyRequests > 0) ? (
+              <a className="btn" href="#/keys">
+                Count the key requests
+              </a>
+            ) : null}
+          </div>
         </div>
       </div>
     </section>

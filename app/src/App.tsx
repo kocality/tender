@@ -29,15 +29,15 @@ export function App() {
       document.querySelector<HTMLElement>('main')?.focus({ preventScroll: true });
     }
   }, [href]);
-  // `#/?at=live` names a section of the home page (a `#live` fragment would be read as a route).
-  const at = route.path === '/' ? (route.query.get('at') ?? '') : '';
+  // `#/?at=live` names a section of the home page, `#/trust?at=check` one of the trust page (a `#live` fragment would be read as a route).
+  const at = route.path === '/' || route.path === '/trust' ? (route.query.get('at') ?? '') : '';
   let page;
   switch (route.path) {
     case '/':
       page = <Home at={at} />;
       break;
     case '/trust':
-      page = <Trust />;
+      page = <Trust at={at} />;
       break;
     case '/sale/:id':
       page = isSaleId(route.params.id) ? <Sale id={route.params.id} /> : <NotFound what="sale" />;
@@ -57,5 +57,5 @@ export function App() {
     default:
       page = <NotFound />;
   }
-  return <Layout current={at ? `at:${at}` : route.path}>{page}</Layout>;
+  return <Layout current={route.path === '/' && at ? `at:${at}` : route.path}>{page}</Layout>;
 }

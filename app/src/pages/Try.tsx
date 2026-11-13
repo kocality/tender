@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { payloadString, simulateIntents, type MultiPayload } from '@tender/intents';
+import { ChainGlyph } from '../components/ChainGlyph';
 import { CopyButton } from '../components/CopyButton';
+import { NetworkBadge } from '../components/NetworkBadge';
 import { config } from '../config';
-import { NEAR_INTENTS } from '../copy';
+import { HOME, NEAR_INTENTS } from '../copy';
+import { useContractMissing } from '../lib/contractStatus';
 import { buildTryBid, liveQuoteToken } from '../lib/bidPayload';
 import { useChainOffset } from '../lib/chainClock';
 import { interpretSimulation, type TryOutcome } from '../lib/tryResult';
@@ -30,6 +33,8 @@ export function Try() {
   const [evmOrigin, setEvmOrigin] = useState<'base' | 'arb'>('base');
   const [nearLoading, setNearLoading] = useState(true);
   const [nearUnavailable, setNearUnavailable] = useState(false);
+  // The wallet-free check needs a sale to open: shown once the contract has answered on this network.
+  const contractLive = useContractMissing() === false;
 
   useEffect(() => {
     let alive = true;
@@ -75,17 +80,9 @@ export function Try() {
   return (
     <div className="wrap page">
       <header className="page-head">
-        <p className="eyebrow">Free · nothing is sent</p>
+        <NetworkBadge />
         <h1>Try signing (free)</h1>
-        <p className="lead">
-          Sign the same message a real bid uses, with your own wallet. {NEAR_INTENTS}, the NEAR contract that holds balances your own wallet controls and checks
-          every signature, checks it and stops there: no deposit, no funds move.
-        </p>
-        <p className="note info">
-          <strong>This proves your wallet can place a real Tender bid, without spending anything.</strong> Success reads{' '}
-          <span className="mono">signature valid · insufficient balance</span>: {NEAR_INTENTS} accepted your signature as a real bid, then stopped because the account
-          holds no USDC there.
-        </p>
+        <p className="lead">Sign the message a real bid uses; nothing is sent, and “insufficient balance” means it worked.</p>
       </header>
       <div className="grid-3">
         <WalletCard
@@ -93,6 +90,7 @@ export function Try() {
           standard="erc191"
           state={cards.evm}
           onRun={() => run('evm')}
+          install={['MetaMask', 'https://metamask.io/download/']}
           extra={
             <label className="small origin-select">
               Funds would come from{' '}
@@ -103,7 +101,7 @@ export function Try() {
             </label>
           }
         />
-        <WalletCard title="Phantom" standard="raw_ed25519" state={cards.phantom} onRun={() => run('phantom')} />
+        <WalletCard title="Phantom" standard="raw_ed25519" state={cards.phantom} onRun={() => run('phantom')} install={['Phantom', 'https://phantom.com/download']} />
         <WalletCard
           title="NEAR wallet"
           standard="nep413"
@@ -113,40 +111,56 @@ export function Try() {
           buttonLabel={nearLoading ? 'Loading wallets…' : nearUnavailable ? 'NEAR wallets unavailable' : undefined}
         />
       </div>
-      <ol className="proves">
-        <li>
-          <span className="n mono">01</span>
-          <strong>Your own wallet, on your own chain.</strong>
-          <span className="muted small">A wallet on Base, Arbitrum, Solana or NEAR signs a Tender bid directly.</span>
-        </li>
-        <li>
-          <span className="n mono">02</span>
-          <strong>Checked by the {NEAR_INTENTS} contract, not by our server.</strong>
-          <span className="muted small">The check is a view call to that contract on NEAR; our server is not involved.</span>
-        </li>
-        <li>
-          <span className="n mono">03</span>
-          <strong>Not shown here: sealing.</strong>
-          <span className="muted small">
-            A real bid is sealed in the page before it is signed (developers can seal on their own machine with <code>pnpm seal:bid</code>). Here the sealed part
-            is random.
-          </span>
-        </li>
-      </ol>
-      <details className="fold tech">
-        <summary>Technical details</summary>
-        <ul className="small check-list">
+      {contractLive ? (
+        <p className="try-nowallet">
+          <a href={`#/sale/${config.twinSales[0]}`}>
+            {HOME.tryNoWallet}
+            <span aria-hidden="true">{' →'}</span>
+          </a>
+        </p>
+      ) : null}
+      <details className="fold proves-fold">
+        <summary>What this proves</summary>
+        <p className="note info">
+          <strong>This proves your wallet can place a real Tender bid, without spending anything.</strong> Success reads{' '}
+          <span className="mono">signature valid · insufficient balance</span>: {NEAR_INTENTS}, the NEAR contract that holds balances your own wallet controls
+          and checks every signature, accepted your signature as a real bid, then stopped because the account holds no USDC there.
+        </p>
+        <ol className="proves">
           <li>
-            The check is a view call, <code>simulate_intents</code>, to <code>{config.intentsContractId}</code>. Nothing is sent to any relayer.
+            <span className="n mono">01</span>
+            <strong>Your own wallet, on your own chain.</strong>
+            <span className="muted small">A wallet on Base, Arbitrum, Solana or NEAR signs a Tender bid directly.</span>
           </li>
           <li>
-            The bid is addressed to <span className="mono">{config.tryReceiver}</span>; its sealed part is random, and its sale id does not exist.
+            <span className="n mono">02</span>
+            <strong>Checked by the {NEAR_INTENTS} contract, not by our server.</strong>
+            <span className="muted small">The check is a view call to that contract on NEAR; our server is not involved.</span>
           </li>
           <li>
-            Signature standards: MetaMask signs <code>erc191</code>, Phantom <code>raw_ed25519</code>, a NEAR wallet <code>nep413</code>. The chain you pick for
-            MetaMask is declared by you, not proven.
+            <span className="n mono">03</span>
+            <strong>Not shown here: sealing.</strong>
+            <span className="muted small">
+              A real bid is sealed in the page before it is signed (developers can seal on their own machine with <code>pnpm seal:bid</code>). Here the sealed part
+              is random.
+            </span>
           </li>
-        </ul>
+        </ol>
+        <details className="fold tech">
+          <summary>Technical details</summary>
+          <ul className="small check-list">
+            <li>
+              The check is a view call, <code>simulate_intents</code>, to <code>{config.intentsContractId}</code>. Nothing is sent to any relayer.
+            </li>
+            <li>
+              The bid is addressed to <span className="mono">{config.tryReceiver}</span>; its sealed part is random, and its sale id does not exist.
+            </li>
+            <li>
+              Signature standards: MetaMask signs <code>erc191</code>, Phantom <code>raw_ed25519</code>, a NEAR wallet <code>nep413</code>. The chain you pick for
+              MetaMask is declared by you, not proven.
+            </li>
+          </ul>
+        </details>
       </details>
     </div>
   );
@@ -160,6 +174,7 @@ function WalletCard({
   extra,
   disabled,
   buttonLabel,
+  install,
 }: {
   title: string;
   standard: string;
@@ -168,12 +183,19 @@ function WalletCard({
   extra?: ReactNode;
   disabled?: boolean;
   buttonLabel?: string;
+  /** [wallet name, its download page]: offered when the wallet is not installed in this browser. */
+  install?: [string, string];
 }) {
   const { outcome } = state;
   const headId = `try-${standard}`;
   return (
     <section className="card pad wallet-card" aria-label={title}>
       <div className="row">
+        <span className="wallet-chains" aria-hidden="true">
+          {(standard === 'erc191' ? ['base', 'arb'] : standard === 'raw_ed25519' ? ['sol'] : ['near']).map((c) => (
+            <ChainGlyph key={c} chain={c} />
+          ))}
+        </span>
         <h2 className="sub" id={headId} style={{ margin: 0 }}>
           {title}
         </h2>
@@ -197,6 +219,15 @@ function WalletCard({
       {state.error ? (
         <p className="result bad" role="alert">
           {state.error}
+          {install && /not found|Install/.test(state.error) ? (
+            <>
+              {' '}
+              <a href={install[1]} target="_blank" rel="noreferrer">
+                {`Get ${install[0]}`}
+                <span aria-hidden="true">{' →'}</span>
+              </a>
+            </>
+          ) : null}
         </p>
       ) : null}
       {state.signed && state.signedString ? (

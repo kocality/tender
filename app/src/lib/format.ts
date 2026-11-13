@@ -10,6 +10,15 @@ export function formatUnits(value: bigint, decimals: number): string {
   return `${neg ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
 }
 
+/** For display at size: 1800001n, 6 → "1.80" (half up, `dp` places, never more than the token has); the exact value goes in a title. */
+export function formatRounded(value: bigint, decimals: number, dp = 2): string {
+  if (decimals <= dp || value < 0n) return formatUnits(value, decimals);
+  const step = 10n ** BigInt(decimals - dp);
+  const r = (value + step / 2n) / step;
+  const base = 10n ** BigInt(dp);
+  return `${r / base}.${(r % base).toString().padStart(dp, '0')}`;
+}
+
 export function formatUsdc(value: bigint): string {
   return formatUnits(value, USDC_DECIMALS);
 }

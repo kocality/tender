@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { mtBatchBalanceOf, simulateIntents, type MultiPayload } from '@tender/intents';
 import { AmountField } from '../components/AmountField';
 import { CopyButton } from '../components/CopyButton';
+import { NetworkBadge } from '../components/NetworkBadge';
 import { TxLink } from '../components/TxLink';
 import { WalletPicker } from '../components/WalletPicker';
 import { config } from '../config';
@@ -277,16 +278,17 @@ export function Withdraw() {
   return (
     <div className="wrap page narrow">
       <header className="page-head">
-        <p className="eyebrow">After a sale</p>
+        <NetworkBadge />
         <h1>Withdraw to chain</h1>
-        <p className="lead">
-          Got a refund or tokens from a sale? They wait in your {NEAR_INTENTS} account, a balance on NEAR that your own wallet controls.{' '}
-          {WITHDRAW_TESTNET ?? 'This page sends them back to your wallet on Base, Arbitrum or Solana.'}
-        </p>
-        <p className="small muted">You only need it after a sale. If you never bid, there is nothing to withdraw.</p>
+        {/* On testnet the lead itself says funds cannot leave for another chain (1Click is mainnet only). */}
+        <p className="lead">{WITHDRAW_TESTNET ?? `Refunds and tokens from a sale wait in your ${NEAR_INTENTS} account.`}</p>
       </header>
       <details className="fold tech page-intro-tech">
         <summary>How it works</summary>
+        <p className="small">
+          {WITHDRAW_TESTNET ? `Refunds and tokens from a sale wait in your ${NEAR_INTENTS} account, a balance on NEAR that your own wallet controls.` : `Your ${NEAR_INTENTS} account is a balance on NEAR that your own wallet controls. This page sends them back to your wallet on Base, Arbitrum or Solana.`}{' '}
+          You only need it after a sale. If you never bid, there is nothing to withdraw.
+        </p>
         <p className="small">
           {WITHDRAW_TESTNET ? 'On mainnet it moves' : 'It moves'} tokens from your {NEAR_INTENTS} account to another chain through 1Click. You sign one Intents transfer to the quote&apos;s deposit address; the
           relayer only pays gas and cannot change it. Each token needs its own quote and signature.
