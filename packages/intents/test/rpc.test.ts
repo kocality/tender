@@ -51,6 +51,29 @@ describe('rpcCall', () => {
     expect(Date.now() - t0).toBeLessThan(500);
   });
 
+  test('a fetch TypeError (a browser sees a 429 without CORS headers this way) goes to the next URL at once', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === 'http://one.invalid') throw new TypeError('Failed to fetch');
+      return Response.json({ jsonrpc: '2.0', id: 'tender', result: { header: { timestamp_nanosec: '8' } } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const t0 = Date.now();
+    expect(await blockTimestampNs(['http://one.invalid', 'http://two.invalid'])).toBe(8n); // default 1/2/4 s backoff
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['http://one.invalid', 'http://two.invalid']);
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
+  test('a fetch TypeError on the last URL is still retried', async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async () => {
+      if (n++ === 0) throw new TypeError('Failed to fetch');
+      return Response.json({ jsonrpc: '2.0', id: 'tender', result: { header: { timestamp_nanosec: '9' } } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await blockTimestampNs(['http://one.invalid'], { backoffMs: [0, 0] })).toBe(9n);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test('429 on every URL ends with the 429 error after one call each', async () => {
     const fetchMock = vi.fn(async () => new Response('Rate limits exceeded', { status: 429 }));
     vi.stubGlobal('fetch', fetchMock);

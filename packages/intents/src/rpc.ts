@@ -47,7 +47,8 @@ interface RpcResponse {
 
 /**
  * JSON-RPC call with the V2 policy: each URL up to 3 attempts (1/2/4 s backoff), then the next URL; an HTTP 429 moves on to
- * the next URL at once. An answer the node gave about the request itself (contract panic, missing account) is thrown at once.
+ * the next URL at once, and so does a fetch TypeError while another URL is left (a browser reports a 429 sent without
+ * CORS headers that way, so retrying the same URL only waits). An answer the node gave about the request itself (contract panic, missing account) is thrown at once.
  */
 async function rpcCall(rpcUrls: string[], method: string, params: unknown, opts?: RpcOptions): Promise<unknown> {
   if (rpcUrls.length === 0) throw new Error('no RPC URL given');
@@ -83,6 +84,7 @@ async function rpcCall(rpcUrls: string[], method: string, params: unknown, opts?
       } catch (e) {
         if (e instanceof ViewPanic || e instanceof RpcAnswer) throw e;
         lastError = e;
+        if (e instanceof TypeError && u < rpcUrls.length - 1) break;
         const last = u === rpcUrls.length - 1 && a === backoff.length - 1;
         if (!last) await sleep(wait);
       }
