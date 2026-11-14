@@ -6,66 +6,66 @@ The steps: [README › Try it](README.md#try-it-free-no-wallet).
 
 | Claim | Check | Code | Rows |
 |---|---|---|---|
-| The key is requested only if the public open conditions hold | step 11; check #21 `key-ledger` | `contract/src/lib.rs` `open` | T14, T15, M05, M13 |
+| The key is requested only if the public open conditions hold | steps 6 and 11; check #21 `key-ledger` | `contract/src/lib.rs` `open` | T14, T15, M05, M13 |
 | Only `v1.tenderseal.near` can get this key | steps 4-5; checks #4 `no-access-keys`, #5 `wasm-imports`, #8 `sale-identity` | `contract/src/seal.rs` | S6-ckd, T3, M01 |
 | The MPC key and live threshold are the ones [README › Trust and limits](README.md#trust-and-limits) cites | checks #1 `mpc-key`, #2 `mpc-network` | `cli/src/lib/verify-sale.ts` | |
 | Deployed wasm = repo wasm = source | steps 5 and 9; checks #3 `code-hash`, #6 `reproducible-build` | `contract/res/tender.wasm.sha256` | T3, M01 |
-| Bids are ciphertext before close | step 12; check #10 `key-after-close` | `packages/seal/src/ibe.ts` | S2, M07-M12 |
+| Bids are ciphertext before close | step 10; check #10 `key-after-close` | `packages/seal/src/ibe.ts` | S2, M07-M12 |
 | Each stored bid is decrypted and checked against its commitment | checks #12 `ciphertexts-decrypt`, #13 `plaintext-matches-commitment` | `contract/src/lib.rs` `reveal` | M15 |
-| One uniform, recomputable price | step 13; checks #15 `clearing-price` to #18 `uniform-price` | `contract/src/clearing.rs`, `packages/clearing` | M16 |
-| The penalty never goes to the seller's account ([rule](docs/protocol.md#clearing-and-penalty)) | step 15; check #17 `conservation` (and #16 `allocations`) | `contract/src/clearing.rs` | M31 |
-| A failed sale's key is never requested | step 14; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | T15, M05 |
+| One uniform, recomputable price | step 10; checks #15 `clearing-price` to #18 `uniform-price` | `contract/src/clearing.rs`, `packages/clearing` | M16 |
+| The penalty never goes to the seller's account ([rule](docs/protocol.md#clearing-and-penalty)) | step 10; check #17 `conservation` (and #16 `allocations`) | `contract/src/clearing.rs` | M16 (penalty pool 0: every bid was revealed) |
+| A failed sale's key is never requested | step 11; check #23 `cancelled-sealed` | `contract/src/lib.rs` `cancel` | T15, M05 |
 | A sale goes Keyed only with a key that passes the pairing check against the pinned MPC key | step 10; checks #11 `key-pairing`, #21 `key-ledger` | `contract/src/seal.rs`; sandbox `x12f01_changed_key_refunds_in_full` | T7, M13 |
 | One sealed bid is stored at most once per account in a sale, and of the copies our app, `pnpm seal:bid` or our bid script sign before close, intents.near runs at most one | step 10; checks #9 `bid-count`, #25 `archival-tx` | `contract/src/intents.rs`, `packages/intents/src/nonce.ts` | T10, T11 |
-| Bids from four chains with the bidder's own wallet | pending; testnet so far: row T2 | `packages/intents` | S5, M07-M12 |
+| Bids from four chains with the bidder's own wallet | rows M07-M12: MetaMask (Base, Arbitrum) and Phantom (Solana) in the hosted app, relayed with `execute_intents`; the NEAR bid signed with `bidder.tenderseal.near`'s own key (nep413) | `packages/intents` | S5, M07-M12 |
 | Payouts are sent and confirmed | check #20 `payouts` | `contract/src/lib.rs` `finalize` | M16, M17 |
 
 ## Chain record
 
-Raw RPC responses: `evidence/rpc/` (snapshot, not live). Machine-readable rows: `evidence/mainnet.json`, `evidence/spikes.json`, `evidence/testnet.json`.
+Raw RPC responses: `evidence/rpc/` (snapshot, not live); contract state at one block: `evidence/state/`; saved `pnpm verify` outputs: `evidence/verify/`. Machine-readable rows: `evidence/mainnet.json`, `evidence/spikes.json`, `evidence/testnet.json`.
 
 ### Mainnet: Tender
 
 | ID | Step | Expected | Tx |
 |---|---|---|---|
-| M01 | birth of `v1.tenderseal.near` | one transaction, no `AddKey`; code_hash = README step 5 | pending |
-| M02 | sale 0: create | [README › Demo sales](README.md#demo-sales) | pending |
-| M03 | sale 0: one 1 USDC bid | stored sealed | pending |
-| M04 | sale 0: `open` | panics: escrow below `min_escrow` | pending |
-| M05 | sale 0: `cancel` | `Cancelled`, `key_requests = 0` | pending |
-| M06 | sale 1: create | the sale in [README › The story](README.md#the-story) | pending |
-| M07 | sale 1: bid, origin base | stored sealed | pending |
-| M08 | sale 1: bid, origin sol | stored sealed | pending |
-| M09 | sale 1: bid, origin arb | stored sealed | pending |
-| M10 | sale 1: bid, origin near | stored sealed | pending |
-| M11 | sale 1: bid, origin sol | stored sealed | pending |
-| M12 | sale 1: bid, origin base | stored sealed | pending |
-| M13 | sale 1: `open` + `on_key` | key stored; key ledger entry `Ok` | pending |
-| M14 | sale 2: `open` before close | panics: before close | pending |
-| M15 | sale 1: `reveal` by the keeper | 6 bids `Revealed` | pending |
-| M16 | sale 1: `finalize` | the worked-example price | pending |
-| M17 | sale 1: second payout batch, if needed | payouts done | pending |
-| M18 | sale 2: create | JAMBO, size filled in once created | pending |
-| M19 | team account requests CKD with sale 2's path | gets the key of its own `app_id`, which does not decrypt sale 2 | pending |
-| M20 | sale 2: `open` | after close | pending (close time: README step 12) |
-| M21 | withdraw to Solana or Arbitrum through 1Click | arrives on the origin chain | pending |
-| M22 | sale 2: `finalize` | one price, payouts | pending (close time: README step 12) |
+| M01 | birth of `v1.tenderseal.near` | one transaction, no `AddKey`; code_hash = README step 5 | [9FQuPMpJ…](https://nearblocks.io/txns/9FQuPMpJFNYJgv7dm2yyWxaUmTT73U4c9TJ9xFqMXHs3) (init block 224564596) |
+| M02 | sale 0: create | [README › Demo sales](README.md#demo-sales) | [6BhEYs4m…](https://nearblocks.io/txns/6BhEYs4mPyLm7RkNuB5BY1aUcsfx8gRTK8iFvqLfsnjr) |
+| M03 | sale 0: one 1.5 USDC bid | stored sealed | [CFbtMaBf…](https://nearblocks.io/txns/CFbtMaBf8uZ8H7Nzy1ABqNDkaEMWqWiPd5VWzp47T3Zc) |
+| M04 | sale 0: `open` | panics: escrow below `min_escrow` | [8R92w5wm…](https://nearblocks.io/txns/8R92w5wmsoKn78jKoiC521BnS3bwEA8fo6eJvCty2DYQ) (expected failure: `open: escrow below min_escrow`) |
+| M05 | sale 0: `cancel` | `Cancelled`, `key_requests = 0` | [ESQi1anK…](https://nearblocks.io/txns/ESQi1anKX1L1NjUnY46fbLZhwUdc48AT82nb1Gbw7Hef) (payouts 2/2: the bid and the seller's 0.1 wNEAR back in full) |
+| M06 | sale 1: create | the sale in [README › The story](README.md#the-story) | [3nFEgSZY…](https://nearblocks.io/txns/3nFEgSZY2KAgnstvE2x8Q85srspHoqoobeDzEJ6XpgBW) |
+| M07 | sale 1: bid idx 0, origin near (`bidder.tenderseal.near`, nep413), escrow 3 USDC | stored sealed | [E8pxij7q…](https://nearblocks.io/txns/E8pxij7qfa7fffBwRffJ7WS1WJzqztD2Ho9aWcH3xu7w) |
+| M08 | sale 1: bid idx 1, origin base (MetaMask, erc191), escrow 5 USDC | stored sealed | [TWVwDtpS…](https://nearblocks.io/txns/TWVwDtpScJkUPuHjdijX3K4nnK79t2F61jbwNEAkPFB) |
+| M09 | sale 1: bid idx 2, origin arb (MetaMask, erc191), escrow 4 USDC | stored sealed | [4AeAntyF…](https://nearblocks.io/txns/4AeAntyFbUvNUc5SsXJuWEbdMQP54Tks5caZvnUrgfcL) |
+| M10 | sale 1: bid idx 3, origin base (MetaMask, erc191), escrow 2.5 USDC | stored sealed | [133qeErd…](https://nearblocks.io/txns/133qeErdhzD2LQExZmhTLvMdDXWgxLTSv5Xr21UoixtN) |
+| M11 | sale 1: bid idx 4, origin sol (Phantom, raw_ed25519), escrow 5 USDC | stored sealed | [BYxRXCY4…](https://nearblocks.io/txns/BYxRXCY43cnfTAabVVPQ1wfHhwRLQhPQHHxAXSrW3vmC) |
+| M12 | sale 1: bid idx 5, origin sol (Phantom, raw_ed25519), escrow 3.5 USDC | stored sealed | [GHs9KJ3T…](https://nearblocks.io/txns/GHs9KJ3Th9v3V2APo7qvcRDqXJgmzHiNj6QttaWBSb2v) |
+| M13 | sale 1: `open` + `on_key` | key stored; key ledger entry `Ok` | [C9qFFYvJ…](https://nearblocks.io/txns/C9qFFYvJZfbeEiam8FEwRXCcPS85bKPfH4o52uFQN9Ni) (from the hosted app; key at block 224574778, 9 blocks after the request) |
+| M14 | sale 2: `open` before close | panics: before close | not run on mainnet (sale 2 was not created) |
+| M15 | sale 1: `reveal`, from the hosted app (Reveal all) | 6 bids `Revealed` | [6PpwsgUp…](https://nearblocks.io/txns/6PpwsgUpjpfwFqjghqq3g5QYcEDbTNj7HS379DvRGhc2) |
+| M16 | sale 1: `finalize` | the worked-example price | [ENd8tTPH…](https://nearblocks.io/txns/ENd8tTPHDyJt3q8tcaEPCh46PSdUrczKyg1MkUfxnqta) (`Finalized`, P* 3.60, seller 10.800001 USDC, payouts 7/7) |
+| M17 | sale 1: second payout batch, if needed | payouts done | not needed: all 7 payouts confirmed in M16 |
+| M18 | sale 2: create | JAMBO, size filled in once created | not run on mainnet |
+| M19 | team account requests CKD with sale 2's path | gets the key of its own `app_id`, which does not decrypt sale 2 | not run on mainnet |
+| M20 | sale 2: `open` | after close | not run on mainnet |
+| M21 | withdraw to Base through 1Click (bid idx 3's refund, from the hosted app) | arrives on the origin chain | [62mYU3Nz…](https://nearblocks.io/txns/62mYU3NzzicfeLmnbtP9MXwhvcBCa1zyXbUC9zH2cBTV) → Base [0xf97ecb5b…](https://basescan.org/tx/0xf97ecb5b09ea0f632a3620ff9675f09653dbac2659a08498fa02aadeb380f40b) (2.576906 USDC; 1Click `SUCCESS`) |
+| M22 | sale 2: `finalize` | one price, payouts | not run on mainnet |
 
 ### Attack room
 
-Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (M14), CKD with another account (M19). Until mainnet, M25-M27 show their testnet analogue on the T1 copy, sale 3 (sale 2 for the late bid).
+Sale 3 was not run on mainnet; M25-M27 are the testnet analogue on the T1 copy, sale 3 (sale 2 for the late bid). On mainnet: `open` with failed conditions (M04).
 
 | ID | Attack | Expected | Tx |
 |---|---|---|---|
-| M23 | create sale 3 | — | pending |
-| M24 | honest bid | stored sealed, later `Revealed` | pending |
-| M25 | garbage ciphertext, never revealed | `Penalized` | pending; testnet: [HXqkCCQ3…](https://testnet.nearblocks.io/txns/HXqkCCQ3v3CdM1LCAvKGB7Q66kUTQt4jjMSAv8LngCUg) (stored sealed) |
-| M26 | copy someone else's ct + cm | `Penalized` ([why](docs/protocol.md#commitment)) | pending; testnet: [Ez7HkU22…](https://testnet.nearblocks.io/txns/Ez7HkU22sFNctkZY33hyByu58UnZ8H4PfKRfEQDt2T8A) (stored sealed) |
-| M27 | late bid | refunded by `mt_on_transfer` | pending; testnet: [A9gYi4MN…](https://testnet.nearblocks.io/txns/A9gYi4MNVMKj8u8wSy51rCeKyvWPnVq3jfnxr1rDy4Xo) (refunded, reason `closed`) |
-| M28 | `open` sale 3 | key stored | pending |
-| M29 | reveal with a wrong commitment | panics | pending |
-| M30 | `reveal` the honest bid | `Revealed` | pending |
-| M31 | `finalize` sale 3 | garbage and copy `Penalized` | pending |
+| M23 | create sale 3 | — | not run on mainnet |
+| M24 | honest bid | stored sealed, later `Revealed` | not run on mainnet |
+| M25 | garbage ciphertext, never revealed | `Penalized` | not run on mainnet; testnet: [HXqkCCQ3…](https://testnet.nearblocks.io/txns/HXqkCCQ3v3CdM1LCAvKGB7Q66kUTQt4jjMSAv8LngCUg) (stored sealed) |
+| M26 | copy someone else's ct + cm | `Penalized` ([why](docs/protocol.md#commitment)) | not run on mainnet; testnet: [Ez7HkU22…](https://testnet.nearblocks.io/txns/Ez7HkU22sFNctkZY33hyByu58UnZ8H4PfKRfEQDt2T8A) (stored sealed) |
+| M27 | late bid | refunded by `mt_on_transfer` | not run on mainnet; testnet: [A9gYi4MN…](https://testnet.nearblocks.io/txns/A9gYi4MNVMKj8u8wSy51rCeKyvWPnVq3jfnxr1rDy4Xo) (refunded, reason `closed`) |
+| M28 | `open` sale 3 | key stored | not run on mainnet |
+| M29 | reveal with a wrong commitment | panics | not run on mainnet |
+| M30 | `reveal` the honest bid | `Revealed` | not run on mainnet |
+| M31 | `finalize` sale 3 | garbage and copy `Penalized` | not run on mainnet |
 
 ### Mainnet: spikes (before the contract)
 
@@ -106,9 +106,9 @@ Sale 3. Also attacks: `open` with failed conditions (M04), `open` before close (
 
 | ID | What | Expected | State |
 |---|---|---|---|
-| P1 | hosted app URL | up at least until 2026-11-18 | [tender-sealed.vercel.app](https://tender-sealed.vercel.app), a testnet build: contract `rc3.tender-c201d6.testnet` with the twin, sales 1 and 2 (rows T13-T15); NEAR Intents is our copy `intents-09bdfe.testnet`; bids go through the relayer [tender-sealed-relay.vercel.app](https://tender-sealed-relay.vercel.app/relay) (row T12). Team-funded demo: test tokens only, the team is the seller and the bidders. 1Click runs on mainnet only, so here a visitor reads the sales, decrypts sale 1 and tries signing; bidding and withdrawing need test USDC in our copy |
+| P1 | hosted app URL | up at least until 2026-11-18 | [tender-sealed.vercel.app](https://tender-sealed.vercel.app), mainnet: contract `v1.tenderseal.near`, NEAR Intents `intents.near`, relayer [tender-sealed-relay-mainnet.vercel.app/relay](https://tender-sealed-relay-mainnet.vercel.app/relay) (function-call key, `execute_intents` on `intents.near` only). Team-funded demo: the team is the seller and the bidders. Testnet copy: [tender-sealed-testnet.vercel.app](https://tender-sealed-testnet.vercel.app) (rows T13-T15; test tokens; 1Click runs on mainnet only) |
 | P2 | demo video URL | unlisted video | pending |
 | P3 | CI run of `ci.yml` with `ref` = the README step 9 commit | job `repro` prints the step 9 sha256 | [run 43080695741](https://github.com/kocality/tender/actions/runs/43080695741), job `repro` |
 | P4 | tag `hackathon-submission` | tree link | pending |
 | P5 | repository public | `git clone https://github.com/kocality/tender` works | pending |
-| P6 | Arrow repository | public; its URL goes in this cell | pending |
+| P6 | Arrow repository | public; its URL goes in this cell | [github.com/yigitcangokmen/arrow](https://github.com/yigitcangokmen/arrow) |
