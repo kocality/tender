@@ -38,7 +38,7 @@ describe('RPC defaults (OPS-04)', () => {
 describe('page titles (X12A-07)', () => {
   const t = (hash: string) => titleFor(parseHash(hash));
   test('every route has its own title', () => {
-    const titles = ['#/', '#/sale/1', '#/sale/2', '#/bid/1', '#/try', '#/keys', '#/withdraw', '#/nope'].map(t);
+    const titles = ['#/', '#/sales', '#/sale/1', '#/sale/2', '#/bid/1', '#/try', '#/keys', '#/withdraw', '#/nope'].map(t);
     expect(new Set(titles).size).toBe(titles.length);
     expect(t('#/sale/7')).toContain('Sale #7');
     expect(t('#/bid/7')).toContain('Bid on sale #7');

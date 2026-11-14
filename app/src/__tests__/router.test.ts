@@ -21,6 +21,7 @@ describe('parseHash', () => {
     expect(parseHash('#/keys/').path).toBe('/keys');
     expect(parseHash('#/withdraw').path).toBe('/withdraw');
     expect(parseHash('#/trust').path).toBe('/trust');
+    expect(parseHash('#/sales').path).toBe('/sales');
   });
 
   test('home sections are a query, not a route', () => {

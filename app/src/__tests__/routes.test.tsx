@@ -16,6 +16,7 @@ describe('every route mounts', () => {
     ['#/?rec=1', 'Loading sales…'],
     ['#/?at=live', 'Loading sales…'],
     ['#/trust', 'Who can see your bid.'],
+    ['#/sales', 'Loading sales…'],
     ['#/sale/1', 'Loading sale…'],
     ['#/bid/1', 'Bid on sale #'],
     ['#/bid/1?mode=fund', 'Bid on sale #'],

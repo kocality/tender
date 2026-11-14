@@ -16,6 +16,21 @@ export const popoverHandlers = {
   },
 };
 
+/** The sale contract's keyless birth on the explorer; nothing when the build has no lock transaction (testnet). */
+export function LockTxLink() {
+  if (!config.lockTx) return null;
+  return (
+    <a
+      href={`${config.explorerUrl}/txns/${config.lockTx}`}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`Lock tx: ${config.tenderContractId} created with no access key (NearBlocks, new tab)`}
+    >
+      Lock tx<span aria-hidden="true">{' ↗'}</span>
+    </a>
+  );
+}
+
 /**
  * The network in one pill: MAINNET ("Live on NEAR mainnet", once the contract answers there) or TESTNET (today's build).
  * What it rests on (no audit, team seller, the testnet copy of NEAR Intents, the MPC threshold) sits in a popover that is
@@ -31,13 +46,25 @@ export function NetworkBadge({ up = false, missing = false }: { up?: boolean; mi
     <details className={up ? 'netbadge up' : 'netbadge'} data-net={s.tone} {...popoverHandlers}>
       <summary>
         <span className="dot" aria-hidden="true" />
-        {s.badge}
+        {s.lock
+          ? s.lock.map((t, i) => (
+              <span key={t} className={`nb-lock-${i}`}>
+                {t}
+              </span>
+            ))
+          : s.badge}
         <svg className="chev" viewBox="0 0 12 12" aria-hidden="true">
           <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       </summary>
       <div className="pop">
         <p>{up ? s.footer : s.plain}</p>
+        {s.lock ? (
+          <p>
+            {`${config.tenderContractId} has 0 access keys, not even ours: it was created with none and has no upgrade method. `}
+            <LockTxLink />
+          </p>
+        ) : null}
         <p>
           <Rich text={up ? TRUST_LINE : PRIVACY_PLAIN} />
         </p>

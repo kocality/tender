@@ -137,7 +137,7 @@ export function SaleView({
   return (
     <div className="wrap page">
       <p className="crumb">
-        <a href="#/?at=live">← Sales</a>
+        <a href="#/sales">← Sales</a>
       </p>
       {notice}
       {sale ? <SaleHead bundle={bundle} sale={sale} nowNs={nowNs} /> : null}
@@ -287,7 +287,7 @@ export function Sale({ id }: { id: string }) {
   return (
     <div className="wrap page">
       <p className="crumb">
-        <a href="#/?at=live">← Sales</a>
+        <a href="#/sales">← Sales</a>
       </p>
       <header className="page-head">
         <p className="eyebrow">{`Sale #${id} · ${config.network}`}</p>

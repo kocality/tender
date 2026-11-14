@@ -3,19 +3,20 @@ import { config } from '../config';
 import { HOME } from '../copy';
 import { useContractMissing } from '../lib/contractStatus';
 import { onSectionLinkClick } from '../lib/sections';
-import { NetworkBadge, popoverHandlers } from './NetworkBadge';
+import { LockTxLink, NetworkBadge, popoverHandlers } from './NetworkBadge';
 
 /** [key, href, label]: the key is the route pattern, or `at:<section>` for a section of the home page. */
 const NAV: [string, string, string][] = [
-  ['at:live', '#/?at=live', 'Sales'],
+  ['/sales', '#/sales', 'Sales'],
   ['/trust', '#/trust', 'Trust'],
 ];
 
 export function Layout({ current, children }: { current: string; children: ReactNode }) {
-  const here = (key: string) => (current === key ? ('page' as const) : undefined);
+  // A sale page sits under the list of sales.
+  const here = (key: string) => (current === key || (key === '/sales' && current === '/sale/:id') ? ('page' as const) : undefined);
   // While the sale contract is not live, the nav says so instead of promising sales.
   const missing = useContractMissing() === true;
-  const nav = NAV.map(([key, href, label]): [string, string, string] => [key, href, missing && key === 'at:live' ? 'Sales (soon)' : label]);
+  const nav = NAV.map(([key, href, label]): [string, string, string] => [key, href, missing && key === '/sales' ? 'Sales (soon)' : label]);
   return (
     <div className="shell">
       <a className="skip-link" href="#main" onClick={(e) => {
@@ -37,8 +38,12 @@ export function Layout({ current, children }: { current: string; children: React
                 {label}
               </a>
             ))}
+            <LockTxLink />
           </nav>
           <div className="topbar-end">
+            <span className="topbar-net">
+              <NetworkBadge />
+            </span>
             {/* The primary action keeps its look everywhere; on the Try page itself aria-current marks it. */}
             <a className="btn primary btn-sm try-cta" href="#/try" aria-current={here('/try')}>
               {HOME.ctaTry}
@@ -57,6 +62,7 @@ export function Layout({ current, children }: { current: string; children: React
                       {label}
                     </a>
                   ))}
+                  <LockTxLink />
                 </span>
                 <a href="#/keys" aria-current={here('/keys')}>
                   Key ledger

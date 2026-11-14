@@ -28,6 +28,18 @@ export async function loadSaleBundle(id: string): Promise<SaleBundle> {
   return { id, sale, bids, result, keyRequestBlock: sale.key ? (keyRequest?.block ?? null) : null, keyRequestNs: sale.inFlight ? (keyRequest?.ns ?? null) : null };
 }
 
+export interface SaleRow {
+  sale: Sale;
+  /** Stored clearing result; only read for a Finalized sale. */
+  result: SaleResult | null;
+}
+
+/** Every sale, with the clearing result of each Finalized one (for its P*). */
+export async function loadSales(): Promise<SaleRow[]> {
+  const sales = await getAllSales();
+  return Promise.all(sales.map(async (sale) => ({ sale, result: sale.state === 'Finalized' ? await getResult(sale.id).catch(() => null) : null })));
+}
+
 export interface KeysData {
   mpc: string;
   mpcVersion: string | null;

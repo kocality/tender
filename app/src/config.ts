@@ -50,6 +50,8 @@ export interface AppConfig {
   repoUrl: string;
   /** The twin sales run on an earlier build of the contract (the T1 testnet copy): the home page says so. */
   earlierBuild: boolean;
+  /** The sale contract's keyless birth transaction (no AddKey: 0 access keys since). Empty = no lock claim, no "Lock tx" link. */
+  lockTx: string;
 }
 
 function twinSales(v: unknown): [string, string] {
@@ -73,4 +75,6 @@ export const config: AppConfig = {
   explorerUrl: str(env.VITE_EXPLORER_URL, network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io'),
   repoUrl: str(env.VITE_REPO_URL, '').replace(/\/+$/, ''),
   earlierBuild: env.VITE_EARLIER_BUILD === '1',
+  // v1.tenderseal.near: CreateAccount + Transfer + DeployContract + new(), no AddKey.
+  lockTx: str(env.VITE_LOCK_TX, network === 'mainnet' && tenderContractId === 'v1.tenderseal.near' ? '9FQuPMpJFNYJgv7dm2yyWxaUmTT73U4c9TJ9xFqMXHs3' : ''),
 };

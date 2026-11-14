@@ -100,6 +100,10 @@ export function TwinView({
         <a href="#/trust?at=check">
           Evidence<span aria-hidden="true">{' →'}</span>
         </a>
+        {' · '}
+        <a href="#/sales">
+          All sales<span aria-hidden="true">{' →'}</span>
+        </a>
       </p>
     </div>
   );

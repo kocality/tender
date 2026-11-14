@@ -45,7 +45,16 @@ export const PRIVACY_PLAIN =
 export function networkStatus(
   network: 'mainnet' | 'testnet',
   contractMissing: boolean | null = false,
-): { label: string; text: string; footer: string; plain: string; badge: string; tone: 'live' | 'testnet' | 'missing' | 'pending' } {
+): {
+  label: string;
+  text: string;
+  footer: string;
+  plain: string;
+  badge: string;
+  tone: 'live' | 'testnet' | 'missing' | 'pending';
+  /** The pill on a live mainnet contract born keyless: the claim, and its short form under 420 px (styles.css). */
+  lock?: [string, string];
+} {
   const common = 'No audit. Only our team can create sales, and we are the seller in every one of them. The chain shown on a bid is declared by the bidder, not proven.';
   const team = 'No audit, and our team is the seller in every sale.';
   if (network === 'testnet') {
@@ -70,7 +79,8 @@ export function networkStatus(
       tone: 'missing',
     };
   }
-  return { label: 'Mainnet', text: 'real USDC · no audit · team-funded demo sales', footer: `Bids move real USDC. ${common}`, plain: `Bids move real USDC. ${team}`, badge: 'Live on NEAR mainnet', tone: 'live' };
+  const live = { label: 'Mainnet', text: 'real USDC · no audit · team-funded demo sales', footer: `Bids move real USDC. ${common}`, plain: `Bids move real USDC. ${team}`, badge: 'Live on NEAR mainnet', tone: 'live' as const };
+  return config.lockTx ? { ...live, lock: ['Locked on mainnet: 0 access keys, not even ours', 'Live on NEAR mainnet · locked'] } : live;
 }
 
 const ORIGIN_NAMES = { base: 'Base', arb: 'Arbitrum', sol: 'Solana', near: 'NEAR' } as const;

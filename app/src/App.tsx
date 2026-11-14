@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Bid } from './pages/Bid';
 import { Keys } from './pages/Keys';
 import { Sale } from './pages/Sale';
+import { Sales } from './pages/Sales';
 import { Home } from './pages/Home';
 import { Trust } from './pages/Trust';
 import { Try } from './pages/Try';
@@ -38,6 +39,9 @@ export function App() {
       break;
     case '/trust':
       page = <Trust at={at} />;
+      break;
+    case '/sales':
+      page = <Sales />;
       break;
     case '/sale/:id':
       page = isSaleId(route.params.id) ? <Sale id={route.params.id} /> : <NotFound what="sale" />;

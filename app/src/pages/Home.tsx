@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { ChainGlyph } from '../components/ChainGlyph';
+import { ChainGlyph, UsdcGlyph } from '../components/ChainGlyph';
 import { EyeGrid } from '../components/EyeGrid';
 import { ExampleSale } from '../components/ExampleSale';
 import { Loading, ReadError } from '../components/Feedback';
@@ -237,9 +237,7 @@ function Bento() {
                 <span className="arrow" aria-hidden="true">
                   →
                 </span>
-                <span className="usdc" aria-hidden="true">
-                  $
-                </span>
+                <UsdcGlyph />
               </span>
             }
           />

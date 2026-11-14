@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type RoutePattern = '/' | '/trust' | '/sale/:id' | '/bid/:id' | '/try' | '/keys' | '/withdraw';
+export type RoutePattern = '/' | '/trust' | '/sales' | '/sale/:id' | '/bid/:id' | '/try' | '/keys' | '/withdraw';
 
 export interface Route {
   /** Matched pattern, or `*` when nothing matches. */
@@ -16,6 +16,8 @@ export function titleFor(route: Pick<Route, 'path' | 'params'>): string {
       return 'Sealed token sales · Tender';
     case '/trust':
       return 'Who can see your bid · Tender';
+    case '/sales':
+      return 'Sales · Tender';
     case '/sale/:id':
       return `Sale #${route.params.id ?? ''} · Tender`;
     case '/bid/:id':
@@ -31,7 +33,7 @@ export function titleFor(route: Pick<Route, 'path' | 'params'>): string {
   }
 }
 
-const PATTERNS: RoutePattern[] = ['/', '/trust', '/sale/:id', '/bid/:id', '/try', '/keys', '/withdraw'];
+const PATTERNS: RoutePattern[] = ['/', '/trust', '/sales', '/sale/:id', '/bid/:id', '/try', '/keys', '/withdraw'];
 
 /** `#/sale/7?x=1` → `{path: '/sale/:id', params: {id: '7'}, query: x=1}`. Pure, so it can be tested without a DOM. */
 export function parseHash(hash: string): Route {

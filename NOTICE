@@ -29,3 +29,18 @@ This product includes or adapts third-party work:
   Copied into app/src/fx/ as part of the app: TextAnimations/DecryptedText and Micro/StatusMark, adapted to run without
   motion/react. Each file carries a header naming its source path and commit. The Commons Clause forbids selling or
   redistributing the components themselves; they are used here only as part of this application.
+
+- Chain and token logos in app/src/components/ChainGlyph.tsx and, as standalone files with the same path data, in
+  assets/chains/ (base.svg, arbitrum.svg, solana.svg, near.svg, usdc.svg; used by README.md) (trademarks of their
+  owners; shown only to name the chain or token, no endorsement implied; not covered by this repository's license).
+  Path data copied unchanged:
+  Base "The Square": https://github.com/base/brand-kit at eba9e730be34f8c9ae7f9a21f32cc6aafebe2ad1,
+    logo/TheSquare/Digital/Base_square_blue.svg.
+  Arbitrum logomark: https://github.com/OffchainLabs/arbitrum-docs at 8f3db19377666b0b2f1a5180e34754160f7047e5,
+    public/img/logo.svg.
+  Solana logomark: the SVG download on https://solana.com/branding, from https://github.com/solana-foundation/solana-com
+    at 16ce39eab56bcdd68e31998229d01ce0f931cc29, apps/web/public/src/img/branding/solanaLogoMark.svg.
+  NEAR logomark: https://github.com/near/docs at 7be61a444184e5c11e66363a459f36e6f116f426, assets/favicon.svg
+    (viewBox cropped to the mark).
+  USDC token logo: Circle's brand kit, https://www.circle.com/pressroom#brandkit, usdc.zip, Token Logo/USDC Token.svg;
+    Circle Brand Use Policy: https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/CircleBrandUsePolicy.pdf
