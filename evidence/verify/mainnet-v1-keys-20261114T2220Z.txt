@@ -1,0 +1,9 @@
+$ tsx src/verify.ts --keys
+Tender verify · keys · v1.tenderseal.near · mainnet · block 224575937 (2026-11-14T22:20:15Z)
+rpc https://free.rpc.fastnear.com · archival https://archival-rpc.mainnet.fastnear.com
+v1.signer 3.18.0 · threshold 11 of 16 (live) · domain 2 key = repo constant
+key log (contract state): 1 request
+  sale 1   2026-11-14T22:08:46Z   ok      block 224574769
+  sale 0   0 requests · Cancelled 2026-11-14T22:03:14Z · never requested (sealed unless the MPC threshold colludes) · open() unreachable (terminal state)
+NearBlocks: receipts v1.tenderseal.near → v1.signer.request_app_private_key = 1 (match)
+sale 0: 1 sealed bid · tried every released key: 0 decrypt

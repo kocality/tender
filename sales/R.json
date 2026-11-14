@@ -14,7 +14,7 @@
     "min_escrow": "1000000",
     "min_bidders": 1,
     "quote_token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
-    "max_bids": 8,
+    "max_bids": 1,
     "decimals": 24,
     "lot_exp": 0
   }

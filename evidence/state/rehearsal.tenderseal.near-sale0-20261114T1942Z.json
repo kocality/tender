@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-14T19:42:57.347Z",
+    "block_height": 224559631,
+    "block_hash": "7ow4ujsdzdhUYt51R2gAsQHUbMv2oY24nwENcWvqyLXw",
+    "rpc_url": "https://free.rpc.fastnear.com",
+    "label": "snapshot, not live"
+  },
+  "get_config": {
+    "version": "1.0.0",
+    "mpc": "v1.signer",
+    "intents": "intents.near",
+    "domain_id": "2",
+    "app_pk_mode": "generator",
+    "mpc_public_key": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+    "quote_tokens": [
+      "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+    ],
+    "sellers": [
+      "tenderseal.near"
+    ],
+    "init_block": "224559629",
+    "init_ns": "1794685372814859569",
+    "sales": "0",
+    "key_log_len": "0"
+  },
+  "get_sale": null,
+  "get_bids": [],
+  "get_result": null,
+  "get_key_log": [],
+  "view_access_key_list": {
+    "block_hash": "7ow4ujsdzdhUYt51R2gAsQHUbMv2oY24nwENcWvqyLXw",
+    "block_height": 224559631,
+    "keys": [
+      {
+        "access_key": {
+          "nonce": 224559628000000,
+          "permission": "FullAccess"
+        },
+        "public_key": "ed25519:6SCnNGK9ELbWtoX78d94bdpT9UdJtGrkEMPiZVRHzxKr"
+      }
+    ]
+  },
+  "view_account": {
+    "amount": "4500000000000000000000000",
+    "block_hash": "7ow4ujsdzdhUYt51R2gAsQHUbMv2oY24nwENcWvqyLXw",
+    "block_height": 224559631,
+    "code_hash": "ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y",
+    "locked": "0",
+    "storage_paid_at": 0,
+    "storage_usage": 282461
+  },
+  "mt_batch_balance_of": null
+}

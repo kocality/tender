@@ -1,0 +1,31 @@
+$ tsx src/verify.ts --sale 1
+Tender verify · sale 1 · v1.tenderseal.near · mainnet · block 224575099 (2026-11-14T22:12:00Z)
+rpc https://free.rpc.fastnear.com · archival https://archival-rpc.mainnet.fastnear.com
+PASS #1 mpc-key — domain 2 key bls12381g2:24mhN…mXdR = repo constant = live v1.signer = contract config
+PASS #2 mpc-network — v1.signer 3.18.0 · threshold 11 of 16 (live) · key epoch 16, participant ids issued 22 (next_id): resharing does not revoke old shares, so the threshold counts former share holders too · TEE accounts 17 · allowed images 2
+PASS #3 code-hash — ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y = sha256(contract/res/tender.wasm) https://nearblocks.io/address/v1.tenderseal.near
+PASS #4 no-access-keys — v1.tenderseal.near has no access keys: nobody can sign for it or redeploy it https://nearblocks.io/address/v1.tenderseal.near
+PASS #5 wasm-imports — 30 imports, none can add a key, deploy code or delete the account
+WARN #6 reproducible-build — rebuild not performed; run with --rebuild (Docker + cargo-near 0.23.0) · source git+https://github.com/kocality/tender?rev=ab48e6690048e9b506c51c3667f852457758a706
+PASS #7 init-before-sale — init block 224564596 (2026-11-14T20:30:04Z) < sale created block 224570505 (2026-11-14T21:26:20Z)
+PASS #8 sale-identity — path tender/1/ec35e5e888eff79a505748fe0770e17e · app_id(v1.tenderseal.near, path) = 173aa5d6229d0c6c04f41c98118fe80cdd875778d38f0bf813c07406eb84bf70
+PASS #9 bid-count — 6 bids (max 6) from 6 bidders · escrow 23.00 USDC
+PASS #10 key-after-close — key at 2026-11-14T22:08:51Z (block 224574778) ≥ close 2026-11-14T22:01:00Z · bids before close, key requested after close, reveal deadline = key + max(reveal_secs, 24 h) https://nearblocks.io/blocks/224574778
+PASS #11 key-pairing — checkKey true: e(S, G2) = e(H(pk ‖ app_id), mpk), mode generator https://nearblocks.io/blocks/224574778
+PASS #12 ciphertexts-decrypt — 6/6 decrypt
+PASS #13 plaintext-matches-commitment — 6/6 match
+PASS #14 reveal-states — 6 Revealed, 0 Penalized, 0 Sealed; every revealable bid (decrypts, matches its commitment, 1 ≤ q ≤ B) is Revealed
+PASS #15 clearing-price — P* = 3.60 USDC/NEAR (recomputed = get_result)
+PASS #16 allocations — 6 bids: alloc, spend, refund, penalty and penalty share = recomputed (4 winners) · seller 10.800001 USDC
+PASS #17 conservation — USDC in 23.00 = refunds + seller 10.800001 + penalty pool 0.00; tokens in = out; the pool is kept by the contract (paid to nobody), 0 to the seller · bids from sub-accounts of the seller tenderseal.near (only it can create them): #0 bidder.tenderseal.near
+PASS #18 uniform-price — every winner pays one price 3.60 USDC/NEAR ≤ its bid; full winners pay q, marginal ones ceil(alloc·P*/scale); losers get 0
+PASS #19 escrow-balance — 2 sale(s): nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 0 ≥ owed 0 · nep141:wrap.near 0 ≥ owed 0 https://nearblocks.io/address/v1.tenderseal.near
+PASS #20 payouts — 7/7 payouts ok (bids + seller)
+PASS #21 key-ledger — 1 request for this sale (Ok) = key_requests; 1 in the contract's key log
+PASS #22 nearblocks-receipts — NearBlocks: 1 v1.tenderseal.near → v1.signer.request_app_private_key receipts = key log 1
+n/a #23 cancelled-sealed — state Finalized
+n/a #24 oneclick-status — no 1Click deposits recorded for this sale
+PASS #25 archival-tx — 4/4 recorded transactions found with the recorded outcome
+PASS #26 upstream-code — intents.near code_hash BtA1BEFNS619KkvXFsgcpQ21Tb5yMm32aaUkn7xNothk = the tested intents 0.4.5 wasm · v1.signer 3.18.0 = tested version
+PASS #27 token-decimals — ft_metadata: wrap.near 24 decimals = sale decimals 24 · quote token 6 decimals
+24/25 checks passed (1 warning)

@@ -1,0 +1,258 @@
+{
+  "_meta": {
+    "captured_utc": "2026-11-14T22:14:09.415Z",
+    "block_height": 224575301,
+    "block_hash": "4tAEERCwuRt49uQLPLw1pbc2zmKvy8Tm5oETyjfazAiN",
+    "rpc_url": "https://free.rpc.fastnear.com",
+    "label": "snapshot, not live"
+  },
+  "get_config": {
+    "version": "1.0.0",
+    "mpc": "v1.signer",
+    "intents": "intents.near",
+    "domain_id": "2",
+    "app_pk_mode": "generator",
+    "mpc_public_key": "bls12381g2:24mhN4RnB2CbiUkAfukyh4s1CT6dUNd9Pc8kRnL4LvAP3tcxhUupbphmfbmwHSi66aFCiZkMgiH2KqXWJLD7JUeAFhoLS3WQbzWcpUzhERLqxyocwT9Xrd4WNvEuKavxmXdR",
+    "quote_tokens": [
+      "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+    ],
+    "sellers": [
+      "tenderseal.near"
+    ],
+    "init_block": "224564596",
+    "init_ns": "1794688204487186884",
+    "sales": "2",
+    "key_log_len": "1"
+  },
+  "get_sale": {
+    "id": "1",
+    "seller": "tenderseal.near",
+    "token": "nep141:wrap.near",
+    "supply": "3000000000000000000000000",
+    "decimals": 24,
+    "lot_exp": 0,
+    "reserve": "3000000",
+    "min_escrow": "5000000",
+    "min_bidders": 3,
+    "max_bids": 6,
+    "quote_token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "close_ns": "1794693660000000000",
+    "reveal_secs": "86400",
+    "created_block": "224570505",
+    "created_ns": "1794691580884376106",
+    "path": "tender/1/ec35e5e888eff79a505748fe0770e17e",
+    "state": "Finalized",
+    "bids": 6,
+    "bidders": 6,
+    "escrow_total": "23000000",
+    "revealed": 6,
+    "key_requests": 1,
+    "in_flight": false,
+    "key": {
+      "big_y": "bls12381g1:6CHPVifQZs51XBNwShDY2uUCEFzgR6UXd9BgmhAPCKCL8Tew4t76BFnEDb9gog4ry9",
+      "big_c": "bls12381g1:6apYHKmTADExzMWJXbXMwCSmMpk2YPnbbV943d1FnQWLNqHTidzdnKtUdWG9z6gAUy",
+      "block": "224574778",
+      "ns": "1794694131315883284"
+    },
+    "reveal_deadline_ns": "1794780531315883284",
+    "seller_payout": {
+      "usdc": "10800001",
+      "tokens": "0",
+      "ok": true,
+      "pending": false
+    },
+    "payouts_done": 7,
+    "payouts_total": 7
+  },
+  "get_bids": [
+    {
+      "idx": 0,
+      "bidder": "bidder.tenderseal.near",
+      "escrow": "3000000",
+      "ct": "iP8cgZqKu7QPmThOrHL3k6ZX7sAu6LwRrB6LfRr0pM38rbI08w2ibGlpY1Suks9XBMlZZ+xOmyeO3yGUGQHRh+DMeUxA7Wu+t+6p5mPz8Zau8fvWf8QuscRPjQGflaFfxV5aPHuHPrdFKWWECj7P5zZUq/6EI+dNgFfW36NT1gWWJrucjghCdjmdhblpN5XdivICY+yS7b1u4XKjKsNawg==",
+      "cm": "9e278dc5be44cc8c45873c1222cf9f6f8b8f7d30f9c0c0c0399eb7e5b949c754",
+      "origin": "near",
+      "block": "224570709",
+      "ns": "1794691700307606421",
+      "state": "Revealed",
+      "p": "3600000",
+      "q": "2000000",
+      "salt": "daa86685b85f301a2603d4f61bcb1859",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "222222222222222222222223",
+      "spend": "800001",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "2199999",
+        "tokens": "222222222222222222222223",
+        "ok": true,
+        "pending": false
+      }
+    },
+    {
+      "idx": 1,
+      "bidder": "0xf807a96d44995a3eab148e5b0721d4baa654bcfc",
+      "escrow": "5000000",
+      "ct": "sr4YiKr1P9EAmXicBCgZ1vmI447x60XEbW2PvBIf+SIt5nrGltruEhInOvToHcdLBAi8+VJZ3OICFxCXq4spmjNB3Jki7msP2mHY4qXkxc1cFhnRpUCV41dT+I8ItA9WIhfS1Oukp+Lrt0BcfanGzGeNTT8ChtLb3hXcRQADI07CVFLjTh//HtxGZketDgT1Ko7+dHEvQgtM+r2o/k933w==",
+      "cm": "eb4cc01601ee48b7a9196a5d62648de3f395b37a282000014386137e0ebc49ab",
+      "origin": "base",
+      "block": "224571023",
+      "ns": "1794691878253923996",
+      "state": "Revealed",
+      "p": "3900000",
+      "q": "4000000",
+      "salt": "07fa753fad0388d8ff53ba7d88d3c558",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "1111111111111111111111111",
+      "spend": "4000000",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "1000000",
+        "tokens": "1111111111111111111111111",
+        "ok": true,
+        "pending": false
+      }
+    },
+    {
+      "idx": 2,
+      "bidder": "0xae4618477121c8fcd378173709e8d433dd982a26",
+      "escrow": "4000000",
+      "ct": "jS6Yadfc72lbW/k3nU9hNh/3BSnwiNM1kN6QRnCMjuePRfJRomXKE/q4sFEUKHASEuaR+8esfRXRx6xoRzNekkuhJF0sgmRQalb88nXZX/h2PL+q37ySWpDPVtDwr+Y5kn83PhMloeeLmoYubGPPr5NBgUBonr+qeJPYgv2g9+ifkUC3y8cbv6sX9nEuk7q4WrTCN0jxPkJXZpg84iYZ2w==",
+      "cm": "b0ce4cb85446193934876cbeaad96a20f8be575b23d5dc342b6d29f267cdc584",
+      "origin": "arb",
+      "block": "224571619",
+      "ns": "1794692237023093607",
+      "state": "Revealed",
+      "p": "3700000",
+      "q": "3000000",
+      "salt": "64897720428dc833e29494d67c488d1a",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "833333333333333333333333",
+      "spend": "3000000",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "1000000",
+        "tokens": "833333333333333333333333",
+        "ok": true,
+        "pending": false
+      }
+    },
+    {
+      "idx": 3,
+      "bidder": "0x4d84a0c51382cd15db2528a70e87b6e35ebaa8cb",
+      "escrow": "2500000",
+      "ct": "hiZacpOnd2gi7epGASOMx2Pkmznt9zNGc0MErPDr2vwau9hDlNxzaPR/Gno3+EjXDpcTG2UUzMnfJmA0OHvxLVpTRoatrnplE09dohKKzSas2knjmKCboUlVm9o8lKBtEkqUox8B7V1pWNqPozquANuShCnDKUxKw1rlX5XXa21KeV5LhL+ERUYdfDYG3xrycvKRudu9ot+0swhjdgWnwA==",
+      "cm": "aee8f623e31191e53523aacf8f93809084542a268150dafa639b6d50dc15af99",
+      "origin": "base",
+      "block": "224572223",
+      "ns": "1794692606306680880",
+      "state": "Revealed",
+      "p": "2900000",
+      "q": "2000000",
+      "salt": "1a8b6d8e4fcd9ebd774f3ab6cbfa37b6",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "0",
+      "spend": "0",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "2500000",
+        "tokens": "0",
+        "ok": true,
+        "pending": false
+      }
+    },
+    {
+      "idx": 4,
+      "bidder": "30abdbe2ce9462f87db5f95a85f7500a9a4118925593fbf81d98cff9dead022b",
+      "escrow": "5000000",
+      "ct": "lDrKCrz58wwIASC37CRhw1AM8JDLR28Ckz9GM5wmZTVM1gpz5LEWRGNb6x62XZyeD6Pfq3NUkJjZHWawqIDTOkxw99MEnv/W2IlNgthSMmA/C4Br3xrIrcX80rWxmmWhUp6UUh099jasGWl04dYOSCSN8Q+T2FuKzH3qvofcGob/LkBvIdjWLBsO4Xdl/HT80ltSv9UDXLAcnpdSKTnSbA==",
+      "cm": "0dc1cded8049665654d61eb80cd1cb0826224d7c257f40a9ca41da82b679b784",
+      "origin": "sol",
+      "block": "224572665",
+      "ns": "1794692877570210876",
+      "state": "Revealed",
+      "p": "3800000",
+      "q": "3000000",
+      "salt": "589539ca2c75797e93a5f504381d8276",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "833333333333333333333333",
+      "spend": "3000000",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "2000000",
+        "tokens": "833333333333333333333333",
+        "ok": true,
+        "pending": false
+      }
+    },
+    {
+      "idx": 5,
+      "bidder": "68e78d7575ac8cbff92d8f29370516c59567dd9dcf605b3cefbb30cd518567a4",
+      "escrow": "3500000",
+      "ct": "pW+VdE16Zj/2coP7CZVG+U7gEQfBZChQCI2C4zCoEC7q9Y0bAqSuHweLpMlx5J45DgPH2mMHwAUI+f2zjLXoTGV7YE3iP1PuXznGmHEIbCb/tP4w+ZGGM3V+JAp3Hsn6kiBoLfKHklJYonybxuOObN2UWVBhaGyv0jpF7pFwIinKLiKmDBmQRgdEVK9D+d0xo22dxu/LEW9vJ7Z3GBjevQ==",
+      "cm": "5b15c1a45eb7b664467418164d882aef87330f14d001e25c2bb5b1b1847ec578",
+      "origin": "sol",
+      "block": "224573041",
+      "ns": "1794693112919694418",
+      "state": "Revealed",
+      "p": "3200000",
+      "q": "3000000",
+      "salt": "d407982dc8228c69c2363917dcef2bcc",
+      "revealed_by": "bidder.tenderseal.near",
+      "alloc": "0",
+      "spend": "0",
+      "penalty": "0",
+      "penalty_share": "0",
+      "paid": {
+        "usdc": "3500000",
+        "tokens": "0",
+        "ok": true,
+        "pending": false
+      }
+    }
+  ],
+  "get_result": {
+    "p_star": "3600000",
+    "sold": "3000000000000000000000000",
+    "seller_usdc": "10800001",
+    "seller_tokens_back": "0",
+    "token_dust": "0",
+    "penalty_pool": "0",
+    "block": "224574994",
+    "ns": "1794694259224537218",
+    "cancelled": false
+  },
+  "get_key_log": [
+    {
+      "i": "0",
+      "sale": "1",
+      "block": "224574769",
+      "ns": "1794694126348321155",
+      "outcome": "Ok",
+      "resolved_block": "224574778"
+    }
+  ],
+  "view_access_key_list": {
+    "block_hash": "4tAEERCwuRt49uQLPLw1pbc2zmKvy8Tm5oETyjfazAiN",
+    "block_height": 224575301,
+    "keys": []
+  },
+  "view_account": {
+    "amount": "4499999999999999999999990",
+    "block_hash": "4tAEERCwuRt49uQLPLw1pbc2zmKvy8Tm5oETyjfazAiN",
+    "block_height": 224575301,
+    "code_hash": "ArxvskvNtUUxkDtZipxKXSJtGbJGUEm6q9aG2B5XrH9y",
+    "locked": "0",
+    "storage_paid_at": 0,
+    "storage_usage": 287629
+  },
+  "mt_batch_balance_of": [
+    "0",
+    "0"
+  ]
+}
